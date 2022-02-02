@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE docs SYSTEM "appdocsxml.dtd">
+<docs>
+	<configInfo name="res_geolocation" language="en_US">
+		<synopsis>Core Geolocation Support</synopsis>
+		<configFile name="geolocation.conf">
+			<configObject name="location">
+				<synopsis>Location</synopsis>
+				<description>
+					<para>cffdffff</para>
+				</description>
+				<configOption name="type">
+					<synopsis>Must be of type 'location'.</synopsis>
+				</configOption>
+				<configOption name="format" default="">
+					<synopsis>Location specification type</synopsis>
+					<description>
+						<enumlist>
+							<enum name="civicAddress">
+								<para>
+									The
+									<literal>location</literal>
+									parameter must contain a comma separated list of IANA codes
+									describing this location.
+								</para>
+							</enum>
+							<enum name="GML">
+								<para>
+									The
+									<literal>location</literal> parameter must contain a comma
+									separated list valid GML elements describing this location.
+								</para>
+							</enum>
+							<enum name="URI">
+								<para>
+									The
+									<literal>location</literal> parameter must contain a single
+									URI parameter which contains an external URI describing this location.
+								</para>
+							</enum>
+						</enumlist>
+					</description>
+				</configOption>
+				<configOption name="location" default="">
+					<synopsis>Location Data</synopsis>
+					<description>
+						<para>The contents of this parameter are specific to the
+							specification type.</para>
+					</description>
+				</configOption>
+			</configObject>	
+			<configObject name="profile">
+				<synopsis>Profile</synopsis>
+				<description>
+					<para>cffdffff</para>
+				</description>
+				<configOption name="type">
+					<synopsis>Must be of type 'profile'.</synopsis>
+				</configOption>
+				<configOption name="pidf_lo_section" default="device">
+					<synopsis>PIDF-LO element to place this profile in</synopsis>
+					<description>
+						<enumlist>
+							<enum name="tuple" />
+							<enum name="device" />
+							<enum name="person" />
+						</enumlist>
+						<para>
+							Based on RFC5491 (see below) the recommended and default element
+							is <literal>device</literal>.
+						</para>
+					</description>
+					<see-also>
+						<ref type="link">https://www.rfc-editor.org/rfc/rfc5491.html#section-3.4</ref>
+					</see-also>
+				</configOption>
+				<configOption name="location_reference" default="">
+					<synopsis>Reference to a location object</synopsis>
+				</configOption>
+				<configOption name="location_refinement" default="">
+					<synopsis>Reference to a location object</synopsis>
+				</configOption>
+				<configOption name="location_variables" default="">
+					<synopsis>Reference to a location object</synopsis>
+				</configOption>
+				<configOption name="usage_rules" default="yes">
+					<synopsis>location specification type</synopsis>
+					<description>
+						<para>xxxx</para>
+					</description>
+				</configOption>
+				<configOption name="received_location_disposition" default="no">
+					<synopsis>Determine whether the location information supplied to a
+						channel should be used</synopsis>
+					<description>
+						<enumlist>
+							<enum name="discard"/>
+							<enum name="append"/>
+							<enum name="prepend"/>
+							<enum name="replace"/>
+						</enumlist>
+					</description>
+				</configOption>
+				<configOption name="send_location" default="no">
+					<synopsis>Determine whether the channel will send location
+						information</synopsis>
+					<description>
+						<para>
+							For an incoming call leg, this determines if location information
+							will be forwarded to the dialplan. If <replaceable>accept_location</replaceable>
+							is set to <literal>yes</literal> and location information was actually
+							received from the client, it will be forwarded to the dialplan and any location
+							information in this profile will be ignored. If <replaceable>accept_location</replaceable>
+							is set to <literal>no</literal> or no location information was received
+							from the client, location information from this profile, if any, will be
+							forwarded to the dialplan. Dialplan functions can modify this information before
+							forwarding to the outgoing call leg.
+						</para>
+						<para>
+							For an outgoing call leg, this determines if location information
+							will be forwarded to the remote UAS. If
+							<replaceable>accept_location</replaceable>
+							is set to <literal>yes</literal> and location information was actually received from
+							the dialplan, it will be sent and any location information in this
+							profile will be ignored. If <replaceable>accept_location</replaceable>
+							is set to <literal>no</literal> or no location information was received from
+							the dialplan, location information from this profile, if any, will be sent.
+						</para>
+					</description>
+					<see-also>
+						<ref type="configOption">accept_location</ref>
+					</see-also>
+				</configOption>
+			</configObject>
+		</configFile>
+	</configInfo>
+</docs>
+
