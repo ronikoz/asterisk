@@ -1,0 +1,418 @@
+;--
+  Geolocation Profile Sample Configuration
+
+  1. Overview
+  2. Location Object Description
+  3. Profile Object Description
+  4. Examples
+  5. Reference
+--;
+
+;-----------------------------------------------------------------------
+  Overview
+-----------------------------------------------------------------------;
+
+;--
+
+A Geolocation information is actually comprised of two objects, a
+Location object, and a Profile object.
+
+Location objects must contain one of the following:
+
+  - Location information specified in Geographic Markup Language
+    (GML), civicAddress or unstructured formats.
+
+  - A URI that points to externally hosted location information.
+
+Profile objects contain instructions for the disposition of location
+information, an optional reference to a Location object, and updates
+or overrides to that Location object if specified.
+
+Channel drivers and the dialplan functions are responsible for
+associating Profiles to endpoints/devices and calls.  Normally, two
+profiles would be assigned to an endpoint to control behavior in each
+direction and to optionally specify location information.  One for
+incoming calls (Asterisk is the UAS) and and one for outgoing calls
+(Asterisk is the UAC).
+--;
+
+GENERAL CAUTION:  You must coordinate with your upstream and downstream
+partners with regards to what location information is expected by each
+party and how it should be formatted.  An outgoing configuration
+mismatch for instance, could result in misinformation or no information
+being sent to an emergency response center or even call failure for
+which you are solely responsible.
+
+;-----------------------------------------------------------------------
+  Location Object Description
+-----------------------------------------------------------------------;
+
+;-- type -------------------------------------------
+Must be "location" to identify this configuration section as a
+Geolocation Location object.
+
+;-- format -----------------------------------------
+Sets the format used to express the location.
+
+Values:
+civicAddress: [RFC4119] [RFC5139] [RFC5491]
+              The location information will be placed in an XML document
+              conforming to the PIDF-LO standard.
+              For chan_pjsip, this will be placed in the body of
+              outgoing INVITE messages in addition to any SDP.
+
+GML:          [RFC4119] [RFC5491] [GeoShape]
+              The location information will be placed in an XML document
+              conforming to the PIDF-LO standard.
+              For chan_pjsip, this will be placed in the body of
+              outgoing INVITE messages in addition to any SDP.
+
+URI:          [RFC6442]
+              The external URI at which the the location information
+              can be found.  For chan_pjsip, this URI will be placed
+              in a "Geolocation" header in outgoing INVITE messages.
+
+There is no default.
+---------------------------------------------------;
+
+;-- location ---------------------------------------
+
+The information describing the location.  The format depends on the
+"format" parameter set above.  For readability, multiple "location"
+parameters can be specified and they will be concatenated into one
+specification.
+
+--- For civicAddress format:
+
+The following table lists the IANA registered element names that are
+currently accepted.  The left column contains the official IANA
+registered codes and the right column contains completely unofficial
+synonyms accepted by res_geolocation.  On outgoing messages, the
+synonyms will be translated to the official IANA code.
+
+See [RFC5139] and [RFC5491]
+
+|---------|--------------------------|
+| Code    | Unofficial Synonym       |
+|---------|--------------------------|
+| country | country                  |
+| A1      | state_province           |
+| A2      | county_district          |
+| A3      | city                     |
+| A4      | district                 |
+| A5      | neighborhood             |
+| A6      | street_group             |
+| ADDCODE | additional_code          |
+| BLD     | building                 |
+| FLR     | floor                    |
+| HNO     | house_number             |
+| HNS     | house_number_suffix      |
+| LMK     | landmark                 |
+| LOC     | additional_location      |
+| NAM     | location_name            |
+| PC      | postal_code              |
+| PCN     | postal_community         |
+| PLC     | place_type               |
+| POBOX   | po_box                   |
+| POD     | trailing_street_suffix   |
+| POM     | road_post_modifier       |
+| PRD     | leading_road_direction   |
+| PRM     | road_pre_modifier        |
+| RD      | road                     |
+| RDBR    | road_branch              |
+| RDSEC   | road_section             |
+| RDSUBBR | road_sub_branch          |
+| ROOM    | room                     |
+| SEAT    | seat                     |
+| STS     | street_suffix            |
+| UNIT    | unit                     |
+|---------|--------------------------|
+
+Example with mix of Codes and Synonyms:
+
+format = civicAddress
+location = country=US
+location = A1="New York"
+location = A3="New York", city_division=Manhattan, house_number=1633,
+location = PRD=W, street=46th, street_suffix = Street,postal_code=10222
+; Note the use of the replacement variables for floor and room.
+; A profile that references this location can set those variables
+; to further refine the location.  You can also use any existing
+; variables from the channel using this Location object.
+location = floor=${my_floor},room=${my_room}
+; A Profile object can also append to, or replace any existing items
+; in the location parameter.
+
+--- For GML format:
+
+The following table contains the GML 3.1 acceptable shape types
+and their attributes.
+
+See: [RFC5491] [GeoShape]
+
+|------------|--------------------------------------|
+| Shape type |  Attributes                          |
+|------------|--------------------------------------|
+| Point      | pos                                  |
+| Polygon    | pos, pos, pos, ...                   |
+| Circle     | pos, radius                          |
+| Ellipse    | pos, semiMajorAxis, semiMinorAxis    |
+|            | orientation, orientation_uom         |
+| ArcBand    | pos, innerRadius, outerRadius,       |
+|            | startAngle, startAngle_uom,          |
+|            | openingAngle, openingAngle_uom       |
+| Sphere     | pos (must include altitude), radius  |
+| Ellipsoid  | pos (must include altitude),         |
+|            | semiMajorAxis, semiMinorAxis,        |
+|            | verticalAxis, orientation,           |
+|            | orientation_uom                      |
+| Prism      | pos, pos, pos, ..., height           |
+|            | All positions must include altitude  |
+|            | and all must be the same altitude.   |
+|------------|--------------------------------------|
+
+All distances (altitude, radius, axis, etc) must be in
+meters.
+
+All angles must be in degrees or radians as specified
+in the *_uom attribute.
+
+Examples:
+
+format = GML
+; A 2D point
+location = type=Point, pos="${mylat} ${mylon}"
+; As with civicAddress, you can use replacement variables.
+
+; A 3D point.  Altitude must be in meters.
+location = type=Point, pos="39.12345 -105.98765 1875.0"
+
+; A polygon (actually a triangle)
+location = type=Polygon
+location = pos="39.12345 -105.98766"
+location = pos="39.4500  -105.98766"
+location = pos="39.67890 -105.01346"
+location = pos="39.12345 -105.98766"
+
+; A circle
+location = type=Circle, pos="39.12345 -105.98766", radius=100
+
+; An ellipse
+location = type=Ellipse, pos="39.12345 -105.98766"
+location = semiMajorAxis = 600, semiMinorAxis=45
+location = orientation = 95, orientation_uom = radians
+
+; A prism using the polygon above as an example
+location = type=Polygon
+location = pos="39.12345 -105.98766 1866"
+location = pos="39.4500  -105.98766 1866"
+location = pos="39.67890 -105.01346 1866"
+location = pos="39.12345 -105.98766 1866"
+location = height = 10
+
+NOTE:  You can't mix and match shape types.  A location
+can only be specified by one shape.
+
+--- For URI format
+Example:
+format = URI
+location = URI=https://some.company.com?number=${phone_number}
+; Set phone_number="8005551212" would result in a Geolocation
+; header being sent as follows:
+: Geolocation: <https://some.company.com?number=8005551212>
+
+---------------------------------------------------;
+
+
+;-----------------------------------------------------------------------
+  Profile Object Descriptions
+-----------------------------------------------------------------------;
+
+;-- type -------------------------------------------
+Must be "profile" to identify this configuration section as a
+Geolocation Profile object.
+
+
+;-- pidf_lo_section -------------------------------
+
+If the format is civicAddress or GML, this sets the PIDF element into
+which the location information will be placed.
+
+Values:
+tuple:  Places the information in a "tuple" element.
+device: Places the information in a "device" element.
+person: Places the information in a "person" element.
+
+Per [RFC5491], "device" is preferred and therefore the default.
+---------------------------------------------------;
+
+;-- geolocation-routing ---------------------------
+
+Sets whether the "Geolocation-Routing" header is added to outgoing
+requests.  Set to "yes" to indicate that servers later in the path
+can use the location information for routing purposes.  Set to "no"
+if they should not.  If this value isn't specified, no
+"Geolocation-Routing" header will be added.
+
+;-- received_location_disposition ----------------
+
+On an incoming call leg, this sets what the channel driver should do
+with location information received from the remote party.
+
+On an outgoing call leg, this sets what the channel driver should do
+with location information received from the core/dialplan/incoming channel.
+
+Values:
+
+discard:  Discard location specification received.
+append:   Add the location specification after any configured one.
+prepend:  Add the location specification before any configured one.
+replace:  Replace the configured specification with the incoming one.
+
+[RFC5491] has specific requirements for multiple locations in a single
+document which you should understand before allowing multiple locations.
+For that reason, "replace" is the default action.
+---------------------------------------------------;
+
+;-- send_location ----------------------------------
+
+On an incoming call leg, this sets whether the channel driver should
+forward location information to the dialplan.  The dialplan can
+retrieve then add/modify/delete the information and decide whether to
+forward the information to the outgoing channel.
+
+On an outcoming call leg, this sets whether the channel driver should
+forward location information to the remote party.
+
+Values:
+yes:  Forward location info.
+no:   Do not forward any location info.
+
+The default is 'no".
+---------------------------------------------------;
+
+;-- location_reference -----------------------------
+
+The name of an existing Location object if this profile requires one.
+The location_refinement and location_variables parameters below can be
+used to refine the Location object for this specific Profile.
+
+location_reference = "my_building"
+
+---------------------------------------------------;
+
+;-- location_refinement -----------------------------
+
+The information in the referenced Location object can be refined on a per-profile
+basis.  For example, if the referenced Location object has a civicAddress for a
+building, you could set location_refinement to add a floor and room just for this
+profile
+
+location_refinement = floor=20, room=20a2
+
+---------------------------------------------------;
+
+;-- location_variables -----------------------------
+
+If the referenced Location object uses any replacement variables, they
+can be assigned here.  There is no need to define variables that come
+from the channel using this profile.  They get assigned automatically.
+
+location_variables = myfloor=20, myroom=222
+
+---------------------------------------------------;
+
+
+;---------------------------------------------------
+  Examples
+---------------------------------------------------;
+
+; Create a Location Object for a building
+[building_1]
+type = location
+format = civicAddress
+location = country=US
+location = A1="New York"
+location = A3="New York", city_division=Manhattan, house_number=234,
+location = PRD=W, street=42nd, street_suffix = Street
+location = postal_code=10036
+
+; Create a Profile Object for calls coming in from
+; Bob's phone.
+[bobs_incoming_profile]
+type = profile
+; Don't take any location info from the phone itself.
+received_location_disposition = discard
+; Forward configured info to the core
+send_location = yes
+; Send a "Geolocation-Routing" header with a value of "no".
+geolocation_routing = no
+; Use the referenced location
+location_reference = building_1
+; And refine it by adding floor and room.
+location_refinement = floor=20,room=20A2
+
+; We never want to send location info to Bob's phone
+; This is the default if no profile is assigned.
+[bobs_outgoing_profile]
+type = profile
+received_location_disposition = discard
+send_location = no
+
+; Now create a Profile for Alice.
+[alices_incoming_profile]
+type = profile
+received_location_disposition = discard
+send_location = yes
+geolocation-routing = no
+location_reference = building1
+location_refinement = floor=30,room=30A3
+
+; Don't bother with a profile for calls going out to
+; Alice's phone since the default is to not send anything.
+
+; --------------------------
+; Let's say you have location information in a web-accessable
+; location keyed by extension...
+
+[building1]
+type = location
+format=URI
+location=URI=https://some.company.com?building=bldg1&number=${EXTEN}
+
+; ...and you have a profile set up for building 1 employees...
+[building1_employees]
+type = profile
+location_reference = building1
+send_location = yes
+
+; Since EXTEN is a channel variable, if an employee's extension was 5678,
+; and they made a call, the resulting Geolocation header would look like:
+
+; Geolocation: <https://some.company.com?building=bldg1&number=5678>
+
+
+;-------------------------------
+----------- REFERENCE ----------
+-------------------------------;
+;--
+
+[RFC4119]  A Presence-based GEOPRIV Location Object Format
+           https://www.rfc-editor.org/rfc/rfc4119.html
+
+[RFC5139]  Revised Civic Location Format for Presence Information Data
+           Format Location Object (PIDF-LO)
+           https://www.rfc-editor.org/rfc/rfc5139
+
+[RFC5491]  GEOPRIV Presence Information Data Format Location Object (PIDF-LO)
+           Usage Clarification, Considerations, and Recommendations
+           https://www.rfc-editor.org/rfc/rfc5491.html
+
+[RFC6442]  Location Conveyance for the Session Initiation Protocol
+           https://www.rfc-editor.org/rfc/rfc6442.html
+
+[GeoShape] GML 3.1.1 PIDF-LO Shape Application Schema for use by the
+           Internet Engineering Task Force (IETF)
+           https://portal.ogc.org/files/?artifact_id=21630
+--;
+
