@@ -24,6 +24,8 @@
 
 
 #include "asterisk.h"
+#define AST_API_MODULE
+#include "asterisk/res_geolocation.h"
 #include "res_geolocation/geoloc_private.h"
 
 static int reload_module(void)

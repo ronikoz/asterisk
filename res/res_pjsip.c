@@ -53,6 +53,7 @@
 	<depend>res_sorcery_memory</depend>
 	<depend>res_sorcery_astdb</depend>
 	<use type="module">res_statsd</use>
+	<use type="module">res_geolocation</use>
 	<support_level>core</support_level>
  ***/
 
@@ -2714,5 +2715,5 @@ AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_GLOBAL_SYMBOLS | AST_MODFLAG_LOAD_
 	.reload = reload_module,
 	.load_pri = AST_MODPRI_CHANNEL_DEPEND - 5,
 	.requires = "dnsmgr,res_pjproject,res_sorcery_config,res_sorcery_memory,res_sorcery_astdb",
-	.optional_modules = "res_statsd",
+	.optional_modules = "res_geolocation,res_statsd",
 );

@@ -32,8 +32,8 @@ static struct ast_xslt_doc *pidf_lo_xslt;
 
 static struct ast_sorcery *geoloc_sorcery;
 
-static void geoloc_effective_profile_destructor(void *obj) {
-	struct ast_geoloc_effective_profile *eprofile = obj;
+static void geoloc_eprofile_destructor(void *obj) {
+	struct ast_geoloc_eprofile *eprofile = obj;
 
 	ast_string_field_free_memory(eprofile);
 	ast_variables_destroy(eprofile->location_vars);
@@ -43,10 +43,10 @@ static void geoloc_effective_profile_destructor(void *obj) {
 	ast_variables_destroy(eprofile->usage_rules_vars);
 }
 
-struct ast_geoloc_effective_profile *ast_geoloc_eprofile_alloc(const char *name)
+struct ast_geoloc_eprofile *ast_geoloc_eprofile_alloc(const char *name)
 {
-	struct ast_geoloc_effective_profile *eprofile = ao2_alloc_options(sizeof(*eprofile),
-		geoloc_effective_profile_destructor, AO2_ALLOC_OPT_LOCK_NOLOCK);
+	struct ast_geoloc_eprofile *eprofile = ao2_alloc_options(sizeof(*eprofile),
+		geoloc_eprofile_destructor, AO2_ALLOC_OPT_LOCK_NOLOCK);
 
 	ast_string_field_init(eprofile, 256);
 	ast_string_field_set(eprofile, id, name); /* SAFE string fields handle NULL */
@@ -54,7 +54,7 @@ struct ast_geoloc_effective_profile *ast_geoloc_eprofile_alloc(const char *name)
 	return eprofile;
 }
 
-int ast_geoloc_eprofile_refresh_location(struct ast_geoloc_effective_profile *eprofile)
+int ast_geoloc_eprofile_refresh_location(struct ast_geoloc_eprofile *eprofile)
 {
 	struct ast_geoloc_location *loc = NULL;
 	struct ast_variable *var;
@@ -68,13 +68,16 @@ int ast_geoloc_eprofile_refresh_location(struct ast_geoloc_effective_profile *ep
 		}
 
 		eprofile->format = loc->format;
+
 		ast_variables_destroy(eprofile->location_vars);
-		eprofile->location_vars = ast_variables_dup(loc->location_vars);
+		eprofile->location_vars = loc->location_vars ? ast_variables_dup(loc->location_vars) : NULL;
 		ao2_ref(loc, -1);
+		loc = NULL;
 	}
 
 	ast_variables_destroy(eprofile->effective_location);
-	eprofile->effective_location = ast_variables_dup(eprofile->location_vars);
+	eprofile->effective_location = eprofile->location_vars ? ast_variables_dup(eprofile->location_vars) : NULL;
+
 	if (eprofile->location_refinement) {
 		for (var = eprofile->location_refinement; var; var = var->next) {
 			struct ast_variable *newvar = ast_variable_new(var->name, var->value, "");
@@ -101,9 +104,9 @@ int ast_geoloc_eprofile_refresh_location(struct ast_geoloc_effective_profile *ep
 	(_rc); \
 })
 
-struct ast_geoloc_effective_profile *ast_geoloc_eprofile_create_from_profile(struct ast_geoloc_profile *profile)
+struct ast_geoloc_eprofile *ast_geoloc_eprofile_create_from_profile(struct ast_geoloc_profile *profile)
 {
-	struct ast_geoloc_effective_profile *eprofile;
+	struct ast_geoloc_eprofile *eprofile;
 	const char *profile_id;
 	int rc = 0;
 
@@ -148,10 +151,10 @@ struct ast_geoloc_effective_profile *ast_geoloc_eprofile_create_from_profile(str
 	return eprofile;
 }
 
-struct ast_geoloc_effective_profile *ast_geoloc_eprofile_create_from_uri(const char *uri,
+struct ast_geoloc_eprofile *ast_geoloc_eprofile_create_from_uri(const char *uri,
 	const char *reference_string)
 {
-	struct ast_geoloc_effective_profile *eprofile = NULL;
+	struct ast_geoloc_eprofile *eprofile = NULL;
 	char *local_uri;
 
 	if (ast_strlen_zero(uri)) {
@@ -178,11 +181,11 @@ struct ast_geoloc_effective_profile *ast_geoloc_eprofile_create_from_uri(const c
 	return eprofile;
 }
 
-static struct ast_geoloc_effective_profile *geoloc_eprofile_create_from_xslt_result(
+static struct ast_geoloc_eprofile *geoloc_eprofile_create_from_xslt_result(
 	struct ast_xml_doc *result_doc,
 	const char *reference_string)
 {
-	struct ast_geoloc_effective_profile *eprofile;
+	struct ast_geoloc_eprofile *eprofile;
 	struct ast_xml_node *presence = NULL;
 	struct ast_xml_node *pidf_element = NULL;
 	struct ast_xml_node *location_info = NULL;
@@ -241,11 +244,11 @@ static struct ast_geoloc_effective_profile *geoloc_eprofile_create_from_xslt_res
 	return eprofile;
 }
 
-struct ast_geoloc_effective_profile *ast_geoloc_eprofile_create_from_pidf(
+struct ast_geoloc_eprofile *ast_geoloc_eprofile_create_from_pidf(
 	struct ast_xml_doc *pidf_xmldoc, const char *reference_string)
 {
 	RAII_VAR(struct ast_xml_doc *, result_doc, NULL, ast_xml_close);
-	struct ast_geoloc_effective_profile *eprofile;
+	struct ast_geoloc_eprofile *eprofile;
 
 	/*
 	 * The namespace prefixes used here (dm, def, gp, etc) don't have to match
@@ -361,7 +364,7 @@ int geoloc_eprofile_reload(void)
 AST_TEST_DEFINE(test_create_from_uri)
 {
 
-	RAII_VAR(struct ast_geoloc_effective_profile *, eprofile,  NULL, ao2_cleanup);
+	RAII_VAR(struct ast_geoloc_eprofile *, eprofile,  NULL, ao2_cleanup);
 	const char *uri = NULL;
 	int rc = AST_TEST_PASS;
 
@@ -399,7 +402,7 @@ static enum ast_test_result_state validate_eprofile(struct ast_test *test,
 	)
 {
 	RAII_VAR(struct ast_str *, str, NULL, ast_free);
-	RAII_VAR(struct ast_geoloc_effective_profile *, eprofile,  NULL, ao2_cleanup);
+	RAII_VAR(struct ast_geoloc_eprofile *, eprofile,  NULL, ao2_cleanup);
 	RAII_VAR(struct ast_xml_doc *, result_doc, NULL, ast_xml_close);
 	const char *search[] = { "path", path, NULL };
 

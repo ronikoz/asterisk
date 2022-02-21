@@ -22,6 +22,7 @@
 #include "asterisk/sorcery.h"
 #include "asterisk/config.h"
 #include "asterisk/xml.h"
+#include "asterisk/optional_api.h"
 
 enum ast_geoloc_pidf_element {
 	AST_PIDF_ELEMENT_NONE = 0,
@@ -67,7 +68,7 @@ struct ast_geoloc_profile {
 	struct ast_variable *usage_rules_vars;
 };
 
-struct ast_geoloc_effective_profile {
+struct ast_geoloc_eprofile {
 	AST_DECLARE_STRING_FIELDS(
 		AST_STRING_FIELD(id);
 		AST_STRING_FIELD(location_reference);
@@ -85,6 +86,34 @@ struct ast_geoloc_effective_profile {
 	struct ast_variable *usage_rules_vars;
 };
 
+/*!
+ * \brief Check if res_geolocation is available
+ *
+ * \return 1 if available, 0 otherwise.
+ */
+AST_OPTIONAL_API(int, ast_geoloc_is_loaded,	(void), { return 0; });
+
+/*!
+ * \brief Retrieve a geolocation location object by id.
+ *
+ * \param id Location object id.
+ *
+ * \return Location object or NULL if not found.
+ */
+AST_OPTIONAL_API(struct ast_geoloc_location *, ast_geoloc_get_location,
+		 (const char *id),
+		 { return NULL; });
+
+/*!
+ * \brief Retrieve a geolocation profile by id.
+ *
+ * \param id profile id.
+ *
+ * \return Profile or NULL if not found.
+ */
+AST_OPTIONAL_API(struct ast_geoloc_profile *, ast_geoloc_get_profile,
+		 (const char *id),
+		 { return NULL; });
 
 /*!
  * \brief Given an official civicAddress code, return its friendly name.
@@ -164,7 +193,13 @@ struct ast_datastore *ast_geoloc_datastore_create_from_profile_name(const char *
  * \return The datastore.
  */
 struct ast_datastore *ast_geoloc_datastore_create_from_eprofile(
-	struct ast_geoloc_effective_profile *eprofile);
+	struct ast_geoloc_eprofile *eprofile);
+
+struct ast_datastore *ast_geoloc_datastore_create(const char *id);
+int ast_geoloc_datastore_add_eprofile(struct ast_datastore *ds,
+	struct ast_geoloc_eprofile *eprofile);
+int ast_geoloc_datastore_size(struct ast_datastore *ds);
+struct ast_geoloc_eprofile *ast_geoloc_datastore_get_eprofile(struct ast_datastore *ds, int ix);
 
 /*!
  * \brief Allocate a new, empty effective profile.
@@ -173,7 +208,7 @@ struct ast_datastore *ast_geoloc_datastore_create_from_eprofile(
  *
  * \return The effective profile ao2 object.
  */
-struct ast_geoloc_effective_profile *ast_geoloc_eprofile_alloc(const char *name);
+struct ast_geoloc_eprofile *ast_geoloc_eprofile_alloc(const char *name);
 
 /*!
  * \brief Allocate a new effective profile from an existing profile.
@@ -182,7 +217,7 @@ struct ast_geoloc_effective_profile *ast_geoloc_eprofile_alloc(const char *name)
  *
  * \return The effective profile ao2 object.
  */
-struct ast_geoloc_effective_profile *ast_geoloc_eprofile_create_from_profile(struct ast_geoloc_profile *profile);
+struct ast_geoloc_eprofile *ast_geoloc_eprofile_create_from_profile(struct ast_geoloc_profile *profile);
 
 /*!
  * \brief Allocate a new effective profile from an XML PIDF-LO document
@@ -192,7 +227,7 @@ struct ast_geoloc_effective_profile *ast_geoloc_eprofile_create_from_profile(str
  *
  * \return The effective profile ao2 object.
  */
-struct ast_geoloc_effective_profile *ast_geoloc_eprofile_create_from_pidf(
+struct ast_geoloc_eprofile *ast_geoloc_eprofile_create_from_pidf(
 	struct ast_xml_doc *pidf_xmldoc, const char *reference_string);
 
 /*!
@@ -203,7 +238,7 @@ struct ast_geoloc_effective_profile *ast_geoloc_eprofile_create_from_pidf(
  *
  * \return The effective profile ao2 object.
  */
-struct ast_geoloc_effective_profile *ast_geoloc_eprofile_create_from_uri(const char *uri,
+struct ast_geoloc_eprofile *ast_geoloc_eprofile_create_from_uri(const char *uri,
 	const char *reference_string);
 
 /*!
@@ -213,6 +248,6 @@ struct ast_geoloc_effective_profile *ast_geoloc_eprofile_create_from_uri(const c
  *
  * \return 0 on success, any other value on error.
  */
-int ast_geoloc_eprofile_refresh_location(struct ast_geoloc_effective_profile *eprofile);
+int ast_geoloc_eprofile_refresh_location(struct ast_geoloc_eprofile *eprofile);
 
 #endif /* INCLUDE_ASTERISK_RES_GEOLOCATION_H_ */

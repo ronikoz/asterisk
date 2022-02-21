@@ -19,8 +19,8 @@
 #include "asterisk.h"
 #include "asterisk/module.h"
 #include "asterisk/cli.h"
+#define AST_API_MODULE
 #include "geoloc_private.h"
-#include "asterisk/res_geolocation.h"
 
 static struct ast_sorcery *geoloc_sorcery;
 
@@ -433,7 +433,7 @@ static char *geoloc_config_show_profiles(struct ast_cli_entry *e, int cmd, struc
 		struct ast_str *refinement_str = NULL;
 		struct ast_str *variables_str = NULL;
 		struct ast_str *resolved_str = NULL;
-		struct ast_geoloc_effective_profile *eprofile = ast_geoloc_eprofile_create_from_profile(profile);
+		struct ast_geoloc_eprofile *eprofile = ast_geoloc_eprofile_create_from_profile(profile);
 		ao2_ref(profile, -1);
 
 		if (!ast_strlen_zero(eprofile->location_reference)) {
@@ -514,6 +514,24 @@ static struct ast_cli_entry geoloc_location_cli_commands[] = {
 	AST_CLI_DEFINE(geoloc_config_cli_reload, "Reload Geolocation Configuration"),
 };
 
+struct ast_geoloc_location * AST_OPTIONAL_API_NAME(ast_geoloc_get_location)(const char *id)
+{
+	if (ast_strlen_zero(id)) {
+		return NULL;
+	}
+
+	return ast_sorcery_retrieve_by_id(geoloc_sorcery, "location", id);
+}
+
+struct ast_geoloc_profile * AST_OPTIONAL_API_NAME(ast_geoloc_get_profile)(const char *id)
+{
+	if (ast_strlen_zero(id)) {
+		return NULL;
+	}
+
+	return ast_sorcery_retrieve_by_id(geoloc_sorcery, "profile", id);
+}
+
 int geoloc_config_reload(void)
 {
 	if (geoloc_sorcery) {
@@ -587,5 +605,10 @@ int geoloc_config_load(void)
 	ast_cli_register_multiple(geoloc_location_cli_commands, ARRAY_LEN(geoloc_location_cli_commands));
 
 	return AST_MODULE_LOAD_SUCCESS;
+}
+
+int AST_OPTIONAL_API_NAME(ast_geoloc_is_loaded)(void)
+{
+	return 1;
 }
 
