@@ -723,10 +723,11 @@ struct ast_str *ast_variable_list_join(const struct ast_variable *head, const ch
 }
 
 struct ast_variable *ast_variable_list_from_string(const char *input, const char *item_separator,
-	const char *name_value_separator)
+	const char *name_value_separator, const char *quote_str)
 {
 	char item_sep;
 	char nv_sep;
+	char quote;
 	struct ast_variable *new_list = NULL;
 	struct ast_variable *new_var = NULL;
 	char *item_string;
@@ -740,11 +741,14 @@ struct ast_variable *ast_variable_list_from_string(const char *input, const char
 
 	item_sep = ast_strlen_zero(item_separator) ? ',' : item_separator[0];
 	nv_sep = ast_strlen_zero(name_value_separator) ? '=' : name_value_separator[0];
+	quote = ast_strlen_zero(quote_str) ? '"' : quote_str[0];
 	item_string = ast_strip(ast_strdupa(input));
 
-	while ((item = ast_strsep(&item_string, item_sep, AST_STRSEP_ALL))) {
-		item_name = ast_strsep(&item, nv_sep, AST_STRSEP_ALL);
-		item_value = ast_strsep(&item, nv_sep, AST_STRSEP_ALL);
+	while ((item = ast_strsep_strict(&item_string, item_sep, quote, AST_STRSEP_ALL))) {
+		item_name = ast_strsep_strict(&item, nv_sep, quote, AST_STRSEP_ALL);
+
+		item_value = ast_strsep_strict(&item, nv_sep, quote, AST_STRSEP_ALL);
+
 		new_var = ast_variable_new(item_name, item_value, "");
 		if (!new_var) {
 			ast_variables_destroy(new_list);

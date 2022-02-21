@@ -1015,12 +1015,15 @@ struct ast_str *ast_variable_list_join(const struct ast_variable *head, const ch
  * \param name_value_separator The string used to separate each item's name and value.
  *                             Only the first character in the string will be used.
  *                             If NULL, "=" will be used.
+ * \param quote_str            The string used to quote values.
+ *                             Only the first character in the string will be used.
+ *                             If NULL, '"' will be used.
  *
  * \retval A pointer to a list of ast_variables.
  * \retval NULL if there was an error or no variables could be parsed.
  */
 struct ast_variable *ast_variable_list_from_string(const char *input, const char *item_separator,
-	const char *name_value_separator);
+	const char *name_value_separator, const char *quote_str);
 
 /*!
  * \brief Update variable value within a config

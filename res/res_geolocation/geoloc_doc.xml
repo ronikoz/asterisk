@@ -57,7 +57,7 @@
 				<configOption name="type">
 					<synopsis>Must be of type 'profile'.</synopsis>
 				</configOption>
-				<configOption name="pidf_lo_section" default="device">
+				<configOption name="pidf_element" default="device">
 					<synopsis>PIDF-LO element to place this profile in</synopsis>
 					<description>
 						<enumlist>

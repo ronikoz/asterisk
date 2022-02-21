@@ -189,6 +189,18 @@ struct ast_xml_node *ast_xml_find_element(struct ast_xml_node *root_node, const 
 struct ast_xml_ns *ast_xml_find_namespace(struct ast_xml_doc *doc, struct ast_xml_node *node, const char *ns_name);
 
 /*!
+ * \brief Find a direct child element by name.
+ * \param parent_node This is the parent node to search.
+ * \param name Node name to find.
+ * \param attrname attribute name to match (if NULL it won't be matched).
+ * \param attrvalue attribute value to match (if NULL it won't be matched).
+ * \retval NULL if not found.
+ * \return The node on success.
+ */
+#define ast_xml_find_child_element(_parent_node, _name, _attrname, _attrvalue) \
+    ast_xml_find_element(ast_xml_node_get_children(_parent_node), _name, _attrname, _attrvalue)
+
+/*!
  * \brief Get the prefix of a namespace.
  * \param ns The namespace
  * \return The prefix of the namespace.

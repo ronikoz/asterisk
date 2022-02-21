@@ -18,6 +18,7 @@
 
 #include "asterisk.h"
 #include "asterisk/datastore.h"
+#include "asterisk/res_geolocation.h"
 #include "geoloc_private.h"
 
 
@@ -36,7 +37,7 @@ static const struct ast_datastore_info geoloc_datastore_info = {
 };
 
 
-struct ast_datastore *ast_geoloc_datastore_create(const char *profile_name)
+struct ast_datastore *ast_geoloc_datastore_create_from_profile_name(const char *profile_name)
 {
 	struct ast_datastore *ds = NULL;
 	struct ast_geoloc_effective_profile *eprofile = NULL;
@@ -59,7 +60,7 @@ struct ast_datastore *ast_geoloc_datastore_create(const char *profile_name)
 		return NULL;
 	}
 
-	eprofile = ast_geoloc_effective_profile_create(profile);
+	eprofile = ast_geoloc_eprofile_create_from_profile(profile);
 	ao2_ref(profile, -1);
 	if (!eprofile) {
 		ast_datastore_free(ds);

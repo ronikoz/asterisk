@@ -25,8 +25,18 @@
 #include "asterisk/lock.h"
 #include "asterisk/res_geolocation.h"
 
+#define CONFIG_STR_TO_ENUM_DECL(_stem) int geoloc_ ## _stem ## _str_to_enum(const char *str);
+CONFIG_STR_TO_ENUM_DECL(pidf_element)
+CONFIG_STR_TO_ENUM_DECL(format);
+CONFIG_STR_TO_ENUM_DECL(location_disposition);
+#define GEOLOC_ENUM_TO_NAME_DECL(_stem) const char * geoloc_ ## _stem ## _to_name(int ix);
+GEOLOC_ENUM_TO_NAME_DECL(pidf_element)
+GEOLOC_ENUM_TO_NAME_DECL(format);
+GEOLOC_ENUM_TO_NAME_DECL(location_disposition);
+
+
 #define CONFIG_STR_TO_ENUM(_stem) \
-static int _stem ## _str_to_enum(const char *str) \
+int geoloc_ ## _stem ## _str_to_enum(const char *str) \
 { \
 	int i; \
 	for (i = 0; i < ARRAY_LEN(_stem ## _names); i++) { \
@@ -41,12 +51,23 @@ static int _stem ## _str_to_enum(const char *str) \
 static int _stem ## _handler(const struct aco_option *opt, struct ast_variable *var, void *obj) \
 { \
 	struct ast_geoloc_ ## _object *_thisobject = obj; \
-	int enumval = _stem ## _str_to_enum(var->value); \
+	int enumval = geoloc_ ## _stem ## _str_to_enum(var->value); \
 	if (enumval == -1) { \
 		return -1; \
 	} \
 	_thisobject->_stem = enumval; \
 	return 0; \
+}
+
+
+#define GEOLOC_ENUM_TO_NAME(_stem) \
+const char * geoloc_ ## _stem ## _to_name(int ix) \
+{ \
+	if (!ARRAY_IN_BOUNDS(ix, _stem ## _names)) { \
+		return "none"; \
+	} else { \
+		return _stem ## _names[ix]; \
+	} \
 }
 
 #define CONFIG_ENUM_TO_STR(_object, _stem) \
@@ -63,6 +84,7 @@ static int _stem ## _to_str(const void *obj, const intptr_t *args, char **buf) \
 
 #define CONFIG_ENUM(_object, _stem) \
 CONFIG_STR_TO_ENUM(_stem) \
+GEOLOC_ENUM_TO_NAME(_stem) \
 CONFIG_ENUM_HANDLER(_object, _stem) \
 CONFIG_ENUM_TO_STR(_object, _stem)
 
@@ -132,6 +154,10 @@ int geoloc_dialplan_reload(void);
 int geoloc_channel_unload(void);
 int geoloc_channel_load(void);
 int geoloc_channel_reload(void);
+
+int geoloc_eprofile_unload(void);
+int geoloc_eprofile_load(void);
+int geoloc_eprofile_reload(void);
 
 struct ast_sorcery *geoloc_get_sorcery(void);
 

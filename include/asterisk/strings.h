@@ -308,6 +308,8 @@ enum ast_strsep_flags {
  */
 char *ast_strsep(char **s, const char sep, uint32_t flags);
 
+char *ast_strsep_strict(char **s, const char sep, const char quote, uint32_t flags);
+
 /*!
   \brief Strip backslash for "escaped" semicolons,
 	the string to be stripped (will be modified).

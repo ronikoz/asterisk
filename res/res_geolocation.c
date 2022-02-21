@@ -17,27 +17,14 @@
  */
 
 /*** MODULEINFO
+	<depend>libxml2</depend>
+	<depend>libxslt</depend>
 	<support_level>core</support_level>
  ***/
 
 
 #include "asterisk.h"
 #include "res_geolocation/geoloc_private.h"
-
-static const char *result_names[] = {
-	"Success",
-	"Missing type",
-	"Invalid shape type",
-	"Invalid variable name",
-	"Not enough variables",
-	"Too many variables",
-	"Invalid variable value"
-};
-
-const char *ast_geoloc_validate_result_to_str(enum ast_geoloc_validate_result result)
-{
-	return result_names[result];
-}
 
 static int reload_module(void)
 {
@@ -52,6 +39,10 @@ static int reload_module(void)
 		return AST_MODULE_LOAD_DECLINE;
 	}
 	res = geoloc_config_reload();
+	if (res) {
+		return AST_MODULE_LOAD_DECLINE;
+	}
+	res = geoloc_eprofile_reload();
 	if (res) {
 		return AST_MODULE_LOAD_DECLINE;
 	}
@@ -71,8 +62,9 @@ static int unload_module(void)
 {
 	int res = 0;
 
-	res += geoloc_channel_reload();
+	res += geoloc_channel_unload();
 	res += geoloc_dialplan_unload();
+	res += geoloc_eprofile_unload();
 	res += geoloc_config_unload();
 	res += geoloc_gml_unload();
 	res += geoloc_civicaddr_unload();
@@ -84,18 +76,24 @@ static int load_module(void)
 {
 	int res = 0;
 
-	res = geoloc_gml_load();
-	if (res) {
-		return AST_MODULE_LOAD_DECLINE;
-	}
-
 	res = geoloc_civicaddr_load();
 	if (res) {
 		unload_module();
 		return AST_MODULE_LOAD_DECLINE;
 	}
 
+	res = geoloc_gml_load();
+	if (res) {
+		return AST_MODULE_LOAD_DECLINE;
+	}
+
 	res = geoloc_config_load();
+	if (res) {
+		unload_module();
+		return AST_MODULE_LOAD_DECLINE;
+	}
+
+	res = geoloc_eprofile_load();
 	if (res) {
 		unload_module();
 		return AST_MODULE_LOAD_DECLINE;
