@@ -24,6 +24,8 @@
 #include "asterisk/xml.h"
 #include "asterisk/optional_api.h"
 
+#define AST_GEOLOC_INVALID_VALUE -1
+
 enum ast_geoloc_pidf_element {
 	AST_PIDF_ELEMENT_NONE = 0,
 	AST_PIDF_ELEMENT_TUPLE,
@@ -38,11 +40,11 @@ enum ast_geoloc_format {
 	AST_GEOLOC_FORMAT_URI,
 };
 
-enum ast_geoloc_location_disposition {
-	AST_GEOLOC_LOC_DISP_DISCARD = 0,
-	AST_GEOLOC_LOC_DISP_APPEND,
-	AST_GEOLOC_LOC_DISP_PREPEND,
-	AST_GEOLOC_LOC_DISP_REPLACE,
+enum ast_geoloc_action {
+	AST_GEOLOC_ACTION_DISCARD = 0,
+	AST_GEOLOC_ACTION_APPEND,
+	AST_GEOLOC_ACTION_PREPEND,
+	AST_GEOLOC_ACTION_REPLACE,
 };
 
 struct ast_geoloc_location {
@@ -51,7 +53,7 @@ struct ast_geoloc_location {
 		AST_STRING_FIELD(method);
 	);
 	enum ast_geoloc_format format;
-	struct ast_variable *location_vars;
+	struct ast_variable *location_info;
 };
 
 struct ast_geoloc_profile {
@@ -60,12 +62,12 @@ struct ast_geoloc_profile {
 		AST_STRING_FIELD(location_reference);
 	);
 	enum ast_geoloc_pidf_element pidf_element;
-	enum ast_geoloc_location_disposition location_disposition;
+	enum ast_geoloc_action action;
 	int geolocation_routing;
 	int send_location;
 	struct ast_variable *location_refinement;
 	struct ast_variable *location_variables;
-	struct ast_variable *usage_rules_vars;
+	struct ast_variable *usage_rules;
 };
 
 struct ast_geoloc_eprofile {
@@ -75,15 +77,15 @@ struct ast_geoloc_eprofile {
 		AST_STRING_FIELD(method);
 	);
 	enum ast_geoloc_pidf_element pidf_element;
-	enum ast_geoloc_location_disposition location_disposition;
+	enum ast_geoloc_action action;
 	int geolocation_routing;
 	int send_location;
 	enum ast_geoloc_format format;
-	struct ast_variable *location_vars;
+	struct ast_variable *location_info;
 	struct ast_variable *location_refinement;
 	struct ast_variable *location_variables;
 	struct ast_variable *effective_location;
-	struct ast_variable *usage_rules_vars;
+	struct ast_variable *usage_rules;
 };
 
 /*!
@@ -143,13 +145,13 @@ const char *ast_geoloc_civicaddr_get_code_from_name(const char *name);
 const char *ast_geoloc_civicaddr_resolve_variable(const char *variable);
 
 enum ast_geoloc_validate_result {
+	AST_GEOLOC_VALIDATE_INVALID_VALUE = -1,
 	AST_GEOLOC_VALIDATE_SUCCESS = 0,
 	AST_GEOLOC_VALIDATE_MISSING_TYPE,
 	AST_GEOLOC_VALIDATE_INVALID_TYPE,
 	AST_GEOLOC_VALIDATE_INVALID_VARNAME,
 	AST_GEOLOC_VALIDATE_NOT_ENOUGH_VARNAMES,
 	AST_GEOLOC_VALIDATE_TOO_MANY_VARNAMES,
-	AST_GEOLOC_VALIDATE_INVALID_VALUE,
 };
 
 const char *ast_geoloc_validate_result_to_str(enum ast_geoloc_validate_result result);
@@ -176,6 +178,12 @@ enum ast_geoloc_validate_result ast_geoloc_civicaddr_validate_varlist(
 enum ast_geoloc_validate_result ast_geoloc_gml_validate_varlist(const struct ast_variable *varlist,
 	const char **result);
 
+
+/*!
+ * \brief Geolocation datastore Functions
+ * @{
+ */
+
 /*!
  * \brief Create a geoloc datastore from a profile name
  *
@@ -195,11 +203,105 @@ struct ast_datastore *ast_geoloc_datastore_create_from_profile_name(const char *
 struct ast_datastore *ast_geoloc_datastore_create_from_eprofile(
 	struct ast_geoloc_eprofile *eprofile);
 
+/*!
+ * \brief Create an empty geoloc datastore.
+ *
+ * \param id  An id to use for the datastore.
+ *
+ * \return The datastore.
+ */
 struct ast_datastore *ast_geoloc_datastore_create(const char *id);
+
+/*!
+ * \brief Retrieve a geoloc datastore's id.
+ *
+ * \param ds The datastore
+ *
+ * \return The datastore's id.
+ */
+const char *ast_geoloc_datastore_get_id(struct ast_datastore *ds);
+
+/*!
+ * \brief Add an eprofile to a datastore
+ *
+ * \param ds       The datastore
+ * \param eprofile The eprofile to add.
+ *
+ * \return The new number of eprofiles or -1 to indicate a failure.
+ */
 int ast_geoloc_datastore_add_eprofile(struct ast_datastore *ds,
 	struct ast_geoloc_eprofile *eprofile);
+
+/*!
+ * \brief Insert an eprofile to a datastore at the specified position
+ *
+ * \param ds       The datastore
+ * \param eprofile The eprofile to add.
+ * \param index    The position to insert at.  Existing eprofiles will
+ *                 be moved up to make room.
+ *
+ * \return The new number of eprofiles or -1 to indicate a failure.
+ */
+int ast_geoloc_datastore_insert_eprofile(struct ast_datastore *ds,
+	struct ast_geoloc_eprofile *eprofile, int index);
+
+/*!
+ * \brief Retrieves the number of eprofiles in the datastore
+ *
+ * \param ds The datastore
+ *
+ * \return The number of eprofiles.
+ */
 int ast_geoloc_datastore_size(struct ast_datastore *ds);
+
+/*!
+ * \brief Sets the inheritance flag on the datastore
+ *
+ * \param ds      The datastore
+ * \param inherit 1 to allow the datastore to be inherited by other channels
+ *                0 to prevent the datastore to be inherited by other channels
+ *
+ * \return 0 if successful, -1 otherwise.
+ */
+int ast_geoloc_datastore_set_inheritance(struct ast_datastore *ds, int inherit);
+
+/*!
+ * \brief Retrieve a specific eprofile from a datastore by index
+ *
+ * \param ds The datastore
+ * \param ix The index
+ *
+ * \return The effective profile ao2 object with its reference count bumped.
+ */
 struct ast_geoloc_eprofile *ast_geoloc_datastore_get_eprofile(struct ast_datastore *ds, int ix);
+
+/*!
+ * \brief Delete a specific eprofile from a datastore by index
+ *
+ * \param ds The datastore
+ * \param ix The index
+ *
+ * \return 0 if succesful, -1 otherwise.
+ */
+int ast_geoloc_datastore_delete_eprofile(struct ast_datastore *ds, int ix);
+
+/*!
+ * \brief Retrieves the geoloc datastore from a channel, if any
+ *
+ * \param chan Channel
+ *
+ * \return datastore if found, NULL otherwise.
+ */
+struct ast_datastore *ast_geoloc_datastore_find(struct ast_channel *chan);
+
+/*!
+ *  @}
+ */
+
+/*!
+ * \brief Geolocation Effective Profile Functions
+ * @{
+ */
 
 /*!
  * \brief Allocate a new, empty effective profile.
@@ -249,5 +351,9 @@ struct ast_geoloc_eprofile *ast_geoloc_eprofile_create_from_uri(const char *uri,
  * \return 0 on success, any other value on error.
  */
 int ast_geoloc_eprofile_refresh_location(struct ast_geoloc_eprofile *eprofile);
+
+/*!
+ *  @}
+ */
 
 #endif /* INCLUDE_ASTERISK_RES_GEOLOCATION_H_ */

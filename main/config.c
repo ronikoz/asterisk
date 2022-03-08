@@ -746,8 +746,16 @@ struct ast_variable *ast_variable_list_from_string(const char *input, const char
 
 	while ((item = ast_strsep_strict(&item_string, item_sep, quote, AST_STRSEP_ALL))) {
 		item_name = ast_strsep_strict(&item, nv_sep, quote, AST_STRSEP_ALL);
+		if (!item_name) {
+			ast_variables_destroy(new_list);
+			return NULL;
+		}
 
 		item_value = ast_strsep_strict(&item, nv_sep, quote, AST_STRSEP_ALL);
+		if (!item_value) {
+			ast_variables_destroy(new_list);
+			return NULL;
+		}
 
 		new_var = ast_variable_new(item_name, item_value, "");
 		if (!new_var) {

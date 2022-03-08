@@ -145,7 +145,7 @@ static int handle_incoming_request(struct ast_sip_session *session, struct pjsip
 			"%s: Couldn't allocate a geoloc datastore\n", session_name);
 	}
 
-	if (config_profile->location_disposition == AST_GEOLOC_LOC_DISP_DISCARD) {
+	if (config_profile->action == AST_GEOLOC_ACTION_DISCARD) {
 		ast_trace(4, "%s: Profile '%s' location_disposition is 'discard' so "
 			"discarding Geolocation: " PJSTR_PRINTF_SPEC, session_name,
 			ast_sorcery_object_get_id(config_profile),
@@ -158,23 +158,23 @@ static int handle_incoming_request(struct ast_sip_session *session, struct pjsip
 		}
 
 		rc = ast_geoloc_datastore_add_eprofile(ds, config_eprofile);
-		if (rc != 0) {
+		if (rc <= 0) {
 			SCOPE_EXIT_LOG_RTN_VALUE(0, LOG_WARNING,
 				"%s: Couldn't add eprofile '%s' to datastore\n", session_name,
 				config_eprofile->id);
 		}
 
+		ast_channel_lock(channel);
 		ast_channel_datastore_add(channel, ds);
+		ast_channel_unlock(channel);
 		/*
-		 * We gave our eprofile reference to the datastore and the
-		 * datastore to the channel so don't let RAII_VAR clean them up.
+		 * We gave the datastore to the channel so don't let RAII_VAR clean it up.
 		 */
-		config_eprofile = NULL;
 		ds = NULL;
 
 		SCOPE_EXIT_RTN_VALUE(0, "%s: Added geoloc datastore with 1 eprofile\n",
 			session_name);
-	} else if (config_profile->location_disposition == AST_GEOLOC_LOC_DISP_PREPEND) {
+	} else if (config_profile->action == AST_GEOLOC_ACTION_PREPEND) {
 		ast_trace(4, "%s: Profile '%s' location_disposition is 'prepend' so "
 			"adding to datastore first", session_name, ast_sorcery_object_get_id(config_profile));
 
@@ -185,21 +185,22 @@ static int handle_incoming_request(struct ast_sip_session *session, struct pjsip
 		}
 
 		rc = ast_geoloc_datastore_add_eprofile(ds, config_eprofile);
-		if (rc != 0) {
+		if (rc <= 0) {
 			SCOPE_EXIT_LOG_RTN_VALUE(0, LOG_WARNING,
 				"%s: Couldn't add eprofile '%s' to datastore\n", session_name,
 				config_eprofile->id);
 		}
-		config_eprofile = NULL;
 
 		if (!geoloc_hdr) {
+			ast_channel_lock(channel);
 			ast_channel_datastore_add(channel, ds);
+			ast_channel_unlock(channel);
 			ds = NULL;
 
 			SCOPE_EXIT_RTN_VALUE(0, "%s: No Geolocation header so just adding config profile "
 				"'%s' to datastore\n", session_name, ast_sorcery_object_get_id(config_profile));
 		}
-	} else if (config_profile->location_disposition == AST_GEOLOC_LOC_DISP_REPLACE) {
+	} else if (config_profile->action == AST_GEOLOC_ACTION_REPLACE) {
 		if (geoloc_hdr) {
 			ast_trace(4, "%s: Profile '%s' location_disposition is 'replace' so "
 				"we don't need to do anything with the configured profile", session_name,
@@ -275,19 +276,19 @@ static int handle_incoming_request(struct ast_sip_session *session, struct pjsip
 
 			eprofile = ast_geoloc_eprofile_create_from_pidf(incoming_doc, session_name);
 		}
-		eprofile->location_disposition = config_profile->location_disposition;
+		eprofile->action = config_profile->action;
 		eprofile->send_location = config_profile->send_location;
 
 		ast_trace(4, "Processing URI '%s'.  Adding to datastore\n", geoloc_uri);
 		rc = ast_geoloc_datastore_add_eprofile(ds, eprofile);
-		if (rc != 0) {
-			ao2_ref(eprofile, -1);
+		ao2_ref(eprofile, -1);
+		if (rc <= 0) {
 			ast_log(LOG_WARNING, "%s: Unable to add effective profile for URI '%s' to datastore.  Skipping\n",
 				session_name, geoloc_uri);
 		}
 	}
 
-	if (config_profile->location_disposition == AST_GEOLOC_LOC_DISP_APPEND) {
+	if (config_profile->action == AST_GEOLOC_ACTION_APPEND) {
 		ast_trace(4, "%s: Profile '%s' location_disposition is 'prepend' so "
 			"adding to datastore first", session_name, ast_sorcery_object_get_id(config_profile));
 
@@ -298,7 +299,7 @@ static int handle_incoming_request(struct ast_sip_session *session, struct pjsip
 		}
 
 		rc = ast_geoloc_datastore_add_eprofile(ds, config_eprofile);
-		if (rc != 0) {
+		if (rc <= 0) {
 			SCOPE_EXIT_LOG_RTN_VALUE(0, LOG_WARNING,
 				"%s: Couldn't add eprofile '%s' to datastore\n", session_name,
 				config_eprofile->id);
@@ -313,7 +314,9 @@ static int handle_incoming_request(struct ast_sip_session *session, struct pjsip
 			session_name);
 	}
 
+	ast_channel_lock(channel);
 	ast_channel_datastore_add(channel, ds);
+	ast_channel_unlock(channel);
 	ds = NULL;
 
 	SCOPE_EXIT_RTN_VALUE(0, "%s: Added geoloc datastore with %" PRIu64 " eprofiles\n",

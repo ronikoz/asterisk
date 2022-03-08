@@ -28,11 +28,11 @@
 #define CONFIG_STR_TO_ENUM_DECL(_stem) int geoloc_ ## _stem ## _str_to_enum(const char *str);
 CONFIG_STR_TO_ENUM_DECL(pidf_element)
 CONFIG_STR_TO_ENUM_DECL(format);
-CONFIG_STR_TO_ENUM_DECL(location_disposition);
+CONFIG_STR_TO_ENUM_DECL(action);
 #define GEOLOC_ENUM_TO_NAME_DECL(_stem) const char * geoloc_ ## _stem ## _to_name(int ix);
 GEOLOC_ENUM_TO_NAME_DECL(pidf_element)
 GEOLOC_ENUM_TO_NAME_DECL(format);
-GEOLOC_ENUM_TO_NAME_DECL(location_disposition);
+GEOLOC_ENUM_TO_NAME_DECL(action);
 
 
 #define CONFIG_STR_TO_ENUM(_stem) \

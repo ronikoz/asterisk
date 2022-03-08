@@ -38,7 +38,7 @@ static const char *format_names[] = {
 	"URI",
 };
 
-static const char * location_disposition_names[] = {
+static const char * action_names[] = {
 	"discard",
 	"append",
 	"prepend",
@@ -46,13 +46,13 @@ static const char * location_disposition_names[] = {
 };
 
 CONFIG_ENUM(location, format)
-CONFIG_VAR_LIST(location, location_vars)
+CONFIG_VAR_LIST(location, location_info)
 
 static void geoloc_location_destructor(void *obj) {
 	struct ast_geoloc_location *location = obj;
 
 	ast_string_field_free_memory(location);
-	ast_variables_destroy(location->location_vars);
+	ast_variables_destroy(location->location_info);
 }
 
 static void *geoloc_location_alloc(const char *name)
@@ -67,10 +67,10 @@ static void *geoloc_location_alloc(const char *name)
 
 
 CONFIG_ENUM(profile, pidf_element)
-CONFIG_ENUM(profile, location_disposition)
+CONFIG_ENUM(profile, action)
 CONFIG_VAR_LIST(profile, location_refinement)
 CONFIG_VAR_LIST(profile, location_variables)
-CONFIG_VAR_LIST(profile, usage_rules_vars)
+CONFIG_VAR_LIST(profile, usage_rules)
 
 
 static void geoloc_profile_destructor(void *obj) {
@@ -79,7 +79,7 @@ static void geoloc_profile_destructor(void *obj) {
 	ast_string_field_free_memory(profile);
 	ast_variables_destroy(profile->location_refinement);
 	ast_variables_destroy(profile->location_variables);
-	ast_variables_destroy(profile->usage_rules_vars);
+	ast_variables_destroy(profile->usage_rules);
 }
 
 static void *geoloc_profile_alloc(const char *name)
@@ -105,7 +105,7 @@ static int geoloc_location_apply_handler(const struct ast_sorcery *sorcery, void
 		ast_log(LOG_ERROR, "Location '%s' must have a format\n", location_id);
 		return -1;
 	case AST_GEOLOC_FORMAT_CIVIC_ADDRESS:
-		result = ast_geoloc_civicaddr_validate_varlist(location->location_vars, &failed);
+		result = ast_geoloc_civicaddr_validate_varlist(location->location_info, &failed);
 		if (result != AST_GEOLOC_VALIDATE_SUCCESS) {
 			ast_log(LOG_ERROR, "Location '%s' has invalid item '%s' in the location\n",
 				location_id, failed);
@@ -113,7 +113,7 @@ static int geoloc_location_apply_handler(const struct ast_sorcery *sorcery, void
 		}
 		break;
 	case AST_GEOLOC_FORMAT_GML:
-		result = ast_geoloc_gml_validate_varlist(location->location_vars, &failed);
+		result = ast_geoloc_gml_validate_varlist(location->location_info, &failed);
 		if (result != AST_GEOLOC_VALIDATE_SUCCESS) {
 			ast_log(LOG_ERROR, "%s for item '%s' in location '%s'\n",
 				ast_geoloc_validate_result_to_str(result),	failed, location_id);
@@ -122,9 +122,9 @@ static int geoloc_location_apply_handler(const struct ast_sorcery *sorcery, void
 
 		break;
 	case AST_GEOLOC_FORMAT_URI:
-		uri = ast_variable_find_in_list(location->location_vars, "URI");
+		uri = ast_variable_find_in_list(location->location_info, "URI");
 		if (!uri) {
-			struct ast_str *str = ast_variable_list_join(location->location_vars, ",", "=", "\"", NULL);
+			struct ast_str *str = ast_variable_list_join(location->location_info, ",", "=", "\"", NULL);
 
 			ast_log(LOG_ERROR, "Geolocation location '%s' format is set to '%s' but no 'URI' was found in location parameter '%s'\n",
 				location_id, format_names[AST_GEOLOC_FORMAT_URI], ast_str_buffer(str));
@@ -259,7 +259,7 @@ static char *geoloc_config_list_locations(struct ast_cli_entry *e, int cmd, stru
 		struct ast_str *str;
 
 		ao2_lock(loc);
-		str = ast_variable_list_join(loc->location_vars, ",", "=", "\"", NULL);
+		str = ast_variable_list_join(loc->location_info, ",", "=", "\"", NULL);
 		if (!str) {
 			ao2_unlock(loc);
 			ao2_ref(loc, -1);
@@ -295,7 +295,7 @@ static char *geoloc_config_list_profiles(struct ast_cli_entry *e, int cmd, struc
 	int using_regex = 0;
 	char *result = CLI_SUCCESS;
 	int ret = 0;
-	char *disposition;
+	char *action;
 	int count = 0;
 
 	switch (cmd) {
@@ -352,14 +352,14 @@ static char *geoloc_config_list_profiles(struct ast_cli_entry *e, int cmd, struc
 	for (; (profile = ao2_iterator_next(&iter)); ao2_ref(profile, -1)) {
 		ao2_lock(profile);
 
-		location_disposition_to_str(profile, NULL, &disposition);
+		action_to_str(profile, NULL, &action);
 		ast_cli(a->fd, "%-46.46s %-13s %-6s %-s\n",
 			ast_sorcery_object_get_id(profile),
-			disposition,
+			action,
 			profile->send_location ? "yes" : "no",
 			profile->location_reference);
 		ao2_unlock(profile);
-		ast_free(disposition);
+		ast_free(action);
 		count++;
 	}
 	ao2_iterator_destroy(&iter);
@@ -428,7 +428,7 @@ static char *geoloc_config_show_profiles(struct ast_cli_entry *e, int cmd, struc
 
 	iter = ao2_iterator_init(sorted_container, AO2_ITERATOR_UNLINK);
 	for (; (profile = ao2_iterator_next(&iter)); ) {
-		char *disposition = NULL;
+		char *action = NULL;
 		struct ast_str *loc_str = NULL;
 		struct ast_str *refinement_str = NULL;
 		struct ast_str *variables_str = NULL;
@@ -437,14 +437,14 @@ static char *geoloc_config_show_profiles(struct ast_cli_entry *e, int cmd, struc
 		ao2_ref(profile, -1);
 
 		if (!ast_strlen_zero(eprofile->location_reference)) {
-			loc_str = ast_variable_list_join(eprofile->location_vars, ",", "=", "\"", NULL);
+			loc_str = ast_variable_list_join(eprofile->location_info, ",", "=", "\"", NULL);
 			resolved_str = ast_variable_list_join(eprofile->effective_location, ",", "=", "\"", NULL);
 		}
 
 		refinement_str = ast_variable_list_join(eprofile->location_refinement, ",", "=", "\"", NULL);
 		variables_str = ast_variable_list_join(eprofile->location_variables, ",", "=", "\"", NULL);
 
-		location_disposition_to_str(eprofile, NULL, &disposition);
+		action_to_str(eprofile, NULL, &action);
 
 		ast_cli(a->fd,
 			"id:                            %-s\n"
@@ -458,7 +458,7 @@ static char *geoloc_config_show_profiles(struct ast_cli_entry *e, int cmd, struc
 			"location_variables:            %-s\n"
 			"effective_location:            %-s\n\n",
 			eprofile->id,
-			disposition,
+			action,
 			eprofile->send_location ? "yes" : "no",
 			pidf_element_names[eprofile->pidf_element],
 			S_OR(eprofile->location_reference, "<none>"),
@@ -469,7 +469,7 @@ static char *geoloc_config_show_profiles(struct ast_cli_entry *e, int cmd, struc
 			S_COR(resolved_str, ast_str_buffer(resolved_str), "<none>"));
 		ao2_ref(eprofile, -1);
 
-		ast_free(disposition);
+		ast_free(action);
 		ast_free(loc_str);
 		ast_free(refinement_str);
 		ast_free(variables_str);
@@ -573,8 +573,8 @@ int geoloc_config_load(void)
 	ast_sorcery_object_field_register(geoloc_sorcery, "location", "type", "", OPT_NOOP_T, 0, 0);
 	ast_sorcery_object_field_register_custom(geoloc_sorcery, "location", "format", AST_GEOLOC_FORMAT_NONE,
 		format_handler, format_to_str, NULL, 0, 0);
-	ast_sorcery_object_field_register_custom(geoloc_sorcery, "location", "location", NULL,
-		location_vars_handler, location_vars_to_str, location_vars_dup, 0, 0);
+	ast_sorcery_object_field_register_custom(geoloc_sorcery, "location", "location_info", NULL,
+		location_info_handler, location_info_to_str, location_info_dup, 0, 0);
 
 	ast_sorcery_apply_default(geoloc_sorcery, "profile", "config", "geolocation.conf,criteria=type=profile");
 	if (ast_sorcery_object_register(geoloc_sorcery, "profile", geoloc_profile_alloc, NULL, geoloc_profile_apply_handler)) {
@@ -589,12 +589,12 @@ int geoloc_config_load(void)
 		pidf_element_handler, pidf_element_to_str, NULL, 0, 0);
 	ast_sorcery_object_field_register(geoloc_sorcery, "profile", "location_reference", "", OPT_STRINGFIELD_T,
 		0, STRFLDSET(struct ast_geoloc_profile, location_reference));
-	ast_sorcery_object_field_register_custom(geoloc_sorcery, "profile", "received_location_disposition", "discard",
-		location_disposition_handler, location_disposition_to_str, NULL, 0, 0);
+	ast_sorcery_object_field_register_custom(geoloc_sorcery, "profile", "action", "discard",
+		action_handler, action_to_str, NULL, 0, 0);
 	ast_sorcery_object_field_register(geoloc_sorcery, "profile", "send_location", "no",
 		OPT_BOOL_T, 1, FLDSET(struct ast_geoloc_profile, send_location));
 	ast_sorcery_object_field_register_custom(geoloc_sorcery, "profile", "usage_rules", NULL,
-		usage_rules_vars_handler, usage_rules_vars_to_str, usage_rules_vars_dup, 0, 0);
+		usage_rules_handler, usage_rules_to_str, usage_rules_dup, 0, 0);
 	ast_sorcery_object_field_register_custom(geoloc_sorcery, "profile", "location_refinement", NULL,
 		location_refinement_handler, location_refinement_to_str, location_refinement_dup, 0, 0);
 	ast_sorcery_object_field_register_custom(geoloc_sorcery, "profile", "location_variables", NULL,

@@ -32,15 +32,30 @@ static struct ast_xslt_doc *pidf_lo_xslt;
 
 static struct ast_sorcery *geoloc_sorcery;
 
-static void geoloc_eprofile_destructor(void *obj) {
+#define DUP_VARS(_dest, _source) \
+({ \
+	int _rc = 0; \
+	if (_source) { \
+		struct ast_variable *_vars = ast_variables_dup(_source); \
+		if (!_vars) { \
+			_rc = -1; \
+		} else { \
+			_dest = _vars; \
+		} \
+	} \
+	(_rc); \
+})
+
+static void geoloc_eprofile_destructor(void *obj)
+{
 	struct ast_geoloc_eprofile *eprofile = obj;
 
 	ast_string_field_free_memory(eprofile);
-	ast_variables_destroy(eprofile->location_vars);
+	ast_variables_destroy(eprofile->location_info);
 	ast_variables_destroy(eprofile->location_refinement);
 	ast_variables_destroy(eprofile->location_variables);
 	ast_variables_destroy(eprofile->effective_location);
-	ast_variables_destroy(eprofile->usage_rules_vars);
+	ast_variables_destroy(eprofile->usage_rules);
 }
 
 struct ast_geoloc_eprofile *ast_geoloc_eprofile_alloc(const char *name)
@@ -57,7 +72,14 @@ struct ast_geoloc_eprofile *ast_geoloc_eprofile_alloc(const char *name)
 int ast_geoloc_eprofile_refresh_location(struct ast_geoloc_eprofile *eprofile)
 {
 	struct ast_geoloc_location *loc = NULL;
+	struct ast_variable *temp_locinfo = NULL;
+	struct ast_variable *temp_effloc = NULL;
 	struct ast_variable *var;
+	int rc = 0;
+
+	if (!eprofile) {
+		return -1;
+	}
 
 	if (!ast_strlen_zero(eprofile->location_reference)) {
 		loc = ast_sorcery_retrieve_by_id(geoloc_sorcery, "location", eprofile->location_reference);
@@ -68,41 +90,42 @@ int ast_geoloc_eprofile_refresh_location(struct ast_geoloc_eprofile *eprofile)
 		}
 
 		eprofile->format = loc->format;
-
-		ast_variables_destroy(eprofile->location_vars);
-		eprofile->location_vars = loc->location_vars ? ast_variables_dup(loc->location_vars) : NULL;
+		rc = DUP_VARS(temp_locinfo, loc->location_info);
 		ao2_ref(loc, -1);
-		loc = NULL;
+		if (rc != 0) {
+			return -1;
+		}
+	} else {
+		temp_locinfo = eprofile->location_info;
 	}
 
-	ast_variables_destroy(eprofile->effective_location);
-	eprofile->effective_location = eprofile->location_vars ? ast_variables_dup(eprofile->location_vars) : NULL;
+	rc = DUP_VARS(temp_effloc, temp_locinfo);
+	if (rc != 0) {
+		ast_variables_destroy(temp_locinfo);
+		return -1;
+	}
 
 	if (eprofile->location_refinement) {
 		for (var = eprofile->location_refinement; var; var = var->next) {
 			struct ast_variable *newvar = ast_variable_new(var->name, var->value, "");
-			if (ast_variable_list_replace(&eprofile->effective_location, newvar)) {
-				ast_variable_list_append(&eprofile->effective_location, newvar);
+			if (!newvar) {
+				ast_variables_destroy(temp_locinfo);
+				ast_variables_destroy(temp_effloc);
+				return -1;
+			}
+			if (ast_variable_list_replace(&temp_effloc, newvar)) {
+				ast_variable_list_append(&temp_effloc, newvar);
 			}
 		}
 	}
 
+	ast_variables_destroy(eprofile->location_info);
+	eprofile->location_info = temp_locinfo;
+	ast_variables_destroy(eprofile->effective_location);
+	eprofile->effective_location = temp_effloc;
+
 	return 0;
 }
-
-#define DUP_VARS(_dest, _source) \
-({ \
-	int _rc = 0; \
-	if (_source) { \
-		struct ast_variable *_vars = ast_variables_dup(_source); \
-		if (!_vars) { \
-			_rc = -1; \
-		} else { \
-			_dest = _vars; \
-		} \
-	} \
-	(_rc); \
-})
 
 struct ast_geoloc_eprofile *ast_geoloc_eprofile_create_from_profile(struct ast_geoloc_profile *profile)
 {
@@ -131,7 +154,7 @@ struct ast_geoloc_eprofile *ast_geoloc_eprofile_create_from_profile(struct ast_g
 		rc = DUP_VARS(eprofile->location_variables, profile->location_variables);
 	}
 	if (rc == 0) {
-		rc = DUP_VARS(eprofile->usage_rules_vars, profile->usage_rules_vars);
+		rc = DUP_VARS(eprofile->usage_rules, profile->usage_rules);
 	}
 	if (rc != 0) {
 		ao2_unlock(profile);
@@ -139,7 +162,7 @@ struct ast_geoloc_eprofile *ast_geoloc_eprofile_create_from_profile(struct ast_g
 		return NULL;
 	}
 
-	eprofile->location_disposition = profile->location_disposition;
+	eprofile->action = profile->action;
 	eprofile->send_location = profile->send_location;
 	ao2_unlock(profile);
 
@@ -176,7 +199,7 @@ struct ast_geoloc_eprofile *ast_geoloc_eprofile_create_from_uri(const char *uri,
 	}
 
 	eprofile->format = AST_GEOLOC_FORMAT_URI;
-	eprofile->location_vars = ast_variable_new("URI", local_uri, "");
+	eprofile->location_info = ast_variable_new("URI", local_uri, "");
 
 	return eprofile;
 }
@@ -227,8 +250,8 @@ static struct ast_geoloc_eprofile *geoloc_eprofile_create_from_xslt_result(
 
 	location_str = ast_xml_get_text(location_info);
 	duped = ast_strdupa(location_str);
-	eprofile->location_vars = ast_variable_list_from_string(duped, ",", "=", "\"");
-	if (!eprofile->location_vars) {
+	eprofile->location_info = ast_variable_list_from_string(duped, ",", "=", "\"");
+	if (!eprofile->location_info) {
 		ao2_ref(eprofile, -1);
 		ast_log(LOG_ERROR, "%s: Unable to create location variables from '%s'\n", reference_string, location_str);
 		return NULL;
@@ -236,7 +259,7 @@ static struct ast_geoloc_eprofile *geoloc_eprofile_create_from_xslt_result(
 
 	usage_str = ast_xml_get_text(usage_rules);
 	duped = ast_strdupa(usage_str);
-	eprofile->usage_rules_vars = ast_variable_list_from_string(duped, ",", "=", "\"");
+	eprofile->usage_rules = ast_variable_list_from_string(duped, ",", "=", "\"");
 
 	method_str = ast_xml_get_text(method);
 	ast_string_field_set(eprofile, method, method_str);
@@ -382,8 +405,8 @@ AST_TEST_DEFINE(test_create_from_uri)
 	eprofile = ast_geoloc_eprofile_create_from_uri("http://some_uri&a=b", __func__);
 	ast_test_validate(test, eprofile != NULL);
 	ast_test_validate(test, eprofile->format == AST_GEOLOC_FORMAT_URI);
-	ast_test_validate(test, eprofile->location_vars != NULL);
-	uri = ast_variable_find_in_list(eprofile->location_vars, "URI");
+	ast_test_validate(test, eprofile->location_info != NULL);
+	uri = ast_variable_find_in_list(eprofile->location_info, "URI");
 	ast_test_validate(test, uri != NULL);
 	ast_test_validate(test, strcmp(uri, "http://some_uri&a=b") == 0);
 
@@ -426,13 +449,13 @@ static enum ast_test_result_state validate_eprofile(struct ast_test *test,
 	ast_test_validate(test, eprofile->format == format);
 	ast_test_validate(test, ast_strings_equal(eprofile->method, method));
 
-	str = ast_variable_list_join(eprofile->location_vars, ",", "=", NULL, NULL);
+	str = ast_variable_list_join(eprofile->location_info, ",", "=", NULL, NULL);
 	ast_test_validate(test, str != NULL);
 	ast_test_status_update(test, "location_vars: %s\n", ast_str_buffer(str));
 	ast_test_validate(test, ast_strings_equal(ast_str_buffer(str), location));
 	ast_free(str);
 
-	str = ast_variable_list_join(eprofile->usage_rules_vars, ",", "=", "'", NULL);
+	str = ast_variable_list_join(eprofile->usage_rules, ",", "=", "'", NULL);
 	ast_test_validate(test, str != NULL);
 	ast_test_status_update(test, "usage_rules: %s\n", ast_str_buffer(str));
 	ast_test_validate(test, ast_strings_equal(ast_str_buffer(str), usage));
