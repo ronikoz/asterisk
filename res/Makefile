@@ -70,7 +70,7 @@ $(call MOD_ADD_C,res_stir_shaken,$(wildcard res_stir_shaken/*.c))
 $(call MOD_ADD_C,res_geolocation,$(wildcard res_geolocation/*.c))
 
 # These are the xml and xslt files to be embedded
-res_geolocation.so: res_geolocation/pidf_lo_test.o res_geolocation/pidf_to_eprofile.o
+res_geolocation.so: res_geolocation/pidf_lo_test.o res_geolocation/pidf_to_eprofile.o res_geolocation/eprofile_to_pidf.o
 
 res_parking.o: _ASTCFLAGS+=$(AST_NO_FORMAT_TRUNCATION)
 snmp/agent.o: _ASTCFLAGS+=-fPIC

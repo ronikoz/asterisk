@@ -261,6 +261,17 @@ struct ast_xml_node *ast_xml_node_get_parent(struct ast_xml_node *node);
 int ast_xml_doc_dump_file(FILE *output, struct ast_xml_doc *doc);
 
 /*!
+ * \brief Dump the specified document to a buffer
+ *
+ * \param doc The XML doc to dump
+ * \param buffer A pointer to a char * to receive the address of the results
+ * \param length A pointer to an int to receive the length of the results
+ *
+ * \note The result buffer must be freed with ast_xml_free_text().
+ */
+void ast_xml_doc_dump_memory(struct ast_xml_doc *doc, char **buffer, int *length);
+
+/*!
  * \brief Free the XPath results
  * \param results The XPath results object to dispose of
  *

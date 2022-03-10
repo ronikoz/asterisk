@@ -20,6 +20,7 @@
 #include "asterisk/config.h"
 #include "asterisk/cli.h"
 #include "asterisk/res_geolocation.h"
+#include "asterisk/xml.h"
 #include "geoloc_private.h"
 
 struct addr_field_entry {
@@ -93,16 +94,16 @@ const char *ast_geoloc_civicaddr_get_code_from_name(const char *name)
 	struct addr_field_entry key = { .name = name };
 	struct addr_field_entry *entry = bsearch(&key, addr_name_code_entries, ARRAY_LEN(addr_name_code_entries),
 		sizeof(struct addr_field_entry), compare_civicaddr_names);
-	return entry ? entry->code : NULL;
+	return entry ? entry->code : name;
 }
 
 const char *ast_geoloc_civicaddr_resolve_variable(const char *variable)
 {
-	const char *result = ast_geoloc_civicaddr_get_name_from_code(variable);
+	const char *result = ast_geoloc_civicaddr_get_code_from_name(variable);
 	if (result) {
 		return result;
 	}
-	return ast_geoloc_civicaddr_get_code_from_name(variable);
+	return ast_geoloc_civicaddr_get_name_from_code(variable);
 }
 
 enum ast_geoloc_validate_result ast_geoloc_civicaddr_validate_varlist(
@@ -148,6 +149,54 @@ static char *handle_civicaddr_show(struct ast_cli_entry *e, int cmd, struct ast_
 static struct ast_cli_entry geoloc_civicaddr_cli[] = {
 	AST_CLI_DEFINE(handle_civicaddr_show, "Show the mappings between civicAddress official codes and synonyms"),
 };
+
+struct ast_xml_node *geoloc_civicaddr_list_to_xml(const struct ast_variable *resolved_location,
+	const char *ref_string)
+{
+	char *lang = NULL;
+	char *s = NULL;
+	struct ast_variable *var;
+	struct ast_xml_node *ca_node;
+	struct ast_xml_node *child_node;
+	int rc = 0;
+	SCOPE_ENTER(3, "%s", ref_string);
+
+	lang = (char *)ast_variable_find_in_list(resolved_location, "lang");
+	if (ast_strlen_zero(lang)) {
+		lang = ast_strdupa(ast_defaultlanguage);
+		for (s = lang; *s; s++) {
+			if (*s == '_') {
+				*s = '-';
+			}
+		}
+	}
+
+	ca_node = ast_xml_new_node("civicAddress");
+	if (!ca_node) {
+		SCOPE_EXIT_LOG_RTN_VALUE(NULL, LOG_ERROR, "%s: Unable to create 'civicAddress' XML node\n", ref_string);
+	}
+	rc = ast_xml_set_attribute(ca_node, "lang", lang);
+	if (rc != 0) {
+		ast_xml_free_node(ca_node);
+		SCOPE_EXIT_LOG_RTN_VALUE(NULL, LOG_ERROR, "%s: Unable to create 'lang' XML attribute\n", ref_string);
+	}
+
+	for (var = (struct ast_variable *)resolved_location; var; var = var->next) {
+		const char *n;
+		if (ast_strings_equal(var->name, "lang")) {
+			continue;
+		}
+		n = ast_geoloc_civicaddr_get_code_from_name(var->name);
+		child_node = ast_xml_new_child(ca_node, n);
+		if (!child_node) {
+			ast_xml_free_node(ca_node);
+			SCOPE_EXIT_LOG_RTN_VALUE(NULL, LOG_ERROR, "%s: Unable to create '%s' XML node\n", n, ref_string);
+		}
+		ast_xml_set_text(child_node, var->value);
+	}
+
+	SCOPE_EXIT_RTN_VALUE(ca_node, "%s: Done\n", ref_string);
+}
 
 int geoloc_civicaddr_unload(void)
 {

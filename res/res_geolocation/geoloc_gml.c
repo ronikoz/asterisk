@@ -127,10 +127,10 @@ enum ast_geoloc_validate_result ast_geoloc_gml_validate_varlist(const struct ast
 	int def_index = -1;
 	const struct ast_variable *var;
 	int i;
-	const char *shape_type = ast_variable_find_in_list(varlist, "type");
+	const char *shape_type = ast_variable_find_in_list(varlist, "shape");
 
 	if (!shape_type) {
-		return AST_GEOLOC_VALIDATE_MISSING_TYPE;
+		return AST_GEOLOC_VALIDATE_MISSING_SHAPE;
 	}
 
 	for (i = 0; i < ARRAY_LEN(gml_shape_defs); i++) {
@@ -139,12 +139,12 @@ enum ast_geoloc_validate_result ast_geoloc_gml_validate_varlist(const struct ast
 		}
 	}
 	if (def_index < 0) {
-		return AST_GEOLOC_VALIDATE_INVALID_TYPE;
+		return AST_GEOLOC_VALIDATE_INVALID_SHAPE;
 	}
 
 	for (var = varlist; var; var = var->next) {
 		int vname_index = -1;
-		if (ast_strings_equal("type", var->name)) {
+		if (ast_strings_equal("shape", var->name)) {
 			continue;
 		}
 		for (i = 0; i < ARRAY_LEN(gml_shape_defs[def_index].required_attributes); i++) {
@@ -234,6 +234,113 @@ static char *handle_gml_show(struct ast_cli_entry *e, int cmd, struct ast_cli_ar
 static struct ast_cli_entry geoloc_gml_cli[] = {
 	AST_CLI_DEFINE(handle_gml_show, "Show the GML Shape definitions"),
 };
+
+struct ast_xml_node *geoloc_gml_list_to_xml(const struct ast_variable *resolved_location,
+	const char *ref_string)
+{
+	const char *shape;
+	char *crs;
+	struct ast_variable *var;
+	struct ast_xml_node *gml_node;
+	struct ast_xml_node *child_node;
+	int rc = 0;
+
+	SCOPE_ENTER(3, "%s", ref_string);
+
+	shape = ast_variable_find_in_list(resolved_location, "shape");
+	if (ast_strlen_zero(shape)) {
+		SCOPE_EXIT_LOG_RTN_VALUE(NULL, LOG_ERROR, "%s: There's no 'shape' parameter\n",
+			ref_string);
+	}
+	crs = (char *)ast_variable_find_in_list(resolved_location, "crs");
+	if (ast_strlen_zero(crs)) {
+		crs = "2d";
+	}
+
+	gml_node = ast_xml_new_node(shape);
+	if (!gml_node) {
+		SCOPE_EXIT_LOG_RTN_VALUE(NULL, LOG_ERROR, "%s: Unable to create '%s' XML node\n", shape, ref_string);
+	}
+	rc = ast_xml_set_attribute(gml_node, "crs", crs);
+	if (rc != 0) {
+		ast_xml_free_node(gml_node);
+		SCOPE_EXIT_LOG_RTN_VALUE(NULL, LOG_ERROR, "%s: Unable to create 'crs' XML attribute\n", ref_string);
+	}
+
+	for (var = (struct ast_variable *)resolved_location; var; var = var->next) {
+		RAII_VAR(char *, value, NULL, ast_free);
+		char *uom = NULL;
+
+		if (ast_strings_equal(var->name, "shape") || ast_strings_equal(var->name, "crs")) {
+			continue;
+		}
+		value = ast_strdup(var->value);
+
+		if (ast_strings_equal(var->name, "orientation") || ast_strings_equal(var->name, "startAngle")
+			|| ast_strings_equal(var->name, "openingAngle")) {
+			char *a = NULL;
+			char *junk = NULL;
+			float angle;
+			uom = value;
+
+			/* 'a' should now be the angle and 'uom' should be the uom */
+			a = strsep(&uom, " ");
+			angle = strtof(a, &junk);
+			/*
+			 * strtof sets junk to the first non-valid character so if it's
+			 * not empty after the conversion, there were unrecognized
+			 * characters in the angle.  It'll point to the NULL terminator
+			 * if angle was completely converted.
+			 */
+			if (!ast_strlen_zero(junk)) {
+				ast_xml_free_node(gml_node);
+				SCOPE_EXIT_LOG_RTN_VALUE(NULL, LOG_ERROR, "%s: The angle portion of parameter '%s' ('%s') is malformed\n",
+					ref_string, var->name, var->value);
+			}
+
+			if (ast_strlen_zero(uom)) {
+				uom = "degrees";
+			}
+
+			if (ast_begins_with(uom, "deg")) {
+				if (angle > 360.0) {
+					ast_xml_free_node(gml_node);
+					SCOPE_EXIT_LOG_RTN_VALUE(NULL, LOG_ERROR, "%s: Parameter '%s': '%s' is malformed. "
+						"Degrees can't be > 360.0\n",
+						ref_string, var->name, var->value);
+				}
+			} else if (ast_begins_with(uom, "rad")) {
+				if(angle > 100.0) {
+					ast_xml_free_node(gml_node);
+					SCOPE_EXIT_LOG_RTN_VALUE(NULL, LOG_ERROR, "%s: Parameter '%s': '%s' is malformed. "
+						"Radians can't be  > 100.0\n",
+						ref_string, var->name, var->value);
+				}
+			} else {
+				ast_xml_free_node(gml_node);
+				SCOPE_EXIT_LOG_RTN_VALUE(NULL, LOG_ERROR, "%s: Parameter '%s': '%s' is malformed. "
+					"The unit of measure must be 'deg[rees]' or 'rad[ians]'\n",
+					ref_string, var->name, var->value);
+			}
+		}
+
+		child_node = ast_xml_new_child(gml_node, var->name);
+		if (!child_node) {
+			ast_xml_free_node(gml_node);
+			SCOPE_EXIT_LOG_RTN_VALUE(NULL, LOG_ERROR, "%s: Unable to create '%s' XML node\n", var->name, ref_string);
+		}
+		if (!ast_strlen_zero(uom)) {
+			rc = ast_xml_set_attribute(child_node, "uom", uom);
+			if (rc != 0) {
+				ast_xml_free_node(gml_node);
+				SCOPE_EXIT_LOG_RTN_VALUE(NULL, LOG_ERROR, "%s: Unable to create 'uom' XML attribute\n", ref_string);
+			}
+		}
+		ast_xml_set_text(child_node, value);
+	}
+
+	SCOPE_EXIT_RTN_VALUE(gml_node, "%s: Done\n", ref_string);
+}
 
 int geoloc_gml_unload(void)
 {

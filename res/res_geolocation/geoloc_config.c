@@ -102,6 +102,7 @@ static int geoloc_location_apply_handler(const struct ast_sorcery *sorcery, void
 
 	switch (location->format) {
 	case AST_GEOLOC_FORMAT_NONE:
+	case AST_GEOLOC_FORMAT_LAST:
 		ast_log(LOG_ERROR, "Location '%s' must have a format\n", location_id);
 		return -1;
 	case AST_GEOLOC_FORMAT_CIVIC_ADDRESS:
@@ -134,6 +135,18 @@ static int geoloc_location_apply_handler(const struct ast_sorcery *sorcery, void
 		break;
 	}
 
+	if (!ast_strlen_zero(location->location_source)) {
+		struct ast_sockaddr loc_source_addr;
+		int rc = ast_sockaddr_parse(&loc_source_addr, location->location_source, PARSE_PORT_FORBID);
+		if (rc == 1) {
+			ast_log(LOG_ERROR, "Geolocation location '%s' location_source '%s' must be a FQDN."
+				" RFC8787 expressly forbids IP addresses.\n",
+				location_id, location->location_source);
+			return -1;
+		}
+	}
+
+
 	return 0;
 }
 
@@ -165,6 +178,7 @@ static int geoloc_profile_apply_handler(const struct ast_sorcery *sorcery, void 
 	if (profile->location_refinement) {
 		switch (location->format) {
 		case AST_GEOLOC_FORMAT_NONE:
+		case AST_GEOLOC_FORMAT_LAST:
 			break;
 		case AST_GEOLOC_FORMAT_CIVIC_ADDRESS:
 			result = ast_geoloc_civicaddr_validate_varlist(profile->location_refinement, &failed);
@@ -433,6 +447,7 @@ static char *geoloc_config_show_profiles(struct ast_cli_entry *e, int cmd, struc
 		struct ast_str *refinement_str = NULL;
 		struct ast_str *variables_str = NULL;
 		struct ast_str *resolved_str = NULL;
+		struct ast_str *usage_rules_str = NULL;
 		struct ast_geoloc_eprofile *eprofile = ast_geoloc_eprofile_create_from_profile(profile);
 		ao2_ref(profile, -1);
 
@@ -443,20 +458,24 @@ static char *geoloc_config_show_profiles(struct ast_cli_entry *e, int cmd, struc
 
 		refinement_str = ast_variable_list_join(eprofile->location_refinement, ",", "=", "\"", NULL);
 		variables_str = ast_variable_list_join(eprofile->location_variables, ",", "=", "\"", NULL);
+		usage_rules_str = ast_variable_list_join(eprofile->usage_rules, ",", "=", "\"", NULL);
 
 		action_to_str(eprofile, NULL, &action);
 
 		ast_cli(a->fd,
-			"id:                            %-s\n"
-			"received_location_disposition: %-s\n"
-			"send_location:                 %-s\n"
-			"pidf_element:                  %-s\n"
-			"location_reference:            %-s\n"
-			"Location_format:               %-s\n"
-			"location_reference_details:    %-s\n"
-			"location_refinement:           %-s\n"
-			"location_variables:            %-s\n"
-			"effective_location:            %-s\n\n",
+			"id:                   %-s\n"
+			"action:               %-s\n"
+			"send_location:        %-s\n"
+			"pidf_element:         %-s\n"
+			"location_reference:   %-s\n"
+			"Location_format:      %-s\n"
+			"location_details:     %-s\n"
+			"location_method:      %-s\n"
+			"location_refinement:  %-s\n"
+			"location_variables:   %-s\n"
+			"effective_location:   %-s\n"
+			"usage_rules:          %-s\n"
+			"notes:                %-s\n",
 			eprofile->id,
 			action,
 			eprofile->send_location ? "yes" : "no",
@@ -464,9 +483,13 @@ static char *geoloc_config_show_profiles(struct ast_cli_entry *e, int cmd, struc
 			S_OR(eprofile->location_reference, "<none>"),
 			format_names[eprofile->format],
 			S_COR(loc_str, ast_str_buffer(loc_str), "<none>"),
+			S_OR(eprofile->method, "<none>"),
 			S_COR(refinement_str, ast_str_buffer(refinement_str), "<none>"),
 			S_COR(variables_str, ast_str_buffer(variables_str), "<none>"),
-			S_COR(resolved_str, ast_str_buffer(resolved_str), "<none>"));
+			S_COR(resolved_str, ast_str_buffer(resolved_str), "<none>"),
+			S_COR(usage_rules_str, ast_str_buffer(usage_rules_str), "<none>"),
+			S_OR(eprofile->notes, "<none>")
+			);
 		ao2_ref(eprofile, -1);
 
 		ast_free(action);
@@ -474,6 +497,7 @@ static char *geoloc_config_show_profiles(struct ast_cli_entry *e, int cmd, struc
 		ast_free(refinement_str);
 		ast_free(variables_str);
 		ast_free(resolved_str);
+		ast_free(usage_rules_str);
 		count++;
 	}
 	ao2_iterator_destroy(&iter);
@@ -575,6 +599,11 @@ int geoloc_config_load(void)
 		format_handler, format_to_str, NULL, 0, 0);
 	ast_sorcery_object_field_register_custom(geoloc_sorcery, "location", "location_info", NULL,
 		location_info_handler, location_info_to_str, location_info_dup, 0, 0);
+	ast_sorcery_object_field_register(geoloc_sorcery, "location", "location_source", "", OPT_STRINGFIELD_T,
+		0, STRFLDSET(struct ast_geoloc_location, location_source));
+	ast_sorcery_object_field_register(geoloc_sorcery, "location", "method", "", OPT_STRINGFIELD_T,
+		0, STRFLDSET(struct ast_geoloc_location, method));
+
 
 	ast_sorcery_apply_default(geoloc_sorcery, "profile", "config", "geolocation.conf,criteria=type=profile");
 	if (ast_sorcery_object_register(geoloc_sorcery, "profile", geoloc_profile_alloc, NULL, geoloc_profile_apply_handler)) {
@@ -599,6 +628,8 @@ int geoloc_config_load(void)
 		location_refinement_handler, location_refinement_to_str, location_refinement_dup, 0, 0);
 	ast_sorcery_object_field_register_custom(geoloc_sorcery, "profile", "location_variables", NULL,
 		location_variables_handler, location_variables_to_str, location_variables_dup, 0, 0);
+	ast_sorcery_object_field_register(geoloc_sorcery, "profile", "notes", "", OPT_STRINGFIELD_T,
+		0, STRFLDSET(struct ast_geoloc_profile, notes));
 
 	ast_sorcery_load(geoloc_sorcery);
 

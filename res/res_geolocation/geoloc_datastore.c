@@ -235,7 +235,7 @@ int ast_geoloc_datastore_delete_eprofile(struct ast_datastore *ds, int ix)
 		return -1;
 	}
 
-	AST_VECTOR_REMOVE(&eds->eprofiles, ix, 1);
+	ao2_ref(AST_VECTOR_REMOVE(&eds->eprofiles, ix, 1), -1);
 	return 0;
 }
 

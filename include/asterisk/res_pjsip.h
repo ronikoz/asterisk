@@ -2379,6 +2379,17 @@ int ast_sip_set_outbound_proxy(pjsip_tx_data *tdata, const char *proxy);
 int ast_sip_add_header(pjsip_tx_data *tdata, const char *name, const char *value);
 
 /*!
+ * \brief Add a header to an outbound SIP message, returning a pointer to the header
+ *
+ * \param tdata The message to add the header to
+ * \param name The header name
+ * \param value The header value
+ * \return The pjsip_generic_string_hdr * added.
+ */
+pjsip_generic_string_hdr *ast_sip_add_header2(pjsip_tx_data *tdata,
+	const char *name, const char *value);
+
+/*!
  * \brief Add a body to an outbound SIP message
  *
  * If this is called multiple times, the latest body will replace the current

@@ -19,22 +19,22 @@
 							<enum name="civicAddress">
 								<para>
 									The
-									<literal>location</literal>
+									<literal>location_info</literal>
 									parameter must contain a comma separated list of IANA codes
-									describing this location.
+									describing the civicAddress of this location.
 								</para>
 							</enum>
 							<enum name="GML">
 								<para>
 									The
-									<literal>location</literal> parameter must contain a comma
+									<literal>location_info</literal> parameter must contain a comma
 									separated list valid GML elements describing this location.
 								</para>
 							</enum>
 							<enum name="URI">
 								<para>
 									The
-									<literal>location</literal> parameter must contain a single
+									<literal>location_info</literal> parameter must contain a single
 									URI parameter which contains an external URI describing this location.
 								</para>
 							</enum>
@@ -45,10 +45,26 @@
 					<synopsis>Location information</synopsis>
 					<description>
 						<para>The contents of this parameter are specific to the
-							specification type.</para>
+							location <literal>format</literal>.</para>
 					</description>
 				</configOption>
-			</configObject>	
+				<configOption name="location_source" default="">
+					<synopsis>Fully qualified host name</synopsis>
+					<description>
+						<para>This parameter isn't required but if provides, RFC8787 says it MUST be a fully
+						qualified host name.  IP addresses are specifically NOT allowed.</para>
+					</description>
+				</configOption>
+				<configOption name="method" default="">
+					<synopsis>Location determination method</synopsis>
+					<description>
+						<para>This is a rarely used field in the specification that would
+						indicate teh method used to determine the location.  It could be
+						something like "GPS" or "802.11".  Its usage and values should be
+						pre-negotiated with any recipients.</para>
+					</description>
+				</configOption>
+			</configObject>
 			<configObject name="profile">
 				<synopsis>Profile</synopsis>
 				<description>
@@ -87,6 +103,15 @@
 					<synopsis>location specification type</synopsis>
 					<description>
 						<para>xxxx</para>
+					</description>
+				</configOption>
+				<configOption name="notes" default="">
+					<synopsis>Notes to be added to the outgoing PIDF-LO document</synopsis>
+					<description>
+						<para>The specification of this parameter will cause a 
+						<literal>&lt;note-well&gt;</literal> element to be added to the
+						outgoing PIDF-LO document.  Its usage should be pre-negotiated with
+						any recipients.</para>
 					</description>
 				</configOption>
 				<configOption name="action" default="no">
@@ -182,7 +207,7 @@
 			</para></parameter>
 		</syntax>
 		<description>
-			<para>This application deleted a Geolocation Profile from a channel.</para>
+			<para>This application deletes a Geolocation Profile from a channel.</para>
 			<para>The following variable is set:</para>
 			<variablelist>
 				<variable name="GEOLOC_PROFILE_COUNT">
@@ -191,6 +216,5 @@
 			</variablelist>
 		</description>
 	</application>
-	
 </docs>
 

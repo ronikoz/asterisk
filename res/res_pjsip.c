@@ -1825,6 +1825,22 @@ int ast_sip_add_header(pjsip_tx_data *tdata, const char *name, const char *value
 	return 0;
 }
 
+pjsip_generic_string_hdr *ast_sip_add_header2(pjsip_tx_data *tdata,
+	const char *name, const char *value)
+{
+	pj_str_t hdr_name;
+	pj_str_t hdr_value;
+	pjsip_generic_string_hdr *hdr;
+
+	pj_cstr(&hdr_name, name);
+	pj_cstr(&hdr_value, value);
+
+	hdr = pjsip_generic_string_hdr_create(tdata->pool, &hdr_name, &hdr_value);
+
+	pjsip_msg_add_hdr(tdata->msg, (pjsip_hdr *) hdr);
+	return hdr;
+}
+
 static pjsip_msg_body *ast_body_to_pjsip_body(pj_pool_t *pool, const struct ast_sip_body *body)
 {
 	pj_str_t type;

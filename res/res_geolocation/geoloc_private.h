@@ -139,10 +139,14 @@ int geoloc_config_load(void);
 int geoloc_config_reload(void);
 int geoloc_config_unload(void);
 
+struct ast_xml_node *geoloc_civicaddr_list_to_xml(const struct ast_variable *resolved_location,
+	const char *ref_string);
 int geoloc_civicaddr_load(void);
 int geoloc_civicaddr_unload(void);
 int geoloc_civicaddr_reload(void);
 
+struct ast_xml_node *geoloc_gml_list_to_xml(const struct ast_variable *resolved_location,
+	const char *ref_string);
 int geoloc_gml_unload(void);
 int geoloc_gml_load(void);
 int geoloc_gml_reload(void);
