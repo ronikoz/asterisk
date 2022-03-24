@@ -18,10 +18,11 @@
 						<enumlist>
 							<enum name="civicAddress">
 								<para>
-									The
-									<literal>location_info</literal>
+									The <literal>location_info</literal>
 									parameter must contain a comma separated list of IANA codes
-									describing the civicAddress of this location.
+									or synonyms describing the civicAddress of this location.
+									The IANA codes and synonyms can be obtained by executing
+									the CLI command <literal>geoloc show civicAddr_mapping</literal>.
 								</para>
 							</enum>
 							<enum name="GML">
@@ -46,20 +47,41 @@
 					<description>
 						<para>The contents of this parameter are specific to the
 							location <literal>format</literal>.</para>
+						<enumlist>
+						<enum name="civicAddress">
+						<para>
+						location_info = country=US,A1="New York",city_district=Manhattan,
+						A3="New York", house_number=1633, street=46th, street_suffix = Street,
+						postal_code=10222,floor=20,room=20A2
+						</para>
+						</enum>
+						<enum name="GML">
+						<para>
+						location_info = Shape=Sphere, pos3d="39.12345 -105.98766 1920", radius=200
+						</para>
+						</enum>
+						<enum name="URI">
+						<para>
+						location_info = URI=https:/something.com?exten=${EXTEN}
+						</para>
+						</enum>
+						</enumlist>
 					</description>
 				</configOption>
 				<configOption name="location_source" default="">
 					<synopsis>Fully qualified host name</synopsis>
 					<description>
-						<para>This parameter isn't required but if provides, RFC8787 says it MUST be a fully
-						qualified host name.  IP addresses are specifically NOT allowed.</para>
+						<para>This parameter isn't required but if provided, RFC8787 says it MUST be a fully
+						qualified host name.  IP addresses are specifically NOT allowed.  The value will be placed
+						in a <literal>loc-src</literal> parameter appended to the URI in the <literal>
+						Geolocation</literal> header.</para>
 					</description>
 				</configOption>
 				<configOption name="method" default="">
 					<synopsis>Location determination method</synopsis>
 					<description>
 						<para>This is a rarely used field in the specification that would
-						indicate teh method used to determine the location.  It could be
+						indicate the method used to determine the location.  It could be
 						something like "GPS" or "802.11".  Its usage and values should be
 						pre-negotiated with any recipients.</para>
 					</description>
