@@ -89,7 +89,7 @@ static const struct ast_datastore_info dtmf_features_info = {
  * \since 12.0.0
  * \brief read a feature code character and set it on for the give feature_flags struct
  *
- * \param feature_flags flags being modifed
+ * \param feature_flags flags being modified
  * \param feature feature code provided - should be an uppercase letter
  *
  * \retval 0 if the feature was set successfully
@@ -341,7 +341,7 @@ struct bridge_basic_personality {
  * \param len Length of the given extension buffer.
  *
  * \retval 0 success
- * \retval non-zero failiure
+ * \retval non-zero failure
  */
 static int builtin_feature_get_exten(struct ast_channel *chan, const char *feature_name, char *buf, size_t len)
 {
@@ -414,7 +414,6 @@ static int setup_bridge_features_builtin(struct ast_bridge_features *features, s
 	res |= builtin_features_helper(features, chan, flags, AST_FEATURE_REDIRECT, "atxfer", AST_BRIDGE_BUILTIN_ATTENDEDTRANSFER);
 	res |= builtin_features_helper(features, chan, flags, AST_FEATURE_DISCONNECT, "disconnect", AST_BRIDGE_BUILTIN_HANGUP);
 	res |= builtin_features_helper(features, chan, flags, AST_FEATURE_PARKCALL, "parkcall", AST_BRIDGE_BUILTIN_PARKCALL);
-	res |= builtin_features_helper(features, chan, flags, AST_FEATURE_AUTOMON, "automon", AST_BRIDGE_BUILTIN_AUTOMON);
 	res |= builtin_features_helper(features, chan, flags, AST_FEATURE_AUTOMIXMON, "automixmon", AST_BRIDGE_BUILTIN_AUTOMIXMON);
 
 	return res ? -1 : 0;
@@ -1386,15 +1385,32 @@ static const char *get_transfer_context(struct ast_channel *transferer, const ch
 	if (!ast_strlen_zero(context)) {
 		return context;
 	}
-	context = ast_channel_macrocontext(transferer);
-	if (!ast_strlen_zero(context)) {
-		return context;
-	}
 	context = ast_channel_context(transferer);
 	if (!ast_strlen_zero(context)) {
 		return context;
 	}
 	return "default";
+}
+
+/*!
+ * \internal
+ * \brief Determine the transfer extension to use.
+ *
+ * \param transferer Channel initiating the transfer.
+ * \param exten User supplied extension if available.  May be NULL.
+ *
+ * \return The extension to use for the transfer.
+ */
+static const char *get_transfer_exten(struct ast_channel *transferer, const char *exten)
+{
+	if (!ast_strlen_zero(exten)) {
+		return exten;
+	}
+	exten = pbx_builtin_getvar_helper(transferer, "TRANSFER_EXTEN");
+	if (!ast_strlen_zero(exten)) {
+		return exten;
+	}
+	return ""; /* empty default, to get transfer extension from user now */
 }
 
 /*!
@@ -1458,7 +1474,7 @@ static struct attended_transfer_properties *attended_transfer_properties_alloc(
 	/*
 	 * Save the transferee's party information for any recall calls.
 	 * This is the only piece of information needed that gets overwritten
-	 * on the transferer channel by the inital call to the transfer target.
+	 * on the transferer channel by the initial call to the transfer target.
 	 */
 	ast_party_connected_line_copy(&props->original_transferer_colp,
 		ast_channel_connected(props->transferer));
@@ -1835,7 +1851,9 @@ static void bridge_ringing(struct ast_bridge *bridge)
 		.subclass.integer = AST_CONTROL_RINGING,
 	};
 
+	ast_bridge_lock(bridge);
 	ast_bridge_queue_everyone_else(bridge, NULL, &ringing);
+	ast_bridge_unlock(bridge);
 }
 
 /*!
@@ -1848,7 +1866,9 @@ static void bridge_hold(struct ast_bridge *bridge)
 		.subclass.integer = AST_CONTROL_HOLD,
 	};
 
+	ast_bridge_lock(bridge);
 	ast_bridge_queue_everyone_else(bridge, NULL, &hold);
+	ast_bridge_unlock(bridge);
 }
 
 /*!
@@ -1861,7 +1881,9 @@ static void bridge_unhold(struct ast_bridge *bridge)
 		.subclass.integer = AST_CONTROL_UNHOLD,
 	};
 
+	ast_bridge_lock(bridge);
 	ast_bridge_queue_everyone_else(bridge, NULL, &unhold);
+	ast_bridge_unlock(bridge);
 }
 
 /*!
@@ -3162,10 +3184,25 @@ static int grab_transfer(struct ast_channel *chan, char *exten, size_t exten_len
 	int attempts = 0;
 	int max_attempts;
 	struct ast_features_xfer_config *xfer_cfg;
-	char *retry_sound;
-	char *invalid_sound;
+	char *announce_sound, *retry_sound, *invalid_sound;
+	const char *extenoverride;
 
 	ast_channel_lock(chan);
+	extenoverride = get_transfer_exten(chan, NULL);
+
+	if (!ast_strlen_zero(extenoverride)) {
+		int extenres = ast_exists_extension(chan, context, extenoverride, 1,
+			S_COR(ast_channel_caller(chan)->id.number.valid, ast_channel_caller(chan)->id.number.str, NULL)) ? 1 : 0;
+		if (extenres) {
+			ast_copy_string(exten, extenoverride, exten_len);
+			ast_channel_unlock(chan);
+			ast_verb(3, "Transferring call to '%s@%s'", exten, context);
+			return 0;
+		}
+		ast_log(LOG_WARNING, "Override extension '%s' does not exist in context '%s'\n", extenoverride, context);
+		/* since we didn't get a valid extension from the channel, fall back and grab it from the user as usual now */
+	}
+
 	xfer_cfg = ast_get_chan_features_xfer_config(chan);
 	if (!xfer_cfg) {
 		ast_log(LOG_ERROR, "Channel %s: Unable to get transfer configuration\n",
@@ -3175,21 +3212,24 @@ static int grab_transfer(struct ast_channel *chan, char *exten, size_t exten_len
 	}
 	digit_timeout = xfer_cfg->transferdigittimeout * 1000;
 	max_attempts = xfer_cfg->transferdialattempts;
+	announce_sound = ast_strdupa(xfer_cfg->transferannouncesound);
 	retry_sound = ast_strdupa(xfer_cfg->transferretrysound);
 	invalid_sound = ast_strdupa(xfer_cfg->transferinvalidsound);
 	ao2_ref(xfer_cfg, -1);
 	ast_channel_unlock(chan);
 
 	/* Play the simple "transfer" prompt out and wait */
-	res = ast_stream_and_wait(chan, "pbx-transfer", AST_DIGIT_ANY);
-	ast_stopstream(chan);
-	if (res < 0) {
-		/* Hangup or error */
-		return -1;
-	}
-	if (res) {
-		/* Store the DTMF digit that interrupted playback of the file. */
-		exten[0] = res;
+	if (!ast_strlen_zero(announce_sound)) {
+		res = ast_stream_and_wait(chan, announce_sound, AST_DIGIT_ANY);
+		ast_stopstream(chan);
+		if (res < 0) {
+			/* Hangup or error */
+			return -1;
+		}
+		if (res) {
+			/* Store the DTMF digit that interrupted playback of the file. */
+			exten[0] = res;
+		}
 	}
 
 	/* Drop to dialtone so they can enter the extension they want to transfer to */
@@ -3254,10 +3294,17 @@ static struct ast_channel *dial_transfer(struct ast_channel *caller, const char 
 {
 	struct ast_channel *chan;
 	int cause;
+	struct ast_format_cap *caps;
+
+	ast_channel_lock(caller);
+	caps = ao2_bump(ast_channel_nativeformats(caller));
+	ast_channel_unlock(caller);
 
 	/* Now we request a local channel to prepare to call the destination */
-	chan = ast_request("Local", ast_channel_nativeformats(caller), NULL, caller, destination,
-		&cause);
+	chan = ast_request("Local", caps, NULL, caller, destination, &cause);
+
+	ao2_cleanup(caps);
+
 	if (!chan) {
 		return NULL;
 	}

@@ -41,9 +41,6 @@ static pjsip_module distributor_mod = {
 
 struct ast_sched_context *prune_context;
 
-/* From the auth/realm realtime column size */
-#define MAX_REALM_LENGTH 40
-
 #define DEFAULT_SUSPECTS_BUCKETS 53
 
 static struct ao2_container *unidentified_requests;
@@ -591,7 +588,8 @@ static pj_bool_t distributor(pjsip_rx_data *rdata)
 	return PJ_TRUE;
 }
 
-static struct ast_sip_auth *alloc_artificial_auth(char *default_realm)
+static struct ast_sip_auth *alloc_artificial_auth(char *default_realm,
+	char *default_algos_uac, char *default_algos_uas)
 {
 	struct ast_sip_auth *fake_auth;
 
@@ -604,6 +602,13 @@ static struct ast_sip_auth *alloc_artificial_auth(char *default_realm)
 	ast_string_field_set(fake_auth, realm, default_realm);
 	ast_string_field_set(fake_auth, auth_user, "");
 	ast_string_field_set(fake_auth, auth_pass, "");
+
+	ast_sip_auth_digest_algorithms_vector_init("artificial",
+		&fake_auth->supported_algorithms_uac, "UAC", default_algos_uac);
+
+	ast_sip_auth_digest_algorithms_vector_init("artificial",
+		&fake_auth->supported_algorithms_uas, "UAS", default_algos_uas);
+
 	fake_auth->type = AST_SIP_AUTH_TYPE_ARTIFICIAL;
 
 	return fake_auth;
@@ -613,18 +618,25 @@ static AO2_GLOBAL_OBJ_STATIC(artificial_auth);
 
 static int create_artificial_auth(void)
 {
-	char default_realm[MAX_REALM_LENGTH + 1];
+	char default_realm[AST_SIP_AUTH_MAX_REALM_LENGTH + 1];
 	struct ast_sip_auth *fake_auth;
+	char default_algos_uac[AST_SIP_AUTH_MAX_SUPPORTED_ALGORITHMS_LENGTH + 1];
+	char default_algos_uas[AST_SIP_AUTH_MAX_SUPPORTED_ALGORITHMS_LENGTH + 1];
 
 	ast_sip_get_default_realm(default_realm, sizeof(default_realm));
-	fake_auth = alloc_artificial_auth(default_realm);
+	ast_sip_get_default_auth_algorithms_uac(default_algos_uac,
+		sizeof(default_algos_uac));
+	ast_sip_get_default_auth_algorithms_uas(default_algos_uas,
+		sizeof(default_algos_uas));
+
+	fake_auth = alloc_artificial_auth(default_realm, default_algos_uac,
+			default_algos_uas);
 	if (!fake_auth) {
 		ast_log(LOG_ERROR, "Unable to create artificial auth\n");
 		return -1;
 	}
-
 	ao2_global_obj_replace_unref(artificial_auth, fake_auth);
-	ao2_ref(fake_auth, -1);
+	ao2_cleanup(fake_auth);
 	return 0;
 }
 
@@ -763,9 +775,8 @@ static pj_bool_t endpoint_lookup(pjsip_rx_data *rdata)
 		char name[AST_UUID_STR_LEN] = "";
 		pjsip_uri *from = rdata->msg_info.from->uri;
 
-		if (PJSIP_URI_SCHEME_IS_SIP(from) || PJSIP_URI_SCHEME_IS_SIPS(from)) {
-			pjsip_sip_uri *sip_from = pjsip_uri_get_uri(from);
-			ast_copy_pj_str(name, &sip_from->user, sizeof(name));
+		if (ast_sip_is_allowed_uri(from)) {
+			ast_copy_pj_str(name, ast_sip_pjsip_uri_get_username(from), sizeof(name));
 		}
 
 		unid = ao2_find(unidentified_requests, rdata->pkt_info.src_name, OBJ_SEARCH_KEY);
@@ -833,6 +844,7 @@ static int extract_contact_addr(pjsip_contact_hdr *contact, struct ast_sockaddr 
 		*addrs = NULL;
 		return 0;
 	}
+
 	if (!PJSIP_URI_SCHEME_IS_SIP(contact->uri) && !PJSIP_URI_SCHEME_IS_SIPS(contact->uri)) {
 		*addrs = NULL;
 		return 0;
@@ -1164,8 +1176,6 @@ static int clean_task(const void *data)
 
 static void global_loaded(const char *object_type)
 {
-	char default_realm[MAX_REALM_LENGTH + 1];
-	struct ast_sip_auth *fake_auth;
 	char *identifier_order;
 
 	/* Update using_auth_username */
@@ -1185,18 +1195,7 @@ static void global_loaded(const char *object_type)
 		using_auth_username = new_using;
 	}
 
-	/* Update default_realm of artificial_auth */
-	ast_sip_get_default_realm(default_realm, sizeof(default_realm));
-	fake_auth = ast_sip_get_artificial_auth();
-	if (!fake_auth || strcmp(fake_auth->realm, default_realm)) {
-		ao2_cleanup(fake_auth);
-
-		fake_auth = alloc_artificial_auth(default_realm);
-		if (fake_auth) {
-			ao2_global_obj_replace_unref(artificial_auth, fake_auth);
-		}
-	}
-	ao2_cleanup(fake_auth);
+	create_artificial_auth();
 
 	ast_sip_get_unidentified_request_thresholds(&unidentified_count, &unidentified_period, &unidentified_prune_interval);
 

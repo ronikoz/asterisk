@@ -50,11 +50,32 @@ int ast_db_get(const char *family, const char *key, char *value, int valuelen);
  */
 int ast_db_get_allocated(const char *family, const char *key, char **out);
 
+/*!
+ * \brief Check if family/key exitsts
+ *
+ * \param family
+ * \param key
+ * \retval 1 if family/key exists
+ * \retval 0 if family/key does not exist or an error occurred
+ */
+int ast_db_exists(const char *family, const char *key);
+
 /*! \brief Store value addressed by family/key */
 int ast_db_put(const char *family, const char *key, const char *value);
 
 /*! \brief Delete entry in astdb */
 int ast_db_del(const char *family, const char *key);
+
+/*! \brief Same as ast_db_del, but with more stringent error checking
+ *
+ * \details
+ * Unlike ast_db_del, if the key does not exist in the first place,
+ * an error is emitted and -1 is returned.
+ *
+ * \retval -1 An error occured (including key not found to begin with)
+ * \retval 0 Successfully deleted
+ */
+int ast_db_del2(const char *family, const char *key);
 
 /*!
  * \brief Delete one or more entries in astdb

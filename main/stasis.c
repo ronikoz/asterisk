@@ -46,6 +46,9 @@
 /*** DOCUMENTATION
 	<managerEvent language="en_US" name="UserEvent">
 		<managerEventInstance class="EVENT_FLAG_USER">
+			<since>
+				<version>12.3.0</version>
+			</since>
 			<synopsis>A user defined event raised from the dialplan.</synopsis>
 			<syntax>
 				<channel_snapshot/>
@@ -65,20 +68,43 @@
 	<configInfo name="stasis" language="en_US">
 		<configFile name="stasis.conf">
 			<configObject name="threadpool">
+				<since>
+					<version>12.8.0</version>
+					<version>13.1.0</version>
+				</since>
 				<synopsis>Settings that configure the threadpool Stasis uses to deliver some messages.</synopsis>
 				<configOption name="initial_size" default="5">
+					<since>
+						<version>12.8.0</version>
+						<version>13.1.0</version>
+					</since>
 					<synopsis>Initial number of threads in the message bus threadpool.</synopsis>
 				</configOption>
 				<configOption name="idle_timeout_sec" default="20">
+					<since>
+						<version>12.8.0</version>
+						<version>13.1.0</version>
+					</since>
 					<synopsis>Number of seconds before an idle thread is disposed of.</synopsis>
 				</configOption>
 				<configOption name="max_size" default="50">
+					<since>
+						<version>12.8.0</version>
+						<version>13.1.0</version>
+					</since>
 					<synopsis>Maximum number of threads in the threadpool.</synopsis>
 				</configOption>
 			</configObject>
 			<configObject name="declined_message_types">
+				<since>
+					<version>13.0.0</version>
+				</since>
 				<synopsis>Stasis message types for which to decline creation.</synopsis>
 				<configOption name="decline">
+					<since>
+						<version>12.8.0</version>
+						<version>13.1.0</version>
+					</since>
 					<synopsis>The message type to decline.</synopsis>
 					<description>
 						<para>This configuration option defines the name of the Stasis
@@ -130,8 +156,6 @@
 							<enum name="ast_channel_hangup_handler_type" />
 							<enum name="ast_channel_moh_start_type" />
 							<enum name="ast_channel_moh_stop_type" />
-							<enum name="ast_channel_monitor_start_type" />
-							<enum name="ast_channel_monitor_stop_type" />
 							<enum name="ast_channel_mixmonitor_start_type" />
 							<enum name="ast_channel_mixmonitor_stop_type" />
 							<enum name="ast_channel_mixmonitor_mute_type" />
@@ -139,6 +163,7 @@
 							<enum name="ast_channel_agent_logoff_type" />
 							<enum name="ast_channel_talking_start" />
 							<enum name="ast_channel_talking_stop" />
+							<enum name="ast_channel_tone_detect" />
 							<enum name="ast_security_event_type" />
 							<enum name="ast_named_acl_change_type" />
 							<enum name="ast_local_bridge_type" />
@@ -243,7 +268,7 @@
  * subscriptions need the topics to unsubscribe and check subscription status.
  *
  * The cycle is broken by stasis_unsubscribe(). The unsubscribe will remove the
- * topic's reference to a subscription. When the subcription is destroyed, it
+ * topic's reference to a subscription. When the subscription is destroyed, it
  * will remove its reference to the topic.
  *
  * This means that until a subscription has be explicitly unsubscribed, it will
@@ -288,8 +313,8 @@
  * \par Subscriber shutdown sequencing
  *
  * Subscribers are sensitive to shutdown sequencing, specifically in how the
- * reference message types. This is fully detailed on the wiki at
- * https://wiki.asterisk.org/wiki/x/K4BqAQ.
+ * reference message types. This is fully detailed in the documentation at
+ * https://docs.asterisk.org/Development/Roadmap/Asterisk-12-Projects/Asterisk-12-API-Improvements/Stasis-Message-Bus/Using-the-Stasis-Message-Bus/Stasis-Subscriber-Shutdown-Problem/.
  *
  * In short, the lifetime of the \a data (and \a callback, if in a module) must
  * be held until the stasis_subscription_final_message() has been received.
@@ -2298,7 +2323,7 @@ int stasis_message_type_declined(const char *name)
 	ao2_cleanup(name_in_declined);
 	ao2_ref(cfg, -1);
 	if (res) {
-		ast_log(LOG_NOTICE, "Declining to allocate Stasis message type '%s' due to configuration\n", name);
+		ast_debug(4, "Declining to allocate Stasis message type '%s' due to configuration\n", name);
 	}
 	return res;
 }
@@ -2631,7 +2656,7 @@ static char *statistics_show_subscription(struct ast_cli_entry *e, int cmd, stru
 
 	subscription_stats = ao2_global_obj_ref(subscription_statistics);
 	if (!subscription_stats) {
-		ast_cli(a->fd, "Could not fetch subcription_statistics container\n");
+		ast_cli(a->fd, "Could not fetch subscription_statistics container\n");
 		return CLI_FAILURE;
 	}
 

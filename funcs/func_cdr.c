@@ -42,6 +42,9 @@
 
 /*** DOCUMENTATION
 	<function name="CDR" language="en_US">
+		<since>
+			<version>1.2.0</version>
+		</since>
 		<synopsis>
 			Gets or sets a CDR variable.
 		</synopsis>
@@ -161,10 +164,15 @@
 			<note><para>CDRs can only be modified before the bridge between two channels is
 			torn down. For example, CDRs may not be modified after the <literal>Dial</literal>
 			application has returned.</para></note>
-			<para>Example: exten => 1,1,Set(CDR(userfield)=test)</para>
+			<example title="Set the userfield">
+			 exten => 1,1,Set(CDR(userfield)=test)
+			</example>
 		</description>
 	</function>
 	<function name="CDR_PROP" language="en_US">
+		<since>
+			<version>12.0.0</version>
+		</since>
 		<synopsis>
 			Set a property on a channel's CDR.
 		</synopsis>

@@ -149,38 +149,74 @@
 		</description>
 		<configFile name="motif.conf">
 			<configObject name="endpoint">
+				<since>
+					<version>12.0.0</version>
+				</since>
 				<synopsis>The configuration for an endpoint.</synopsis>
 				<configOption name="context">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>Default dialplan context that incoming sessions will be routed to</synopsis>
 				</configOption>
 				<configOption name="callgroup">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>A callgroup to assign to this endpoint.</synopsis>
 				</configOption>
 				<configOption name="pickupgroup">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>A pickup group to assign to this endpoint.</synopsis>
 				</configOption>
 				<configOption name="language">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>The default language for this endpoint.</synopsis>
 				</configOption>
 				<configOption name="musicclass">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>Default music on hold class for this endpoint.</synopsis>
 				</configOption>
 				<configOption name="parkinglot">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>Default parking lot for this endpoint.</synopsis>
 				</configOption>
 				<configOption name="accountcode">
-					<synopsis>Accout code for CDR purposes</synopsis>
+					<since>
+						<version>11.0.0</version>
+					</since>
+					<synopsis>Account code for CDR purposes</synopsis>
 				</configOption>
 				<configOption name="allow">
+					<since>
+						<version>13.0.0</version>
+					</since>
 					<synopsis>Codecs to allow</synopsis>
 				</configOption>
 				<configOption name="disallow">
+					<since>
+						<version>13.0.0</version>
+					</since>
 					<synopsis>Codecs to disallow</synopsis>
 				</configOption>
 				<configOption name="connection">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>Connection to accept traffic on and on which to send traffic out</synopsis>
 				</configOption>
 				<configOption name="transport">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>The transport to use for the endpoint.</synopsis>
 					<description>
 						<para>The default outbound transport for this endpoint. Inbound
@@ -206,9 +242,15 @@
 					</description>
 				</configOption>
 				<configOption name="maxicecandidates">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>Maximum number of ICE candidates to offer</synopsis>
 				</configOption>
 				<configOption name="maxpayloads">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>Maximum number of payloads to offer</synopsis>
 				</configOption>
 			</configObject>
@@ -664,7 +706,7 @@ static void jingle_set_owner(struct jingle_session *session, struct ast_channel 
 	}
 }
 
-/*! \brief Internal helper function which enables video support on a sesson if possible */
+/*! \brief Internal helper function which enables video support on a session if possible */
 static void jingle_enable_video(struct jingle_session *session)
 {
 	struct ast_sockaddr tmp;
@@ -1180,7 +1222,7 @@ static struct ast_channel *jingle_session_lock_full(struct jingle_session *pvt)
 		}
 
 		/* If the owner changed while everything was unlocked, no problem,
-		 * just start over and everthing will work.  This is rare, do not be
+		 * just start over and everything will work.  This is rare, do not be
 		 * confused by this loop and think this it is an expensive operation.
 		 * The majority of the calls to this function will never involve multiple
 		 * executions of this loop. */
@@ -1508,7 +1550,7 @@ static void jingle_send_session_action(struct jingle_session *session, const cha
 	iks_delete(iq);
 }
 
-/*! \brief Internal function which sends a session-inititate message */
+/*! \brief Internal function which sends a session-initiate message */
 static void jingle_send_session_initiate(struct jingle_session *session)
 {
 	jingle_send_session_action(session, session->transport == JINGLE_TRANSPORT_GOOGLE_V1 ? "initiate" : "session-initiate");
@@ -2731,7 +2773,7 @@ static int load_module(void)
 	}
 
 	if (aco_info_init(&cfg_info)) {
-		ast_log(LOG_ERROR, "Unable to intialize configuration for chan_motif.\n");
+		ast_log(LOG_ERROR, "Unable to initialize configuration for chan_motif.\n");
 		goto end;
 	}
 

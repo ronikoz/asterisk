@@ -327,6 +327,9 @@ else
 SUBMAKE:=$(MAKE) --quiet --no-print-directory
 endif
 
+mkfile_path := $(abspath $(lastword $(MAKEFILE_LIST)))
+mkfile_dir := $(dir $(mkfile_path))
+
 # $(MAKE) is printed in several places, and we want it to be a
 # fixed size string. Define a variable whose name has also the
 # same size, so we can easily align text.
@@ -374,7 +377,7 @@ $(MOD_SUBDIRS_MENUSELECT_TREE):
 	+@$(SUBMAKE) -C $(@:-menuselect-tree=) SUBDIR=$(@:-menuselect-tree=) moduleinfo
 	+@$(SUBMAKE) -C $(@:-menuselect-tree=) SUBDIR=$(@:-menuselect-tree=) makeopts
 
-$(SUBDIRS): makeopts .lastclean main/version.c include/asterisk/build.h include/asterisk/buildopts.h defaults.h
+$(SUBDIRS): makeopts .lastclean main/version.c include/asterisk/build.h defaults.h
 
 ifeq ($(findstring $(OSARCH), mingw32 cygwin ),)
 main: third-party
@@ -400,7 +403,7 @@ defaults.h: makeopts .lastclean build_tools/make_defaults_h
 	@cmp -s $@.tmp $@ || mv $@.tmp $@
 	@rm -f $@.tmp
 
-main/version.c: FORCE menuselect.makeopts .lastclean
+main/version.c: FORCE include/asterisk/buildopts.h menuselect.makeopts .lastclean
 	@build_tools/make_version_c > $@.tmp
 	@cmp -s $@.tmp $@ || mv $@.tmp $@
 	@rm -f $@.tmp
@@ -542,7 +545,7 @@ INSTALLDIRS="$(ASTLIBDIR)" "$(ASTMODDIR)" "$(ASTSBINDIR)" "$(ASTCACHEDIR)" "$(AS
 	"$(ASTDATADIR)/firmware/iax" "$(ASTDATADIR)/images" "$(ASTDATADIR)/keys" \
 	"$(ASTDATADIR)/phoneprov" "$(ASTDATADIR)/rest-api" "$(ASTDATADIR)/static-http" \
 	"$(ASTDATADIR)/sounds" "$(ASTDATADIR)/moh" "$(ASTMANDIR)/man8" "$(AGI_DIR)" "$(ASTDBDIR)" \
-	"$(ASTDATADIR)/third-party" "${ASTDATADIR}/keys/stir_shaken"
+	"$(ASTDATADIR)/third-party" "${ASTDATADIR}/keys/stir_shaken" "${ASTDATADIR}/keys/stir_shaken/cache"
 
 installdirs:
 	@for i in $(INSTALLDIRS); do \
@@ -558,9 +561,9 @@ bininstall: _all installdirs $(SUBDIRS_INSTALL) main-bininstall
 	$(INSTALL) -m 755 contrib/scripts/astversion "$(DESTDIR)$(ASTSBINDIR)/"
 	$(INSTALL) -m 755 contrib/scripts/astgenkey "$(DESTDIR)$(ASTSBINDIR)/"
 	$(INSTALL) -m 755 contrib/scripts/autosupport "$(DESTDIR)$(ASTSBINDIR)/"
-	if [ ! -f /sbin/launchd ]; then \
-		./build_tools/install_subst contrib/scripts/safe_asterisk "$(DESTDIR)$(ASTSBINDIR)/safe_asterisk"; \
-	fi
+ifneq ($(HAVE_SBIN_LAUNCHD),1)
+	./build_tools/install_subst contrib/scripts/safe_asterisk "$(DESTDIR)$(ASTSBINDIR)/safe_asterisk";
+endif
 
 ifneq ($(DISABLE_XMLDOC),yes)
 	$(INSTALL) -m 644 doc/core-*.xml "$(DESTDIR)$(ASTDATADIR)/documentation"
@@ -568,7 +571,6 @@ ifneq ($(DISABLE_XMLDOC),yes)
 	$(INSTALL) -m 644 doc/appdocsxml.dtd "$(DESTDIR)$(ASTDATADIR)/documentation"
 endif
 	$(INSTALL) -m 644 doc/asterisk.8 "$(DESTDIR)$(ASTMANDIR)/man8"
-	$(INSTALL) -m 644 doc/astdb*.8 "$(DESTDIR)$(ASTMANDIR)/man8"
 	$(INSTALL) -m 644 contrib/scripts/astgenkey.8 "$(DESTDIR)$(ASTMANDIR)/man8"
 	$(INSTALL) -m 644 contrib/scripts/autosupport.8 "$(DESTDIR)$(ASTMANDIR)/man8"
 	$(INSTALL) -m 644 contrib/scripts/safe_asterisk.8 "$(DESTDIR)$(ASTMANDIR)/man8"
@@ -693,7 +695,17 @@ ifneq ($(filter ~%,$(DESTDIR)),)
 	@exit 1
 endif
 
-install: badshell bininstall datafiles
+versioncheck:
+ifeq ($(ASTERISKVERSION),UNKNOWN__git_check_fail)
+	@echo "Asterisk Version is unknown due to a git error. If you are running make"
+	@echo "as a different user than the project owner, this can be resolved by"
+	@echo "running the following command as the user currently executing make: "$$USER
+	@echo "git config --global --add safe.directory "$(mkfile_dir:/=)
+	@exit 1
+endif
+
+
+install: badshell versioncheck bininstall datafiles
 	@if [ -x /usr/sbin/asterisk-post-install ]; then \
 		/usr/sbin/asterisk-post-install "$(DESTDIR)" . ; \
 	fi
@@ -878,6 +890,12 @@ ifeq ($(AST_DEVMODE),yes)
 endif
 ifeq ($(ASTERISKVERSION),UNKNOWN__and_probably_unsupported)
 	@echo "Asterisk Version is unknown, not configuring Doxygen PROJECT_NUMBER."
+else ifeq ($(ASTERISKVERSION),UNKNOWN__git_check_fail)
+	@echo "Asterisk Version is unknown due to a git error. If you are running make"
+	@echo "as a different user than the project owner, this can be resolved by"
+	@echo "running the following command as the user currently executing make: "$$USER
+	@echo "git config --global --add safe.directory "$(mkfile_dir:/=)
+	@echo "not configuring Doxygen PROJECT_NUMBER."
 else
 	@echo "PROJECT_NUMBER = $(ASTERISKVERSION)" >> doc/Doxyfile
 endif
@@ -966,7 +984,7 @@ sounds:
 
 .lastclean: .cleancount
 	@$(MAKE) clean
-	@[ -f "$(DESTDIR)$(ASTDBDIR)/astdb.sqlite3" ] || [ ! -f "$(DESTDIR)$(ASTDBDIR)/astdb" ] || [ ! -f menuselect.makeopts ] || grep -q MENUSELECT_UTILS=.*astdb2sqlite3 menuselect.makeopts || (sed -i.orig -e's/MENUSELECT_UTILS=\(.*\)/MENUSELECT_UTILS=\1 astdb2sqlite3/' menuselect.makeopts && echo "Updating menuselect.makeopts to include astdb2sqlite3" && echo "Original version backed up to menuselect.makeopts.orig")
+
 
 $(SUBDIRS_UNINSTALL):
 	+@DESTDIR="$(DESTDIR)" ASTSBINDIR="$(ASTSBINDIR)" ASTDATADIR="$(ASTDATADIR)" $(SUBMAKE) -C $(@:-uninstall=) uninstall
@@ -1072,12 +1090,13 @@ menuselect/nmenuselect: menuselect/makeopts .lastclean
 menuselect/makeopts: makeopts .lastclean
 	+$(MAKE_MENUSELECT) makeopts
 
-menuselect-tree: $(foreach dir,$(filter-out main,$(MOD_SUBDIRS)),$(wildcard $(dir)/*.c) $(wildcard $(dir)/*.cc) $(wildcard $(dir)/*.xml)) build_tools/cflags.xml build_tools/cflags-devmode.xml sounds/sounds.xml utils/utils.xml agi/agi.xml configure makeopts
+menuselect-tree: $(foreach dir,$(filter-out main,$(MOD_SUBDIRS)),$(wildcard $(dir)/*.c) $(wildcard $(dir)/*.cc) $(wildcard $(dir)/*.xml)) main/channelstorage_makeopts.xml build_tools/cflags.xml build_tools/cflags-devmode.xml sounds/sounds.xml utils/utils.xml agi/agi.xml configure makeopts
 	@echo "Generating input for menuselect ..."
 	@echo "<?xml version=\"1.0\"?>" > $@
 	@echo >> $@
 	@echo "<menu name=\"Asterisk Module and Build Option Selection\">" >> $@
 	+@for dir in $(sort $(filter-out main,$(MOD_SUBDIRS))); do $(SILENTMAKE) -C $${dir} SUBDIR=$${dir} moduleinfo >> $@; done
+	@cat main/channelstorage_makeopts.xml >> $@
 	@cat build_tools/cflags.xml >> $@
 	+@for dir in $(sort $(filter-out main,$(MOD_SUBDIRS))); do $(SILENTMAKE) -C $${dir} SUBDIR=$${dir} makeopts >> $@; done
 	@if [ "${AST_DEVMODE}" = "yes" ]; then \
@@ -1099,7 +1118,8 @@ ifeq ($(PYTHON),:)
 else
 	@$(INSTALL) -d doc/rest-api
 	$(PYTHON) rest-api-templates/make_ari_stubs.py \
-		rest-api/resources.json .
+		--resources rest-api/resources.json --source-dir $(ASTTOPDIR) \
+		--dest-dir $(ASTTOPDIR)/doc/rest-api --docs-prefix ../
 endif
 
 check-alembic: makeopts

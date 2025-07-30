@@ -42,6 +42,10 @@
 
 /*** DOCUMENTATION
 	<application name="ReceiveMF" language="en_US">
+		<since>
+			<version>16.24.0</version>
+			<version>18.10.0</version>
+		</since>
 		<synopsis>
 			Detects MF digits on a channel and saves them to a variable.
 		</synopsis>
@@ -113,6 +117,10 @@
 		</see-also>
 	</application>
 	<application name="SendMF" language="en_US">
+		<since>
+			<version>16.21.0</version>
+			<version>18.7.0</version>
+		</since>
 		<synopsis>
 			Sends arbitrary MF digits on the current or specified channel.
 		</synopsis>
@@ -151,6 +159,11 @@
 		</see-also>
 	</application>
 	<manager name="PlayMF" language="en_US">
+		<since>
+			<version>16.21.0</version>
+			<version>18.7.0</version>
+			<version>19.0.0</version>
+		</since>
 		<synopsis>
 			Play MF digit on a specific channel.
 		</synopsis>
@@ -220,6 +233,7 @@ static const char sendmf_name[] = "SendMF";
  * \param buflen Size of buffer
  * \param timeout ms to wait for all digits before giving up
  * \param features Any additional DSP features to use
+ * \param laxkp Receive digits even if KP not received
  * \param override Start over if we receive additional KPs
  * \param no_kp Don't include KP in the output
  * \param no_st Don't include start digits in the output

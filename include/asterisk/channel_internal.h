@@ -23,6 +23,8 @@
 
 #define ast_channel_internal_alloc(destructor, assignedid, requestor) __ast_channel_internal_alloc(destructor, assignedid, requestor, __FILE__, __LINE__, __PRETTY_FUNCTION__)
 struct ast_channel *__ast_channel_internal_alloc(void (*destructor)(void *obj), const struct ast_assigned_ids *assignedids, const struct ast_channel *requestor, const char *file, int line, const char *function);
+struct ast_channel *__ast_channel_internal_alloc_with_initializers(void (*destructor)(void *obj), const struct ast_assigned_ids *assignedids,
+	const struct ast_channel *requestor, const struct ast_channel_initializers *initializers, const char *file, int line, const char *function);
 void ast_channel_internal_finalize(struct ast_channel *chan);
 int ast_channel_internal_is_finalized(struct ast_channel *chan);
 void ast_channel_internal_cleanup(struct ast_channel *chan);
@@ -36,5 +38,12 @@ void ast_channel_internal_set_stream_topology_change_source(
 	struct ast_channel *chan, void *change_source);
 void ast_channel_internal_swap_stream_topology(struct ast_channel *chan1,
 	struct ast_channel *chan2);
+
+/*! \brief The current channel storage driver */
+extern const struct ast_channelstorage_driver *current_channel_storage_driver;
+extern struct ast_channelstorage_instance *current_channel_storage_instance;
+
+void ast_channel_close_storage(void);
+int ast_channel_open_storage(void);
 
 #endif /* ASTERISK_CHANNEL_INTERNAL_H */

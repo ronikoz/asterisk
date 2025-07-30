@@ -45,12 +45,23 @@
 
 /*** DOCUMENTATION
 	<function name="PJSIP_CONTACT" language="en_US">
+		<since>
+			<version>13.2.0</version>
+		</since>
 		<synopsis>
 			Get information about a PJSIP contact
 		</synopsis>
 		<syntax>
 			<parameter name="name" required="true">
-				<para>The name of the contact to query.</para>
+				<para>
+				Contact names are in the form of "aor_id@@hash" for dynamic contacts
+				created by the registrar and permanent contacts defined
+				in a <literal>contact</literal> parameter in an <literal>aor</literal>
+				object.  You can get the "aor_id@@hash" contact ID by calling the
+				<literal>PJSIP_AOR()</literal> dialplpan function with the AOR name
+				and the <literal>contact</literal> field.  You can then pass the value
+				returned to this function.
+				</para>
 			</parameter>
 			<parameter name="field" required="true">
 				<para>The configuration option for the contact to query for.
@@ -69,6 +80,9 @@
 				</enumlist>
 			</parameter>
 		</syntax>
+		<see-also>
+			<ref type="function">PJSIP_AOR</ref>
+		</see-also>
 	</function>
 ***/
 

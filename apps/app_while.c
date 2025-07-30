@@ -37,6 +37,9 @@
 
 /*** DOCUMENTATION
 	<application name="While" language="en_US">
+		<since>
+			<version>1.2.0</version>
+		</since>
 		<synopsis>
 			Start a while loop.
 		</synopsis>
@@ -54,6 +57,9 @@
 		</see-also>
 	</application>
 	<application name="EndWhile" language="en_US">
+		<since>
+			<version>1.2.0</version>
+		</since>
 		<synopsis>
 			End a while loop.
 		</synopsis>
@@ -68,6 +74,9 @@
 		</see-also>
 	</application>
 	<application name="ExitWhile" language="en_US">
+		<since>
+			<version>1.4.0</version>
+		</since>
 		<synopsis>
 			End a While loop.
 		</synopsis>
@@ -82,6 +91,9 @@
 		</see-also>
 	</application>
 	<application name="ContinueWhile" language="en_US">
+		<since>
+			<version>1.4.0</version>
+		</since>
 		<synopsis>
 			Restart a While loop.
 		</synopsis>

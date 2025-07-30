@@ -43,6 +43,9 @@
 
 /*** DOCUMENTATION
 	<application name="ForkCDR" language="en_US">
+		<since>
+			<version>1.6.1.0</version>
+		</since>
 		<synopsis>
 			Forks the current Call Data Record for this channel.
 		</synopsis>
@@ -87,7 +90,7 @@
 		</description>
 		<see-also>
 			<ref type="function">CDR</ref>
-			<ref type="application">NoCDR</ref>
+			<ref type="function">CDR_PROP</ref>
 			<ref type="application">ResetCDR</ref>
 		</see-also>
 	</application>

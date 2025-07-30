@@ -43,19 +43,31 @@
 	<configInfo name="res_resolver_unbound" language="en_US">
 		<configFile name="resolver_unbound.conf">
 			<configObject name="general">
+				<since>
+					<version>14.1.0</version>
+				</since>
 				<synopsis>General options for res_resolver_unbound</synopsis>
 				<configOption name="hosts">
+					<since>
+						<version>14.0.0</version>
+					</since>
 					<synopsis>Full path to an optional hosts file</synopsis>
 					<description><para>Hosts specified in a hosts file will be resolved within the resolver itself. If a value
 					of system is provided the system-specific file will be used.</para></description>
 				</configOption>
 				<configOption name="resolv">
+					<since>
+						<version>14.0.0</version>
+					</since>
 					<synopsis>Full path to an optional resolv.conf file</synopsis>
 					<description><para>The resolv.conf file specifies the nameservers to contact when resolving queries. If a
 					value of system is provided the system-specific file will be used. If provided alongside explicit nameservers the
 					nameservers contained within the resolv.conf file will be used after all others.</para></description>
 				</configOption>
 				<configOption name="nameserver">
+					<since>
+						<version>14.0.0</version>
+					</since>
 					<synopsis>Nameserver to use for queries</synopsis>
 					<description><para>An explicit nameserver can be specified which is used for resolving queries. If multiple
 					nameserver lines are specified the first will be the primary with failover occurring, in order, to the other
@@ -63,11 +75,17 @@
 					used before all others.</para></description>
 				</configOption>
 				<configOption name="debug">
+					<since>
+						<version>14.0.0</version>
+					</since>
 					<synopsis>Unbound debug level</synopsis>
 					<description><para>The debugging level for the unbound resolver. While there is no explicit range generally
 					the higher the number the more debug is output.</para></description>
 				</configOption>
 				<configOption name="ta_file">
+					<since>
+						<version>14.0.0</version>
+					</since>
 					<synopsis>Trust anchor file</synopsis>
 					<description><para>Full path to a file with DS and DNSKEY records in zone file format. This file is provided
 					to unbound and is used as a source for trust anchors.</para></description>
@@ -256,6 +274,14 @@ static void unbound_resolver_stop(struct unbound_resolver *resolver)
 static void unbound_resolver_callback(void *data, int err, struct ub_result *ub_result)
 {
 	struct ast_dns_query *query = data;
+
+	if (!ub_result) {
+		ast_debug(3, "Badly formatted DNS query '%s'\n", ast_dns_query_get_name(query));
+		ast_dns_resolver_set_result(query, 0, 0, ns_r_formerr, ast_dns_query_get_name(query), "", 0);
+		ast_dns_resolver_completed(query);
+		ao2_ref(query, -1);
+		return;
+	}
 
 	if (!ast_dns_resolver_set_result(query, ub_result->secure, ub_result->bogus, ub_result->rcode,
 		S_OR(ub_result->canonname, ast_dns_query_get_name(query)), ub_result->answer_packet, ub_result->answer_len)) {
@@ -893,7 +919,8 @@ static int off_nominal_sync_run(struct ast_test *test, const char *domain, int r
 	}
 
 	if (ast_dns_result_get_rcode(result) != expected_rcode) {
-		ast_test_status_update(test, "Unexpected rcode from DNS resolution\n");
+		ast_test_status_update(test, "Unexpected rcode '%d' (expected '%d') from DNS resolution of '%s' class: '%d' type: '%d'\n",
+			ast_dns_result_get_rcode(result), expected_rcode, domain, rr_class, rr_type);
 		res = -1;
 	}
 
@@ -1022,6 +1049,8 @@ static enum ast_test_result_state off_nominal_test(struct ast_test *test,
 
 	static const char *DOMAIN1 = "goose.feathers";
 	static const char *DOMAIN2 = "duck.feathers";
+	static const char *BADFORMAT1 = ".1";
+	static const char *BADFORMAT2 = ".www";
 
 	static const char *ADDR1 = "127.0.0.2";
 
@@ -1043,6 +1072,10 @@ static enum ast_test_result_state off_nominal_test(struct ast_test *test,
 		{ DOMAIN2, ns_t_a,    ns_c_in, ns_r_nxdomain },
 		{ DOMAIN1, ns_t_aaaa, ns_c_in, ns_r_noerror },
 		{ DOMAIN1, ns_t_a,    ns_c_chaos, ns_r_refused },
+		{ BADFORMAT1, ns_t_a,   ns_c_in, ns_r_formerr },
+		{ BADFORMAT2, ns_t_a,   ns_c_in, ns_r_formerr },
+		{ BADFORMAT1, ns_t_ptr, ns_c_in, ns_r_formerr },
+		{ BADFORMAT2, ns_t_ptr, ns_c_in, ns_r_formerr },
 	};
 
 	inet_pton(AF_INET,  ADDR1, addr1_buf);

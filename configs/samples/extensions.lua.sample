@@ -4,9 +4,6 @@ CONSOLE = "Console/dsp" -- Console interface for demo
 --CONSOLE = "DAHDI/1"
 --CONSOLE = "Phone/phone0"
 
-IAXINFO = "guest"       -- IAXtel username/password
---IAXINFO = "myuser:mypass"
-
 TRUNK = "DAHDI/G2"
 TRUNKMSD = 1
 -- TRUNK = "IAX2/user:pass@provider"
@@ -215,9 +212,7 @@ extensions = {
 	};
 
 	public = {
-		-- ATTENTION: If your Asterisk is connected to the internet and you do
-		-- not have allowguest=no in sip.conf, everybody out there may use your
-		-- public context without authentication.  In that case you want to
+		-- ATTENTION: If your Asterisk is connected to the internet
 		-- double check which services you offer to the world.
 		--
 		include = {"demo"};

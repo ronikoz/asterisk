@@ -69,6 +69,9 @@
 
 /*** DOCUMENTATION
 	<application name="Festival" language="en_US">
+		<since>
+			<version>0.2.0</version>
+		</since>
 		<synopsis>
 			Say text to the user.
 		</synopsis>
@@ -433,7 +436,7 @@ static int festival_exec(struct ast_channel *chan, const char *vdata)
 	}
 	readcache = 0;
 	writecache = 0;
-	if (strlen(cachedir) + strlen(MD5Hex) + 1 <= MAXFESTLEN && (usecache == -1)) {
+	if (strlen(cachedir) + sizeof(MD5Hex) + 1 <= MAXFESTLEN && (usecache == -1)) {
 		snprintf(cachefile, sizeof(cachefile), "%s/%s", cachedir, MD5Hex);
 		fdesc = open(cachefile, O_RDWR);
 		if (fdesc == -1) {

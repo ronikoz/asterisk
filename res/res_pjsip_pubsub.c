@@ -50,8 +50,11 @@
 
 /*** DOCUMENTATION
 	<manager name="PJSIPShowSubscriptionsInbound" language="en_US">
+		<since>
+			<version>12.0.0</version>
+		</since>
 		<synopsis>
-			Lists subscriptions.
+			Lists inbound subscriptions.
 		</synopsis>
 		<syntax />
 		<description>
@@ -62,9 +65,80 @@
                         </para>
 		</description>
 	</manager>
+	<managerEvent language="en_US" name="InboundSubscriptionDetail">
+		<managerEventInstance class="EVENT_FLAG_COMMAND">
+			<since>
+				<version>12.0.0</version>
+			</since>
+			<synopsis>
+				Provides details about an inbound subscription - one in which Asterisk
+				handles SUBSCRIBE requests and periodically sends NOTIFYs to its
+				subscribers.
+			</synopsis>
+			<syntax>
+				<parameter name="Role">
+					<para>Asterisk's role for this subscription. This will always be
+					<literal>Notifier</literal>.</para>
+				</parameter>
+				<parameter name="Endpoint">
+					<para>The name of the endpoint associated with this
+					subscription.</para>
+				</parameter>
+				<parameter name="Callid">
+					<para>The CallID of the dialog associated with this
+					subscription.</para>
+				</parameter>
+				<parameter name="State">
+					<para>The current state of the subscription.</para>
+				</parameter>
+				<parameter name="Callerid">
+					<para>The Caller ID of the endpoint associated with this
+					subscription.</para>
+				</parameter>
+				<parameter name="SubscriptionType">
+					<para>Asterisk currently supports the following subscription types, but
+					this could also be extended by third-party modules so this list may not
+					be exhaustive:</para>
+					<enumlist>
+						<enum name="mwi"/>
+						<enum name="extension_state"/>
+					</enumlist>
+				</parameter>
+				<parameter name="Extension">
+					<para>If the <literal>SubscriptionType</literal> is
+					<literal>extension_state</literal> this will be the monitored
+					extension.</para>
+				</parameter>
+				<parameter name="ExtensionStates">
+					<para>If the <literal>SubscriptionType</literal> is
+					<literal>extension_state</literal> this will be the monitored
+					extension's state.</para>
+					<enumlist>
+						<enum name="Idle"/>
+						<enum name="InUse"/>
+						<enum name="Busy"/>
+						<enum name="Unavailable"/>
+						<enum name="Ringing"/>
+						<enum name="InUse&amp;Ringing"/>
+						<enum name="Hold"/>
+						<enum name="InUse&amp;Hold"/>
+						<enum name="Unknown"/>
+					</enumlist>
+				</parameter>
+				<parameter name="Mailboxes">
+					<para>If the <literal>SubscriptionType</literal> is
+					<literal>mwi</literal> this will be a comma-separated list of
+					mailboxes.</para>
+				</parameter>
+			</syntax>
+		</managerEventInstance>
+	</managerEvent>
 	<manager name="PJSIPShowSubscriptionsOutbound" language="en_US">
+		<since>
+			<version>12.0.0</version>
+		</since>
 		<synopsis>
-			Lists subscriptions.
+			Lists outbound subscriptions.
 		</synopsis>
 		<syntax />
 		<description>
@@ -75,7 +149,77 @@
                         </para>
 		</description>
 	</manager>
+	<managerEvent language="en_US" name="OutboundSubscriptionDetail">
+		<managerEventInstance class="EVENT_FLAG_COMMAND">
+			<since>
+				<version>12.0.0</version>
+			</since>
+			<synopsis>
+				Provides details about an outbound subscription - one in which Asterisk
+				sends SUBSCRIBE requests and periodically receives NOTIFYs.
+			</synopsis>
+			<syntax>
+				<parameter name="Role">
+					<para>Asterisk's role for this subscription. This will always be
+					<literal>Subscriber</literal>.</para>
+				</parameter>
+				<parameter name="Endpoint">
+					<para>The name of the endpoint associated with this
+					subscription.</para>
+				</parameter>
+				<parameter name="Callid">
+					<para>The CallID of the dialog associated with this
+					subscription.</para>
+				</parameter>
+				<parameter name="State">
+					<para>The current state of the subscription.</para>
+				</parameter>
+				<parameter name="Callerid">
+					<para>The Caller ID of the endpoint associated with this
+					subscription.</para>
+				</parameter>
+				<parameter name="SubscriptionType">
+					<para>Asterisk currently supports the following subscription types, but
+					this could also be extended by third-party modules so this list may not
+					be exhaustive:</para>
+					<enumlist>
+						<enum name="mwi"/>
+						<enum name="extension_state"/>
+					</enumlist>
+				</parameter>
+				<parameter name="Extension">
+					<para>If the <literal>SubscriptionType</literal> is
+					<literal>extension_state</literal> this will be the monitored
+					extension.</para>
+				</parameter>
+				<parameter name="ExtensionStates">
+					<para>If the <literal>SubscriptionType</literal> is
+					<literal>extension_state</literal> this will be the monitored
+					extension's state.</para>
+					<enumlist>
+						<enum name="Idle"/>
+						<enum name="InUse"/>
+						<enum name="Busy"/>
+						<enum name="Unavailable"/>
+						<enum name="Ringing"/>
+						<enum name="InUse&amp;Ringing"/>
+						<enum name="Hold"/>
+						<enum name="InUse&amp;Hold"/>
+						<enum name="Unknown"/>
+					</enumlist>
+				</parameter>
+				<parameter name="Mailboxes">
+					<para>If the <literal>SubscriptionType</literal> is
+					<literal>mwi</literal> this will be a comma-separated list of
+					mailboxes.</para>
+				</parameter>
+			</syntax>
+		</managerEventInstance>
+	</managerEvent>
 	<manager name="PJSIPShowResourceLists" language="en_US">
+		<since>
+			<version>13.0.0</version>
+		</since>
 		<synopsis>
 			Displays settings for configured resource lists.
 		</synopsis>
@@ -88,6 +232,37 @@
                         </para>
 		</description>
 	</manager>
+	<managerEvent language="en_US" name="ResourceListDetail">
+		<managerEventInstance class="EVENT_FLAG_COMMAND">
+			<since>
+				<version>13.0.0</version>
+			</since>
+			<synopsis>Provides details about a resource list.</synopsis>
+			<syntax>
+				<parameter name="ObjectType">
+					<para>The object's type. This will always be 'resource_list'.</para>
+				</parameter>
+				<parameter name="ObjectName">
+					<para>The name of this object.</para>
+				</parameter>
+				<parameter name="Event">
+					<para><xi:include xpointer="xpointer(/docs/configInfo[@name='res_pjsip_pubsub']/configFile[@name='pjsip.conf']/configObject[@name='resource_list']/configOption[@name='event']/synopsis/node())"/></para>
+				</parameter>
+				<parameter name="FullState">
+					<para><xi:include xpointer="xpointer(/docs/configInfo[@name='res_pjsip_pubsub']/configFile[@name='pjsip.conf']/configObject[@name='resource_list']/configOption[@name='full_state']/synopsis/node())"/></para>
+				</parameter>
+				<parameter name="ListItem">
+					<para>A comma-separated list of resources that belong to this resource list.</para>
+				</parameter>
+				<parameter name="NotificationBatchInterval">
+					<para><xi:include xpointer="xpointer(/docs/configInfo[@name='res_pjsip_pubsub']/configFile[@name='pjsip.conf']/configObject[@name='resource_list']/configOption[@name='notification_batch_interval']/synopsis/node())"/></para>
+				</parameter>
+				<parameter name="ResourceDisplayName">
+					<para><xi:include xpointer="xpointer(/docs/configInfo[@name='res_pjsip_pubsub']/configFile[@name='pjsip.conf']/configObject[@name='resource_list']/configOption[@name='resource_display_name']/synopsis/node())"/></para>
+				</parameter>
+			</syntax>
+		</managerEventInstance>
+	</managerEvent>
 
 	<configInfo name="res_pjsip_pubsub" language="en_US">
 		<synopsis>Module that implements publish and subscribe support.</synopsis>
@@ -139,6 +314,9 @@
 				</configOption>
 			</configObject>
 			<configObject name="resource_list">
+				<since>
+					<version>13.0.0</version>
+				</since>
 				<synopsis>Resource list configuration parameters.</synopsis>
 				<description>
 					<para>This configuration object allows for RFC 4662 resource list subscriptions
@@ -151,9 +329,15 @@
 					</note>
 				</description>
 				<configOption name="type">
+					<since>
+						<version>13.0.0</version>
+					</since>
 					<synopsis>Must be of type 'resource_list'</synopsis>
 				</configOption>
 				<configOption name="event">
+					<since>
+						<version>13.0.0</version>
+					</since>
 					<synopsis>The SIP event package that the list resource belong to.</synopsis>
 					<description><para>
 						The SIP event package describes the types of resources that Asterisk reports
@@ -173,6 +357,9 @@
 					</description>
 				</configOption>
 				<configOption name="list_item">
+					<since>
+						<version>13.0.0</version>
+					</since>
 					<synopsis>The name of a resource to report state on</synopsis>
 					<description>
 						<para>In general Asterisk looks up list items in the following way:</para>
@@ -187,6 +374,9 @@
 					</description>
 				</configOption>
 				<configOption name="full_state" default="no">
+					<since>
+						<version>13.0.0</version>
+					</since>
 					<synopsis>Indicates if the entire list's state should be sent out.</synopsis>
 					<description>
 						<para>If this option is enabled, and a resource changes state, then Asterisk will construct
@@ -202,6 +392,9 @@
 					</description>
 				</configOption>
 				<configOption name="notification_batch_interval" default="0">
+					<since>
+						<version>13.0.0</version>
+					</since>
 					<synopsis>Time Asterisk should wait, in milliseconds, before sending notifications.</synopsis>
 					<description>
 						<para>When a resource's state changes, it may be desired to wait a certain amount before Asterisk
@@ -211,6 +404,11 @@
 					</description>
 				</configOption>
 				<configOption name="resource_display_name" default="no">
+					<since>
+						<version>16.25.0</version>
+						<version>18.11.0</version>
+						<version>19.3.0</version>
+					</since>
 					<synopsis>Indicates whether display name of resource or the resource name being reported.</synopsis>
 					<description>
 						<para>If this option is enabled, the Display Name will be reported as resource name.
@@ -221,11 +419,20 @@
 				</configOption>
 			</configObject>
 			<configObject name="inbound-publication">
+				<since>
+					<version>13.0.0</version>
+				</since>
 				<synopsis>The configuration for inbound publications</synopsis>
 				<configOption name="endpoint" default="">
+					<since>
+						<version>13.0.0</version>
+					</since>
 					<synopsis>Optional name of an endpoint that is only allowed to publish to this resource</synopsis>
 				</configOption>
 				<configOption name="type">
+					<since>
+						<version>13.0.0</version>
+					</since>
 					<synopsis>Must be of type 'inbound-publication'.</synopsis>
 				</configOption>
 			</configObject>
@@ -389,8 +596,8 @@ struct subscription_persistence {
 	char src_name[PJ_INET6_ADDRSTRLEN];
 	/*! Source port of the message */
 	int src_port;
-	/*! Local transport key type */
-	char transport_key[32];
+	/*! Local transport type (UDP,TCP,TLS)*/
+	char transport_type[32];
 	/*! Local transport address */
 	char local_name[PJ_INET6_ADDRSTRLEN];
 	/*! Local transport port */
@@ -474,7 +681,7 @@ struct sip_subscription_tree {
 	/*! The transport the subscription was received on.
 	 * Only used for reliable transports.
 	 */
-	pjsip_transport *transport;
+	char transport_key[IP6ADDR_COLON_PORT_BUFLEN];
 	/*! Indicator if initial notify should be generated.
 	 * Used to refresh modified RLS.
 	 */
@@ -711,8 +918,9 @@ static void subscription_persistence_update(struct sip_subscription_tree *sub_tr
 							rdata->tp_info.transport->obj_name,
 							sub_tree->persistence->endpoint, sub_tree->root->resource,
 							sub_tree->persistence->prune_on_boot);
-						sub_tree->transport = rdata->tp_info.transport;
-						ast_sip_transport_monitor_register(rdata->tp_info.transport,
+						AST_SIP_MAKE_REMOTE_IPADDR_PORT_STR(rdata->tp_info.transport,
+							sub_tree->transport_key);
+						ast_sip_transport_monitor_register_key(sub_tree->transport_key,
 							sub_tree_transport_cb, sub_tree);
 						/*
 						 * FYI: ast_sip_transport_monitor_register holds a reference to the sub_tree
@@ -746,8 +954,8 @@ static void subscription_persistence_update(struct sip_subscription_tree *sub_tr
 		ast_copy_string(sub_tree->persistence->src_name, rdata->pkt_info.src_name,
 				sizeof(sub_tree->persistence->src_name));
 		sub_tree->persistence->src_port = rdata->pkt_info.src_port;
-		ast_copy_string(sub_tree->persistence->transport_key, rdata->tp_info.transport->type_name,
-			sizeof(sub_tree->persistence->transport_key));
+		ast_copy_string(sub_tree->persistence->transport_type, rdata->tp_info.transport->type_name,
+			sizeof(sub_tree->persistence->transport_type));
 		ast_copy_pj_str(sub_tree->persistence->local_name, &rdata->tp_info.transport->local_name.host,
 			sizeof(sub_tree->persistence->local_name));
 		sub_tree->persistence->local_port = rdata->tp_info.transport->local_name.port;
@@ -763,12 +971,12 @@ static void subscription_persistence_remove(struct sip_subscription_tree *sub_tr
 		return;
 	}
 
-	if (sub_tree->persistence->prune_on_boot && sub_tree->transport) {
+	if (sub_tree->persistence->prune_on_boot && !ast_strlen_zero(sub_tree->transport_key)) {
 		ast_debug(3, "Unregistering transport monitor on %s '%s->%s'\n",
-			sub_tree->transport->obj_name,
+			sub_tree->transport_key,
 			sub_tree->endpoint ? ast_sorcery_object_get_id(sub_tree->endpoint) : "Unknown",
 			sub_tree->root ? sub_tree->root->resource : "Unknown");
-		ast_sip_transport_monitor_unregister(sub_tree->transport,
+		ast_sip_transport_monitor_unregister_key(sub_tree->transport_key,
 			sub_tree_transport_cb, sub_tree, NULL);
 	}
 
@@ -944,6 +1152,8 @@ static struct resource_list *retrieve_resource_list(const char *resource, const 
  * \param resource The name of the resource for this tree node.
  * \param visited The vector of resources that have been visited.
  * \param full_state if allocating a list, indicate whether full state is requested in notifications.
+ * \param display_name the display name to include with this tree node.
+ *
  * \retval NULL Allocation failure.
  * \retval non-NULL The newly-allocated tree_node
  */
@@ -1015,6 +1225,8 @@ static int have_visited(const char *resource, struct resources *visited)
 	return 0;
 }
 
+#define NEW_SUBSCRIBE(notifier, endpoint, resource, rdata) notifier->new_subscribe_with_rdata ? notifier->new_subscribe_with_rdata(endpoint, resource, rdata) : notifier->new_subscribe(endpoint, resource)
+
 /*!
  * \brief Build child nodes for a given parent.
  *
@@ -1037,7 +1249,7 @@ static int have_visited(const char *resource, struct resources *visited)
  * \param visited The resources that have already been visited.
  */
 static void build_node_children(struct ast_sip_endpoint *endpoint, const struct ast_sip_subscription_handler *handler,
-		struct resource_list *list, struct tree_node *parent, struct resources *visited)
+		struct resource_list *list, struct tree_node *parent, struct resources *visited, pjsip_rx_data *rdata)
 {
 	int i;
 
@@ -1053,7 +1265,7 @@ static void build_node_children(struct ast_sip_endpoint *endpoint, const struct 
 
 		child_list = retrieve_resource_list(resource, list->event);
 		if (!child_list) {
-			int resp = handler->notifier->new_subscribe(endpoint, resource);
+			int resp = NEW_SUBSCRIBE(handler->notifier, endpoint, resource, rdata);
 			if (PJSIP_IS_STATUS_IN_CLASS(resp, 200)) {
 				char display_name[AST_MAX_EXTENSION] = "";
 				if (list->resource_display_name && handler->notifier->get_resource_display_name) {
@@ -1082,7 +1294,7 @@ static void build_node_children(struct ast_sip_endpoint *endpoint, const struct 
 				ast_debug(1, "Cannot build children of resource %s due to allocation failure\n", resource);
 				continue;
 			}
-			build_node_children(endpoint, handler, child_list, current, visited);
+			build_node_children(endpoint, handler, child_list, current, visited, rdata);
 			if (AST_VECTOR_SIZE(&current->children) > 0) {
 				ast_debug(1, "List %s had no successful children.\n", resource);
 				if (AST_VECTOR_APPEND(&parent->children, current)) {
@@ -1155,19 +1367,21 @@ static void resource_tree_destroy(struct resource_tree *tree)
  * \retval 300-699 Failure to subscribe to requested resource.
  */
 static int build_resource_tree(struct ast_sip_endpoint *endpoint, const struct ast_sip_subscription_handler *handler,
-		const char *resource, struct resource_tree *tree, int has_eventlist_support)
+		const char *resource, struct resource_tree *tree, int has_eventlist_support, pjsip_rx_data *rdata)
 {
 	RAII_VAR(struct resource_list *, list, NULL, ao2_cleanup);
 	struct resources visited;
 
-	if (!has_eventlist_support || !(list = retrieve_resource_list(resource, handler->event_name))) {
+	int not_eventlist_but_needs_children = !strcmp(handler->body_type, AST_SIP_DEVICE_FEATURE_SYNC_DATA);
+
+	if ((!has_eventlist_support && !not_eventlist_but_needs_children) || !(list = retrieve_resource_list(resource, handler->event_name))) {
 		ast_debug(2, "Subscription '%s->%s' is not to a list\n",
 			ast_sorcery_object_get_id(endpoint), resource);
 		tree->root = tree_node_alloc(resource, NULL, 0, NULL);
 		if (!tree->root) {
 			return 500;
 		}
-		return handler->notifier->new_subscribe(endpoint, resource);
+		return NEW_SUBSCRIBE(handler->notifier, endpoint, resource, rdata);
 	}
 
 	ast_debug(2, "Subscription '%s->%s' is a list\n",
@@ -1184,7 +1398,7 @@ static int build_resource_tree(struct ast_sip_endpoint *endpoint, const struct a
 
 	tree->notification_batch_interval = list->notification_batch_interval;
 
-	build_node_children(endpoint, handler, list, tree->root, &visited);
+	build_node_children(endpoint, handler, list, tree->root, &visited, rdata);
 	AST_VECTOR_FREE(&visited);
 
 	if (AST_VECTOR_SIZE(&tree->root->children) > 0) {
@@ -1377,6 +1591,7 @@ static void shutdown_subscriptions(struct ast_sip_subscription *sub)
 		sub->handler->subscription_shutdown(sub);
 	}
 }
+
 static int subscription_unreference_dialog(void *obj)
 {
 	struct sip_subscription_tree *sub_tree = obj;
@@ -1596,17 +1811,17 @@ static int sub_persistence_recreate(void *obj)
 	struct ast_sip_pubsub_body_generator *generator;
 	struct ast_sip_subscription_handler *handler;
 	char *resource;
-	pjsip_sip_uri *request_uri;
 	size_t resource_size;
 	int resp;
 	struct resource_tree tree;
 	pjsip_expires_hdr *expires_header;
 	int64_t expires;
+	const pj_str_t *user;
 
-	request_uri = pjsip_uri_get_uri(rdata->msg_info.msg->line.req.uri);
-	resource_size = pj_strlen(&request_uri->user) + 1;
+	user = ast_sip_pjsip_uri_get_username(rdata->msg_info.msg->line.req.uri);
+	resource_size = pj_strlen(user) + 1;
 	resource = ast_alloca(resource_size);
-	ast_copy_pj_str(resource, &request_uri->user, resource_size);
+	ast_copy_pj_str(resource, user, resource_size);
 
 	/*
 	 * We may want to match without any user options getting
@@ -1671,7 +1886,7 @@ static int sub_persistence_recreate(void *obj)
 
 	memset(&tree, 0, sizeof(tree));
 	resp = build_resource_tree(endpoint, handler, resource, &tree,
-		ast_sip_pubsub_has_eventlist_support(rdata));
+		ast_sip_pubsub_has_eventlist_support(rdata), rdata);
 	if (PJSIP_IS_STATUS_IN_CLASS(resp, 200)) {
 		pj_status_t dlg_status;
 
@@ -1743,7 +1958,7 @@ static int subscription_persistence_recreate(void *obj, void *arg, int flags)
 	rdata.tp_info.pool = pool;
 
 	if (ast_sip_create_rdata_with_contact(&rdata, persistence->packet, persistence->src_name,
-		persistence->src_port, persistence->transport_key, persistence->local_name,
+		persistence->src_port, persistence->transport_type, persistence->local_name,
 		persistence->local_port, persistence->contact_uri)) {
 		ast_log(LOG_WARNING, "Failed recreating '%s' subscription: The message could not be parsed\n",
 			persistence->endpoint);
@@ -2070,6 +2285,7 @@ static void add_rlmi_resource(pj_pool_t *pool, pj_xml_node *rlmi, const pjsip_ge
 	pj_xml_attr *cid_attr;
 	char id[6];
 	char uri[PJSIP_MAX_URL_SIZE];
+	char name_sanitized[PJSIP_MAX_URL_SIZE];
 
 	/* This creates a string representing the Content-ID without the enclosing < > */
 	const pj_str_t cid_stripped = {
@@ -2084,7 +2300,8 @@ static void add_rlmi_resource(pj_pool_t *pool, pj_xml_node *rlmi, const pjsip_ge
 	pjsip_uri_print(PJSIP_URI_IN_CONTACT_HDR, resource_uri, uri, sizeof(uri));
 	ast_sip_presence_xml_create_attr(pool, resource, "uri", uri);
 
-	pj_strdup2(pool, &name->content, resource_name);
+	ast_sip_sanitize_xml(resource_name, name_sanitized, sizeof(name_sanitized));
+	pj_strdup2(pool, &name->content, name_sanitized);
 
 	ast_generate_random_string(id, sizeof(id));
 
@@ -2449,6 +2666,16 @@ static pjsip_require_hdr *create_require_eventlist(pj_pool_t *pool)
 	return require;
 }
 
+static void set_state_terminated(struct ast_sip_subscription *sub)
+{
+	int i;
+
+	sub->subscription_state = PJSIP_EVSUB_STATE_TERMINATED;
+	for (i = 0; i < AST_VECTOR_SIZE(&sub->children); ++i) {
+		set_state_terminated(AST_VECTOR_GET(&sub->children, i));
+	}
+}
+
 /*!
  * \brief Send a NOTIFY request to a subscriber
  *
@@ -2484,6 +2711,12 @@ static int send_notify(struct sip_subscription_tree *sub_tree, unsigned int forc
 	if (sub_tree->is_list) {
 		pjsip_require_hdr *require = create_require_eventlist(tdata->pool);
 		pjsip_msg_add_hdr(tdata->msg, (pjsip_hdr *) require);
+	}
+
+	if (sub_tree->root->handler->notifier->notify_created) {
+		/* The module for this event wants a callback to the pjsip_tx_data,
+		 * e.g. so it can add custom headers or do something custom to the response. */
+		sub_tree->root->handler->notifier->notify_created(sub_tree->root, tdata);
 	}
 
 	if (sip_subscription_send_request(sub_tree, tdata)) {
@@ -2949,6 +3182,7 @@ static int generate_initial_notify(struct ast_sip_subscription *sub)
 
 	notify_data = sub->handler->notifier->get_notify_data(sub);
 	if (!notify_data) {
+		ast_debug(3, "No notify data, not generating any body content\n");
 		return -1;
 	}
 
@@ -3013,11 +3247,11 @@ static pj_bool_t pubsub_on_rx_subscribe_request(pjsip_rx_data *rdata)
 	struct ast_sip_pubsub_body_generator *generator;
 	char *resource;
 	pjsip_uri *request_uri;
-	pjsip_sip_uri *request_uri_sip;
 	size_t resource_size;
 	int resp;
 	struct resource_tree tree;
 	pj_status_t dlg_status;
+	const pj_str_t *user;
 
 	endpoint = ast_pjsip_rdata_get_endpoint(rdata);
 	ast_assert(endpoint != NULL);
@@ -3030,7 +3264,7 @@ static pj_bool_t pubsub_on_rx_subscribe_request(pjsip_rx_data *rdata)
 
 	request_uri = rdata->msg_info.msg->line.req.uri;
 
-	if (!PJSIP_URI_SCHEME_IS_SIP(request_uri) && !PJSIP_URI_SCHEME_IS_SIPS(request_uri)) {
+	if (!ast_sip_is_uri_sip_sips(request_uri)) {
 		char uri_str[PJSIP_MAX_URL_SIZE];
 
 		pjsip_uri_print(PJSIP_URI_IN_REQ_URI, request_uri, uri_str, sizeof(uri_str));
@@ -3039,10 +3273,10 @@ static pj_bool_t pubsub_on_rx_subscribe_request(pjsip_rx_data *rdata)
 		return PJ_TRUE;
 	}
 
-	request_uri_sip = pjsip_uri_get_uri(request_uri);
-	resource_size = pj_strlen(&request_uri_sip->user) + 1;
+	user = ast_sip_pjsip_uri_get_username(request_uri);
+	resource_size = pj_strlen(user) + 1;
 	resource = ast_alloca(resource_size);
-	ast_copy_pj_str(resource, &request_uri_sip->user, resource_size);
+	ast_copy_pj_str(resource, user, resource_size);
 
 	/*
 	 * We may want to match without any user options getting
@@ -3080,7 +3314,7 @@ static pj_bool_t pubsub_on_rx_subscribe_request(pjsip_rx_data *rdata)
 
 	memset(&tree, 0, sizeof(tree));
 	resp = build_resource_tree(endpoint, handler, resource, &tree,
-		ast_sip_pubsub_has_eventlist_support(rdata));
+		ast_sip_pubsub_has_eventlist_support(rdata), rdata);
 	if (!PJSIP_IS_STATUS_IN_CLASS(resp, 200)) {
 		pjsip_endpt_respond_stateless(ast_sip_get_pjsip_endpoint(), rdata, resp, NULL, NULL, NULL);
 		resource_tree_destroy(&tree);
@@ -3090,6 +3324,7 @@ static pj_bool_t pubsub_on_rx_subscribe_request(pjsip_rx_data *rdata)
 	sub_tree = create_subscription_tree(handler, endpoint, rdata, resource, generator, &tree, &dlg_status, NULL);
 	if (!sub_tree) {
 		if (dlg_status != PJ_EEXISTS) {
+			ast_debug(3, "No dialog exists, rejecting\n");
 			pjsip_endpt_respond_stateless(ast_sip_get_pjsip_endpoint(), rdata, 500, NULL, NULL, NULL);
 		}
 	} else {
@@ -3258,12 +3493,12 @@ static struct ast_sip_publication *publish_request_initial(struct ast_sip_endpoi
 	RAII_VAR(struct ast_sip_publication_resource *, resource, NULL, ao2_cleanup);
 	struct ast_variable *event_configuration_name = NULL;
 	pjsip_uri *request_uri;
-	pjsip_sip_uri *request_uri_sip;
 	int resp;
+	const pj_str_t *user;
 
 	request_uri = rdata->msg_info.msg->line.req.uri;
 
-	if (!PJSIP_URI_SCHEME_IS_SIP(request_uri) && !PJSIP_URI_SCHEME_IS_SIPS(request_uri)) {
+	if (!ast_sip_is_uri_sip_sips(request_uri)) {
 		char uri_str[PJSIP_MAX_URL_SIZE];
 
 		pjsip_uri_print(PJSIP_URI_IN_REQ_URI, request_uri, uri_str, sizeof(uri_str));
@@ -3272,10 +3507,10 @@ static struct ast_sip_publication *publish_request_initial(struct ast_sip_endpoi
 		return NULL;
 	}
 
-	request_uri_sip = pjsip_uri_get_uri(request_uri);
-	resource_size = pj_strlen(&request_uri_sip->user) + 1;
+	user = ast_sip_pjsip_uri_get_username(request_uri);
+	resource_size = pj_strlen(user) + 1;
 	resource_name = ast_alloca(resource_size);
-	ast_copy_pj_str(resource_name, &request_uri_sip->user, resource_size);
+	ast_copy_pj_str(resource_name, user, resource_size);
 
 	/*
 	 * We may want to match without any user options getting
@@ -3326,6 +3561,7 @@ static struct ast_sip_publication *publish_request_initial(struct ast_sip_endpoi
 	publication->handler = handler;
 	if (publication->handler->publication_state_change(publication, rdata->msg_info.msg->body,
 			AST_SIP_PUBLISH_STATE_INITIALIZED)) {
+		ast_debug(3, "Publication state change failed\n");
 		pjsip_endpt_respond_stateless(ast_sip_get_pjsip_endpoint(), rdata, 500, NULL, NULL, NULL);
 		ao2_cleanup(publication);
 		return NULL;
@@ -3755,42 +3991,32 @@ static pj_bool_t pubsub_on_rx_request(pjsip_rx_data *rdata)
 	return PJ_FALSE;
 }
 
-static void set_state_terminated(struct ast_sip_subscription *sub)
-{
-	int i;
-
-	sub->subscription_state = PJSIP_EVSUB_STATE_TERMINATED;
-	for (i = 0; i < AST_VECTOR_SIZE(&sub->children); ++i) {
-		set_state_terminated(AST_VECTOR_GET(&sub->children, i));
-	}
-}
-
 /*!
  * \brief Callback sequence for subscription terminate:
  *
+ * * Please note that the descriptions below represent pjproject behavior on versions
+ *   >= 2.13.
  * * Client initiated:
  *     pjproject receives SUBSCRIBE on the subscription's serializer thread
+ *         calls pubsub_evsub_set_state with state = TERMINATED
+ *             pubsub_on_evsub_state checks the event and finds it is due to a received
+ *             SUBSCRIBE with an expires of 0 and so does nothing.
  *         calls pubsub_on_rx_refresh with dialog locked
  *             pubsub_on_rx_refresh sets TERMINATE_PENDING
- *             pushes serialized_pubsub_on_refresh_timeout
+ *             calls pubsub_on_refresh_timeout to push final NOTIFY to pjproject
+ *                 checks state == TERMINATE_PENDING
+ *                 sets TERMINATE_IN_PROGRESS
+ *                 calls send_notify (2)
+ *                 send_notify ultimately calls pjsip_evsub_send_request
+ *                 pjsip_evsub_send_request calls evsub's set_state
+ *                     set_state calls pubsub_evsub_set_state
+ *                         pubsub_on_evsub_state checks state == TERMINATE_IN_PROGRESS
+ *                         removes the subscriptions
+ *                         cleans up references to evsub
+ *                         sets state = TERMINATED
+ *             pubsub_on_refresh_timeout unlocks dialog
  *             returns to pjproject
- *         pjproject calls pubsub_on_evsub_state
- *             pubsub_evsub_set_state checks state == TERMINATE_IN_PROGRESS (no)
- *             ignore and return
  *         pjproject unlocks dialog
- *     serialized_pubsub_on_refresh_timeout starts (1)
- *       locks dialog
- *       checks state == TERMINATE_PENDING
- *       sets TERMINATE_IN_PROGRESS
- *       calls send_notify (2)
- *           send_notify ultimately calls pjsip_evsub_send_request
- *               pjsip_evsub_send_request calls evsub's set_state
- *                   set_state calls pubsub_evsub_set_state
- *                       pubsub_on_evsub_state checks state == TERMINATE_IN_PROGRESS
- *                       removes the subscriptions
- *                       cleans up references to evsub
- *                       sets state = TERMINATED
- *       serialized_pubsub_on_refresh_timeout unlocks dialog
  *
  * * Subscription timer expires:
  *     pjproject timer expires
@@ -3801,8 +4027,20 @@ static void set_state_terminated(struct ast_sip_subscription *sub)
  *             pushes serialized_pubsub_on_refresh_timeout
  *             returns to pjproject
  *         pjproject unlocks dialog
- *     serialized_pubsub_on_refresh_timeout starts
- *         See (1) Above
+ *     serialized_pubsub_on_refresh_timeout starts (1)
+ *       locks dialog
+ *       checks state == TERMINATE_PENDING
+ *       sets TERMINATE_IN_PROGRESS
+ *       calls send_notify (2)
+ *           send_notify ultimately calls pjsip_evsub_send_request
+ *               pjsip_evsub_send_request calls evsub's set_state
+ *                   set_state calls pubsub_evsub_set_state
+ *                       pubsub_on_evsub_state checks state == TERMINATE_IN_PROGRESS
+ *                       checks that the event is not due to un-SUBSCRIBE
+ *                       removes the subscriptions
+ *                       cleans up references to evsub
+ *                       sets state = TERMINATED
+ *       serialized_pubsub_on_refresh_timeout unlocks dialog
  *
  * * Transmission failure sending NOTIFY or error response from client
  *     pjproject transaction timer expires or non OK response
@@ -3832,6 +4070,52 @@ static void set_state_terminated(struct ast_sip_subscription *sub)
  *               See (2) Above
  *
  */
+
+
+/* The code in this function was previously in pubsub_on_evsub_state. */
+static void clean_sub_tree(pjsip_evsub *evsub)
+{
+
+	struct sip_subscription_tree *sub_tree;
+	sub_tree = pjsip_evsub_get_mod_data(evsub, pubsub_module.id);
+
+	ast_debug(3, "Cleaning subscription %p\n", evsub);
+
+	if (sub_tree->expiration_task) {
+		char task_name[256];
+
+		ast_sip_sched_task_get_name(sub_tree->expiration_task, task_name, sizeof(task_name));
+		ast_debug(3, "Cancelling timer: %s\n", task_name);
+		ast_sip_sched_task_cancel(sub_tree->expiration_task);
+		ao2_cleanup(sub_tree->expiration_task);
+		sub_tree->expiration_task = NULL;
+	}
+
+	remove_subscription(sub_tree);
+
+	pjsip_evsub_set_mod_data(evsub, pubsub_module.id, NULL);
+
+#ifdef HAVE_PJSIP_EVSUB_GRP_LOCK
+	pjsip_evsub_dec_ref(sub_tree->evsub);
+#endif
+
+	sub_tree->evsub = NULL;
+
+	ast_sip_dialog_set_serializer(sub_tree->dlg, NULL);
+	ast_sip_dialog_set_endpoint(sub_tree->dlg, NULL);
+
+	subscription_persistence_remove(sub_tree);
+	shutdown_subscriptions(sub_tree->root);
+
+	sub_tree->state = SIP_SUB_TREE_TERMINATED;
+	/* Remove evsub's reference to the sub_tree */
+	ao2_ref(sub_tree, -1);
+}
+
+/* This functionality appeared in pjsip 2.13 */
+#if PJ_VERSION_NUM >= 0x020D0000
+# define HAVE_PJSIP_EVSUB_PENDING_NOTIFY 1
+#endif
 
 /*!
  * \brief PJSIP callback when underlying SIP subscription changes state
@@ -3863,35 +4147,21 @@ static void pubsub_on_evsub_state(pjsip_evsub *evsub, pjsip_event *event)
 		return;
 	}
 
-	if (sub_tree->expiration_task) {
-		char task_name[256];
-
-		ast_sip_sched_task_get_name(sub_tree->expiration_task, task_name, sizeof(task_name));
-		ast_debug(3, "Cancelling timer: %s\n", task_name);
-		ast_sip_sched_task_cancel(sub_tree->expiration_task);
-		ao2_cleanup(sub_tree->expiration_task);
-		sub_tree->expiration_task = NULL;
+#ifdef HAVE_PJSIP_EVSUB_PENDING_NOTIFY
+	/* This check looks for re-subscribes with an expires of 0. If we receive one of those,
+	   we don't want to clean the evsub because we still need it to send the final NOTIFY.
+	   This was previously handled by pubsub_on_rx_refresh setting:
+	   'sub_tree->state = SIP_SUB_TREE_TERMINATE_PENDING' */
+	if (event->body.tsx_state.type == PJSIP_EVENT_RX_MSG &&
+		!pjsip_method_cmp(&event->body.tsx_state.tsx->method, &pjsip_subscribe_method) &&
+		pjsip_evsub_get_expires(evsub) == 0) {
+		ast_debug(3, "Subscription ending, do nothing.\n");
+		return;
 	}
-
-	remove_subscription(sub_tree);
-
-	pjsip_evsub_set_mod_data(evsub, pubsub_module.id, NULL);
-
-#ifdef HAVE_PJSIP_EVSUB_GRP_LOCK
-	pjsip_evsub_dec_ref(sub_tree->evsub);
 #endif
-
-	sub_tree->evsub = NULL;
-
-	ast_sip_dialog_set_serializer(sub_tree->dlg, NULL);
-	ast_sip_dialog_set_endpoint(sub_tree->dlg, NULL);
-
-	subscription_persistence_remove(sub_tree);
-	shutdown_subscriptions(sub_tree->root);
-
-	sub_tree->state = SIP_SUB_TREE_TERMINATED;
-	/* Remove evsub's reference to the sub_tree */
-	ao2_ref(sub_tree, -1);
+	/* If we made it this far, we want to clean the sub tree. For pjproject <2.13, the sub_tree
+	   state check makes sure the evsub is not cleaned at the wrong time */
+	clean_sub_tree(evsub);
 }
 
 static int pubsub_on_refresh_timeout(void *userdata)
@@ -3992,19 +4262,28 @@ static int cmp_subscription_childrens(struct ast_sip_subscription *s1, struct as
 	return 0;
 }
 
+static int destroy_subscriptions_task(void *obj)
+{
+	struct ast_sip_subscription *sub = (struct ast_sip_subscription *) obj;
+
+	destroy_subscriptions(sub);
+
+	return 0;
+}
+
 /*!
  * \brief Called whenever an in-dialog SUBSCRIBE is received
  *
  * This includes both SUBSCRIBE requests that actually refresh the subscription
  * as well as SUBSCRIBE requests that end the subscription.
  *
- * In either case we push serialized_pubsub_on_refresh_timeout to send an
- * appropriate NOTIFY request.
+ * In either case we push an appropriate NOTIFY via pubsub_on_refresh_timeout.
  */
 static void pubsub_on_rx_refresh(pjsip_evsub *evsub, pjsip_rx_data *rdata,
 		int *p_st_code, pj_str_t **p_st_text, pjsip_hdr *res_hdr, pjsip_msg_body **p_body)
 {
 	struct sip_subscription_tree *sub_tree;
+	RAII_VAR(struct ast_sip_endpoint *, endpoint, NULL, ao2_cleanup);
 
 	sub_tree = pjsip_evsub_get_mod_data(evsub, pubsub_module.id);
 	ast_debug(3, "evsub %p sub_tree %p sub_tree state %s\n", evsub, sub_tree,
@@ -4032,35 +4311,58 @@ static void pubsub_on_rx_refresh(pjsip_evsub *evsub, pjsip_rx_data *rdata,
 		sub_tree->state = SIP_SUB_TREE_TERMINATE_PENDING;
 	}
 
+	endpoint = ast_pjsip_rdata_get_endpoint(rdata);
+
+	/* If the handler wants a callback on refresh, then do it (some protocols require this). */
+	if (sub_tree->state == SIP_SUB_TREE_NORMAL && sub_tree->root->handler->notifier->refresh_subscribe) {
+		if (!sub_tree->root->handler->notifier->refresh_subscribe(sub_tree->root, rdata)) {
+			return; /* If the callback handled it, we're done. */
+		}
+	}
+
 	if (sub_tree->state == SIP_SUB_TREE_NORMAL && sub_tree->is_list) {
 		/* update RLS */
 		const char *resource = sub_tree->root->resource;
 		struct ast_sip_subscription *old_root = sub_tree->root;
 		struct ast_sip_subscription *new_root = NULL;
-		RAII_VAR(struct ast_sip_endpoint *, endpoint, NULL, ao2_cleanup);
-		struct ast_sip_subscription_handler *handler = NULL;
+
 		struct ast_sip_pubsub_body_generator *generator = NULL;
 
-		if ((endpoint = ast_pjsip_rdata_get_endpoint(rdata))
-			&& (handler = subscription_get_handler_from_rdata(rdata, ast_sorcery_object_get_id(endpoint)))
-			&& (generator = subscription_get_generator_from_rdata(rdata, handler))) {
+		if (endpoint && (generator = subscription_get_generator_from_rdata(rdata, sub_tree->root->handler))) {
 
 			struct resource_tree tree;
 			int resp;
 
 			memset(&tree, 0, sizeof(tree));
-			resp = build_resource_tree(endpoint, handler, resource, &tree,
-				ast_sip_pubsub_has_eventlist_support(rdata));
+			resp = build_resource_tree(endpoint, sub_tree->root->handler, resource, &tree,
+				ast_sip_pubsub_has_eventlist_support(rdata), rdata);
 			if (PJSIP_IS_STATUS_IN_CLASS(resp, 200)) {
-				new_root = create_virtual_subscriptions(handler, resource, generator, sub_tree, tree.root);
+				new_root = create_virtual_subscriptions(sub_tree->root->handler, resource, generator, sub_tree, tree.root);
 				if (new_root) {
 					if (cmp_subscription_childrens(old_root, new_root)) {
 						ast_debug(1, "RLS '%s->%s' was modified, regenerate it\n", ast_sorcery_object_get_id(endpoint), old_root->resource);
 						new_root->version = old_root->version;
 						sub_tree->root = new_root;
 						sub_tree->generate_initial_notify = 1;
+
+						/* If there is scheduled notification need to delete it to avoid use old subscriptions */
+						if (sub_tree->notify_sched_id > -1) {
+							AST_SCHED_DEL_UNREF(sched, sub_tree->notify_sched_id, ao2_ref(sub_tree, -1));
+							sub_tree->send_scheduled_notify = 0;
+						}
+
+						/* Terminate old subscriptions to stop sending NOTIFY messages on exten/device state changes */
+						set_state_terminated(old_root);
+
+						/* Shutdown old subscriptions to remove exten/device state change callbacks
+						 that can queue tasks for old subscriptions */
 						shutdown_subscriptions(old_root);
-						destroy_subscriptions(old_root);
+
+						/* Postpone destruction until all already queued tasks that may be using old subscriptions have completed */
+						if (ast_sip_push_task(sub_tree->serializer, destroy_subscriptions_task, old_root)) {
+							ast_log(LOG_ERROR, "Failed to push task to destroy old subscriptions for RLS '%s->%s'.\n",
+								ast_sorcery_object_get_id(endpoint), old_root->resource);
+						}
 					} else {
 						destroy_subscriptions(new_root);
 					}
@@ -4076,12 +4378,21 @@ static void pubsub_on_rx_refresh(pjsip_evsub *evsub, pjsip_rx_data *rdata,
 
 	subscription_persistence_update(sub_tree, rdata, SUBSCRIPTION_PERSISTENCE_REFRESHED);
 
+#ifdef HAVE_PJSIP_EVSUB_PENDING_NOTIFY
+	/* As of pjsip 2.13, the NOTIFY has to be sent within this function as pjproject now
+	   requires it.  Previously this would have caused an early NOTIFY to go out before the
+	   SUBSCRIBE's 200 OK. The previous solution was to push the NOTIFY, but now pjproject
+	   looks for the NOTIFY to be sent from this function and caches it to send after it
+	   auto-replies to the SUBSCRIBE. */
+	pubsub_on_refresh_timeout(sub_tree);
+#else
 	if (ast_sip_push_task(sub_tree->serializer, serialized_pubsub_on_refresh_timeout, ao2_bump(sub_tree))) {
 		/* If we can't push the NOTIFY refreshing task...we'll just go with it. */
 		ast_log(LOG_ERROR, "Failed to push task to send NOTIFY.\n");
 		sub_tree->state = SIP_SUB_TREE_NORMAL;
 		ao2_ref(sub_tree, -1);
 	}
+#endif
 
 	if (sub_tree->is_list) {
 		pj_list_insert_before(res_hdr, create_require_eventlist(rdata->tp_info.pool));
@@ -5067,6 +5378,7 @@ struct ast_sip_notifier test_notifier = {
  */
 struct ast_sip_subscription_handler test_handler = {
 	.event_name = "test",
+	.body_type = "",
 	.notifier = &test_notifier,
 };
 
@@ -5251,7 +5563,7 @@ AST_TEST_DEFINE(resource_tree)
 	}
 
 	tree = ast_calloc(1, sizeof(*tree));
-	resp = build_resource_tree(NULL, &test_handler, "foo", tree, 1);
+	resp = build_resource_tree(NULL, &test_handler, "foo", tree, 1, NULL);
 	if (resp != 200) {
 		ast_test_status_update(test, "Unexpected response %d when building resource tree\n", resp);
 		return AST_TEST_FAIL;
@@ -5321,7 +5633,7 @@ AST_TEST_DEFINE(complex_resource_tree)
 	}
 
 	tree = ast_calloc(1, sizeof(*tree));
-	resp = build_resource_tree(NULL, &test_handler, "foo", tree, 1);
+	resp = build_resource_tree(NULL, &test_handler, "foo", tree, 1, NULL);
 	if (resp != 200) {
 		ast_test_status_update(test, "Unexpected response %d when building resource tree\n", resp);
 		return AST_TEST_FAIL;
@@ -5382,7 +5694,7 @@ AST_TEST_DEFINE(bad_resource)
 	}
 
 	tree = ast_calloc(1, sizeof(*tree));
-	resp = build_resource_tree(NULL, &test_handler, "foo", tree, 1);
+	resp = build_resource_tree(NULL, &test_handler, "foo", tree, 1, NULL);
 	if (resp != 200) {
 		ast_test_status_update(test, "Unexpected response %d when building resource tree\n", resp);
 		return AST_TEST_FAIL;
@@ -5451,7 +5763,7 @@ AST_TEST_DEFINE(bad_branch)
 	}
 
 	tree = ast_calloc(1, sizeof(*tree));
-	resp = build_resource_tree(NULL, &test_handler, "foo", tree, 1);
+	resp = build_resource_tree(NULL, &test_handler, "foo", tree, 1, NULL);
 	if (resp != 200) {
 		ast_test_status_update(test, "Unexpected response %d when building resource tree\n", resp);
 		return AST_TEST_FAIL;
@@ -5524,7 +5836,7 @@ AST_TEST_DEFINE(duplicate_resource)
 	}
 
 	tree = ast_calloc(1, sizeof(*tree));
-	resp = build_resource_tree(NULL, &test_handler, "foo", tree, 1);
+	resp = build_resource_tree(NULL, &test_handler, "foo", tree, 1, NULL);
 	if (resp != 200) {
 		ast_test_status_update(test, "Unexpected response %d when building resource tree\n", resp);
 		return AST_TEST_FAIL;
@@ -5596,7 +5908,7 @@ AST_TEST_DEFINE(loop)
 	}
 
 	tree = ast_calloc(1, sizeof(*tree));
-	resp = build_resource_tree(NULL, &test_handler, "herp", tree, 1);
+	resp = build_resource_tree(NULL, &test_handler, "herp", tree, 1, NULL);
 	if (resp == 200) {
 		ast_test_status_update(test, "Unexpected response %d when building resource tree\n", resp);
 		return AST_TEST_FAIL;
@@ -5643,7 +5955,7 @@ AST_TEST_DEFINE(bad_event)
 	/* Since the test_handler is for event "test", this should not build a list, but
 	 * instead result in a single resource being created, called "foo"
 	 */
-	resp = build_resource_tree(NULL, &test_handler, "foo", tree, 1);
+	resp = build_resource_tree(NULL, &test_handler, "foo", tree, 1, NULL);
 	if (resp != 200) {
 		ast_test_status_update(test, "Unexpected response %d when building resource tree\n", resp);
 		return AST_TEST_FAIL;
@@ -5731,7 +6043,7 @@ static int load_module(void)
 	ast_sorcery_object_field_register(sorcery, "subscription_persistence", "src_port", "0", OPT_UINT_T, 0,
 		FLDSET(struct subscription_persistence, src_port));
 	ast_sorcery_object_field_register(sorcery, "subscription_persistence", "transport_key", "0", OPT_CHAR_ARRAY_T, 0,
-		CHARFLDSET(struct subscription_persistence, transport_key));
+		CHARFLDSET(struct subscription_persistence, transport_type));
 	ast_sorcery_object_field_register(sorcery, "subscription_persistence", "local_name", "", OPT_CHAR_ARRAY_T, 0,
 		CHARFLDSET(struct subscription_persistence, local_name));
 	ast_sorcery_object_field_register(sorcery, "subscription_persistence", "local_port", "0", OPT_UINT_T, 0,

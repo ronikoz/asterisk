@@ -425,6 +425,12 @@ static void ari_bridges_play_new(const char **args_media,
 	struct bridge_channel_control_thread_data *thread_data;
 	pthread_t threadid;
 
+	struct ast_frame prog = {
+		.frametype = AST_FRAME_CONTROL,
+		.subclass.integer = AST_CONTROL_PROGRESS,
+	};
+
+
 	if (!(play_channel = prepare_bridge_media_channel("Announcer"))) {
 		ast_ari_response_error(
 			response, 500, "Internal Error", "Could not create playback channel");
@@ -471,6 +477,8 @@ static void ari_bridges_play_new(const char **args_media,
 		ast_ari_response_alloc_failed(response);
 		return;
 	}
+
+	ast_bridge_queue_everyone_else(bridge, NULL, &prog);
 
 	/* Give play_channel and control reference to the thread data */
 	thread_data = ast_malloc(sizeof(*thread_data) + strlen(bridge->uniqueid) + 1);
@@ -939,13 +947,21 @@ void ast_ari_bridges_create(struct ast_variable *headers,
 	struct ast_ari_bridges_create_args *args,
 	struct ast_ari_response *response)
 {
-	RAII_VAR(struct ast_bridge *, bridge, stasis_app_bridge_create(args->type, args->name, args->bridge_id), ao2_cleanup);
+	RAII_VAR(struct ast_bridge *, bridge, NULL, ao2_cleanup);
 	RAII_VAR(struct ast_bridge_snapshot *, snapshot, NULL, ao2_cleanup);
 
+	if (ast_bridge_topic_exists(args->bridge_id)) {
+		ast_ari_response_error(
+			response, 409, "Conflict",
+			"Bridge with id '%s' already exists", args->bridge_id);
+		return;
+	}
+
+	bridge = stasis_app_bridge_create(args->type, args->name, args->bridge_id);
 	if (!bridge) {
 		ast_ari_response_error(
 			response, 500, "Internal Error",
-			"Unable to create bridge");
+			"Unable to create bridge. Possible duplicate bridge id '%s'", args->bridge_id);
 		return;
 	}
 
@@ -968,26 +984,13 @@ void ast_ari_bridges_create_with_id(struct ast_variable *headers,
 	struct ast_ari_bridges_create_with_id_args *args,
 	struct ast_ari_response *response)
 {
-	RAII_VAR(struct ast_bridge *, bridge, find_bridge(response, args->bridge_id), ao2_cleanup);
+	RAII_VAR(struct ast_bridge *, bridge, NULL, ao2_cleanup);
 	RAII_VAR(struct ast_bridge_snapshot *, snapshot, NULL, ao2_cleanup);
 
-	if (bridge) {
-		/* update */
-		if (!ast_strlen_zero(args->name)
-			&& strcmp(args->name, bridge->name)) {
-			ast_ari_response_error(
-				response, 500, "Internal Error",
-				"Changing bridge name is not implemented");
-			return;
-		}
-		if (!ast_strlen_zero(args->type)) {
-			ast_ari_response_error(
-				response, 500, "Internal Error",
-				"Supplying a bridge type when updating a bridge is not allowed.");
-			return;
-		}
-		ast_ari_response_ok(response,
-			ast_bridge_snapshot_to_json(snapshot, stasis_app_get_sanitizer()));
+	if (ast_bridge_topic_exists(args->bridge_id)) {
+		ast_ari_response_error(
+			response, 409, "Conflict",
+			"Bridge with id '%s' already exists", args->bridge_id);
 		return;
 	}
 

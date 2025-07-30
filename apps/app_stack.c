@@ -42,13 +42,16 @@
 
 /*** DOCUMENTATION
 	<application name="Gosub" language="en_US">
+		<since>
+			<version>1.2.0</version>
+		</since>
 		<synopsis>
 			Jump to label, saving return address.
 		</synopsis>
 		<syntax>
-			<parameter name="context" />
-			<parameter name="exten" />
-			<parameter name="priority" required="true" hasparams="optional">
+			<parameter name="context" documentationtype="dialplan_context" />
+			<parameter name="extension" documentationtype="dialplan_extension" />
+			<parameter name="priority" documentationtype="dialplan_priority" required="true" hasparams="optional">
 				<argument name="arg1" multiple="true" required="true" />
 				<argument name="argN" />
 			</parameter>
@@ -58,13 +61,15 @@
 		</description>
 		<see-also>
 			<ref type="application">GosubIf</ref>
-			<ref type="application">Macro</ref>
 			<ref type="application">Goto</ref>
 			<ref type="application">Return</ref>
 			<ref type="application">StackPop</ref>
 		</see-also>
 	</application>
 	<application name="GosubIf" language="en_US">
+		<since>
+			<version>1.2.0</version>
+		</since>
 		<synopsis>
 			Conditionally jump to label, saving return address.
 		</synopsis>
@@ -93,13 +98,15 @@
 		<see-also>
 			<ref type="application">Gosub</ref>
 			<ref type="application">Return</ref>
-			<ref type="application">MacroIf</ref>
 			<ref type="function">IF</ref>
 			<ref type="application">GotoIf</ref>
 			<ref type="application">Goto</ref>
 		</see-also>
 	</application>
 	<application name="Return" language="en_US">
+		<since>
+			<version>1.2.0</version>
+		</since>
 		<synopsis>
 			Return from gosub routine.
 		</synopsis>
@@ -118,6 +125,9 @@
 		</see-also>
 	</application>
 	<application name="StackPop" language="en_US">
+		<since>
+			<version>1.2.0</version>
+		</since>
 		<synopsis>
 			Remove one address from gosub stack.
 		</synopsis>
@@ -131,6 +141,9 @@
 		</see-also>
 	</application>
 	<function name="LOCAL" language="en_US">
+		<since>
+			<version>1.6.1.0</version>
+		</since>
 		<synopsis>
 			Manage variables local to the gosub stack frame.
 		</synopsis>
@@ -148,6 +161,9 @@
 		</see-also>
 	</function>
 	<function name="LOCAL_PEEK" language="en_US">
+		<since>
+			<version>1.6.1.0</version>
+		</since>
 		<synopsis>
 			Retrieve variables hidden by the local gosub stack frame.
 		</synopsis>
@@ -170,6 +186,10 @@
 		</see-also>
 	</function>
 	<function name="STACK_PEEK" language="en_US">
+		<since>
+			<version>1.8.11.0</version>
+			<version>10.3.0</version>
+		</since>
 		<synopsis>
 			View info about the location which called Gosub
 		</synopsis>
@@ -202,11 +222,14 @@
 			returning to the dialplan with execution of a Return().</para>
 		</description>
 		<see-also>
-			<ref type="application">GoSub</ref>
+			<ref type="application">Gosub</ref>
 		</see-also>
 	</agi>
 	<managerEvent language="en_US" name="VarSet">
 		<managerEventInstance class="EVENT_FLAG_DIALPLAN">
+			<since>
+				<version>12.0.0</version>
+			</since>
 			<synopsis>Raised when a variable local to the gosub stack frame is set due to a subroutine call.</synopsis>
 			<syntax>
 				<channel_snapshot/>
@@ -220,7 +243,7 @@
 				</parameter>
 			</syntax>
 			<see-also>
-				<ref type="application">GoSub</ref>
+				<ref type="application">Gosub</ref>
 				<ref type="agi">gosub</ref>
 				<ref type="function">LOCAL</ref>
 				<ref type="function">LOCAL_PEEK</ref>
@@ -1076,7 +1099,7 @@ static int gosub_run(struct ast_channel *chan, const char *sub_args, int ignore_
 				ast_channel_name(chan), app_gosub, sub_args,
 				S_OR(pbx_builtin_getvar_helper(chan, "GOSUB_RETVAL"), ""));
 		} else {
-			ast_log(LOG_NOTICE, "%s Abnormal '%s(%s)' exit.  Popping routine return locations.\n",
+			ast_log(LOG_WARNING, "%s Abnormal '%s(%s)' exit.  Popping routine return locations.\n",
 				ast_channel_name(chan), app_gosub, sub_args);
 			balance_stack(chan);
 			pbx_builtin_setvar_helper(chan, "GOSUB_RETVAL", "");

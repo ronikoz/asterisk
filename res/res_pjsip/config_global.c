@@ -48,11 +48,15 @@
 #define DEFAULT_MWI_TPS_QUEUE_HIGH AST_TASKPROCESSOR_HIGH_WATER_LEVEL
 #define DEFAULT_MWI_TPS_QUEUE_LOW -1
 #define DEFAULT_MWI_DISABLE_INITIAL_UNSOLICITED 0
+#define DEFAULT_ALLOW_SENDING_180_AFTER_183 0
 #define DEFAULT_IGNORE_URI_USER_OPTIONS 0
 #define DEFAULT_USE_CALLERID_CONTACT 0
 #define DEFAULT_SEND_CONTACT_STATUS_ON_UPDATE_REGISTRATION 0
 #define DEFAULT_TASKPROCESSOR_OVERLOAD_TRIGGER TASKPROCESSOR_OVERLOAD_TRIGGER_GLOBAL
 #define DEFAULT_NOREFERSUB 1
+#define DEFAULT_ALL_CODECS_ON_EMPTY_REINVITE 0
+#define DEFAULT_AUTH_ALGORITHMS_UAS "MD5"
+#define DEFAULT_AUTH_ALGORITHMS_UAC "MD5"
 
 /*!
  * \brief Cached global config object
@@ -81,6 +85,10 @@ struct global_config {
 		AST_STRING_FIELD(default_voicemail_extension);
 		/*! Realm to use in challenges before an endpoint is identified */
 		AST_STRING_FIELD(default_realm);
+		/*! Default authentication algorithms for UAS */
+		AST_STRING_FIELD(default_auth_algorithms_uas);
+		/*! Default authentication algorithms for UAC */
+		AST_STRING_FIELD(default_auth_algorithms_uac);
 	);
 	/*! Value to put in Max-Forwards header */
 	unsigned int max_forwards;
@@ -92,6 +100,8 @@ struct global_config {
 	unsigned int contact_expiration_check_interval;
 	/*! Nonzero to disable multi domain support */
 	unsigned int disable_multi_domain;
+	/*! Nonzero to disable changing 180/SDP to 183/SDP */
+	unsigned int allow_sending_180_after_183;
 	/*! The maximum number of unidentified requests per source IP address before a security event is logged */
 	unsigned int unidentified_request_count;
 	/*! The period during which unidentified requests are accumulated */
@@ -116,6 +126,8 @@ struct global_config {
 	enum ast_sip_taskprocessor_overload_trigger overload_trigger;
 	/*! Nonzero if norefersub is to be sent in Supported header */
 	unsigned int norefersub;
+	/*! Nonzero if we should return all codecs on empty re-INVITE */
+	unsigned int all_codecs_on_empty_reinvite;
 };
 
 static void global_destructor(void *obj)
@@ -182,6 +194,8 @@ static int global_apply(const struct ast_sorcery *sorcery, void *obj)
 {
 	struct global_config *cfg = obj;
 	char max_forwards[10];
+	struct pjsip_auth_algorithm_type_vector algorithms;
+	int res = 0;
 
 	if (ast_strlen_zero(cfg->debug)) {
 		ast_log(LOG_ERROR,
@@ -203,6 +217,25 @@ static int global_apply(const struct ast_sorcery *sorcery, void *obj)
 
 	if (check_regcontext(cfg)) {
 		return -1;
+	}
+
+	AST_VECTOR_INIT(&algorithms, 0);
+	res = ast_sip_auth_digest_algorithms_vector_init("global",
+		&algorithms, "UAS", cfg->default_auth_algorithms_uas);
+	AST_VECTOR_FREE(&algorithms);
+	if (res) {
+		ast_log(LOG_WARNING, "global: Invalid values in default_auth_algorithms_uas. "
+			"Defaulting to %s\n", DEFAULT_AUTH_ALGORITHMS_UAS);
+		ast_string_field_set(cfg, default_auth_algorithms_uas, DEFAULT_AUTH_ALGORITHMS_UAS);
+	}
+	AST_VECTOR_INIT(&algorithms, 0);
+	res = ast_sip_auth_digest_algorithms_vector_init("global",
+		&algorithms, "UAC", cfg->default_auth_algorithms_uac);
+	AST_VECTOR_FREE(&algorithms);
+	if (res) {
+		ast_log(LOG_WARNING, "global: Invalid values in default_auth_algorithms_uac. "
+			"Defaulting to %s\n", DEFAULT_AUTH_ALGORITHMS_UAC);
+		ast_string_field_set(cfg, default_auth_algorithms_uac, DEFAULT_AUTH_ALGORITHMS_UAC);
 	}
 
 	ao2_t_global_obj_replace_unref(global_cfg, cfg, "Applying global settings");
@@ -385,6 +418,32 @@ void ast_sip_get_default_realm(char *realm, size_t size)
 	}
 }
 
+void ast_sip_get_default_auth_algorithms_uas(char *default_auth_algorithms_uas, size_t size)
+{
+	struct global_config *cfg;
+
+	cfg = get_global_cfg();
+	if (!cfg) {
+		ast_copy_string(default_auth_algorithms_uas, DEFAULT_AUTH_ALGORITHMS_UAS, size);
+	} else {
+		ast_copy_string(default_auth_algorithms_uas, cfg->default_auth_algorithms_uas, size);
+		ao2_ref(cfg, -1);
+	}
+}
+
+void ast_sip_get_default_auth_algorithms_uac(char *default_auth_algorithms_uac, size_t size)
+{
+	struct global_config *cfg;
+
+	cfg = get_global_cfg();
+	if (!cfg) {
+		ast_copy_string(default_auth_algorithms_uac, DEFAULT_AUTH_ALGORITHMS_UAC, size);
+	} else {
+		ast_copy_string(default_auth_algorithms_uac, cfg->default_auth_algorithms_uac, size);
+		ao2_ref(cfg, -1);
+	}
+}
+
 void ast_sip_get_default_from_user(char *from_user, size_t size)
 {
 	struct global_config *cfg;
@@ -442,6 +501,21 @@ unsigned int ast_sip_get_mwi_disable_initial_unsolicited(void)
 	disable_initial_unsolicited = cfg->mwi.disable_initial_unsolicited;
 	ao2_ref(cfg, -1);
 	return disable_initial_unsolicited;
+}
+
+unsigned int ast_sip_get_allow_sending_180_after_183(void)
+{
+	unsigned int allow_sending_180_after_183;
+	struct global_config *cfg;
+
+	cfg = get_global_cfg();
+	if (!cfg) {
+		return DEFAULT_ALLOW_SENDING_180_AFTER_183;
+	}
+
+	allow_sending_180_after_183 = cfg->allow_sending_180_after_183;
+	ao2_ref(cfg, -1);
+	return allow_sending_180_after_183;
 }
 
 unsigned int ast_sip_get_ignore_uri_user_options(void)
@@ -517,6 +591,21 @@ unsigned int ast_sip_get_norefersub(void)
 	norefersub = cfg->norefersub;
 	ao2_ref(cfg, -1);
 	return norefersub;
+}
+
+unsigned int ast_sip_get_all_codecs_on_empty_reinvite(void)
+{
+	unsigned int all_codecs_on_empty_reinvite;
+	struct global_config *cfg;
+
+	cfg = get_global_cfg();
+	if (!cfg) {
+		return DEFAULT_ALL_CODECS_ON_EMPTY_REINVITE;
+	}
+
+	all_codecs_on_empty_reinvite = cfg->all_codecs_on_empty_reinvite;
+	ao2_ref(cfg, -1);
+	return all_codecs_on_empty_reinvite;
 }
 
 static int overload_trigger_handler(const struct aco_option *opt,
@@ -708,6 +797,9 @@ int ast_sip_initialize_sorcery_global(void)
 	ast_sorcery_object_field_register(sorcery, "global", "mwi_disable_initial_unsolicited",
 		DEFAULT_MWI_DISABLE_INITIAL_UNSOLICITED ? "yes" : "no",
 		OPT_BOOL_T, 1, FLDSET(struct global_config, mwi.disable_initial_unsolicited));
+	ast_sorcery_object_field_register(sorcery, "global", "allow_sending_180_after_183",
+		DEFAULT_ALLOW_SENDING_180_AFTER_183 ? "yes" : "no",
+		OPT_BOOL_T, 1, FLDSET(struct global_config, allow_sending_180_after_183));
 	ast_sorcery_object_field_register(sorcery, "global", "ignore_uri_user_options",
 		DEFAULT_IGNORE_URI_USER_OPTIONS ? "yes" : "no",
 		OPT_BOOL_T, 1, FLDSET(struct global_config, ignore_uri_user_options));
@@ -723,10 +815,20 @@ int ast_sip_initialize_sorcery_global(void)
 	ast_sorcery_object_field_register(sorcery, "global", "norefersub",
 		DEFAULT_NOREFERSUB ? "yes" : "no",
 		OPT_YESNO_T, 1, FLDSET(struct global_config, norefersub));
+	ast_sorcery_object_field_register(sorcery, "global", "all_codecs_on_empty_reinvite",
+		DEFAULT_ALL_CODECS_ON_EMPTY_REINVITE ? "yes" : "no",
+		OPT_BOOL_T, 1, FLDSET(struct global_config, all_codecs_on_empty_reinvite));
+	ast_sorcery_object_field_register(sorcery, "global", "default_auth_algorithms_uas",
+		DEFAULT_AUTH_ALGORITHMS_UAS, OPT_STRINGFIELD_T, 0,
+		STRFLDSET(struct global_config, default_auth_algorithms_uas));
+	ast_sorcery_object_field_register(sorcery, "global", "default_auth_algorithms_uac",
+		DEFAULT_AUTH_ALGORITHMS_UAC, OPT_STRINGFIELD_T, 0,
+		STRFLDSET(struct global_config, default_auth_algorithms_uac));
 
 	if (ast_sorcery_instance_observer_add(sorcery, &observer_callbacks_global)) {
 		return -1;
 	}
+	ast_sorcery_load_object(ast_sip_get_sorcery(), "global");
 
 	return 0;
 }

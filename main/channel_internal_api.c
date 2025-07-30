@@ -48,183 +48,13 @@
 #include "asterisk/stream.h"
 #include "asterisk/test.h"
 #include "asterisk/vector.h"
+#include "channel_private.h"
+#include "channelstorage.h"
 
-/*!
- * \brief Channel UniqueId structure
- * \note channel creation time used for determining LinkedId Propagation
- */
-struct ast_channel_id {
-	time_t creation_time;				/*!< Creation time */
-	int creation_unique;				/*!< sub-second unique value */
-	char unique_id[AST_MAX_UNIQUEID];	/*!< Unique Identifier */
-};
-
-/*!
- * \brief Main Channel structure associated with a channel.
- *
- * \note When adding fields to this structure, it is important to add the field
- *       'in position' with like-aligned fields, so as to keep the compiler from
- *       having to add padding to align fields. The structure's fields are sorted
- *       in this order: pointers, structures, long, int/enum, short, char. This
- *       is especially important on 64-bit architectures, where mixing 4-byte
- *       and 8-byte fields causes 4 bytes of padding to be added before many
- *       8-byte fields.
- */
-struct ast_channel {
-	const struct ast_channel_tech *tech;		/*!< Technology (point to channel driver) */
-	void *tech_pvt;					/*!< Private data used by the technology driver */
-	void *music_state;				/*!< Music State*/
-	void *generatordata;				/*!< Current generator data if there is any */
-	struct ast_generator *generator;		/*!< Current active data generator */
-	struct ast_channel *masq;			/*!< Channel that will masquerade as us */
-	struct ast_channel *masqr;			/*!< Who we are masquerading as */
-	const char *blockproc;				/*!< Procedure causing blocking */
-	const char *appl;				/*!< Current application */
-	const char *data;				/*!< Data passed to current application */
-	struct ast_sched_context *sched;                /*!< Schedule context */
-	struct ast_filestream *stream;			/*!< Stream itself. */
-	struct ast_filestream *vstream;			/*!< Video Stream itself. */
-	ast_timing_func_t timingfunc;
-	void *timingdata;
-	struct ast_pbx *pbx;				/*!< PBX private structure for this channel */
-	struct ast_trans_pvt *writetrans;		/*!< Write translation path */
-	struct ast_trans_pvt *readtrans;		/*!< Read translation path */
-	struct ast_audiohook_list *audiohooks;
-	struct ast_framehook_list *framehooks;
-	struct ast_cdr *cdr;				/*!< Call Detail Record */
-	struct ast_tone_zone *zone;			/*!< Tone zone as set in indications.conf or
-							 *   in the CHANNEL dialplan function */
-	struct ast_channel_monitor *monitor;		/*!< Channel monitoring */
-	ast_callid callid;			/*!< Bound call identifier pointer */
-	struct ao2_container *dialed_causes;		/*!< Contains tech-specific and Asterisk cause data from dialed channels */
-
-	AST_DECLARE_STRING_FIELDS(
-		AST_STRING_FIELD(name);         /*!< ASCII unique channel name */
-		AST_STRING_FIELD(language);     /*!< Language requested for voice prompts */
-		AST_STRING_FIELD(musicclass);   /*!< Default music class */
-		AST_STRING_FIELD(latest_musicclass);   /*!< Latest active music class */
-		AST_STRING_FIELD(accountcode);  /*!< Account code for billing */
-		AST_STRING_FIELD(peeraccount);  /*!< Peer account code for billing */
-		AST_STRING_FIELD(userfield);    /*!< Userfield for CEL billing */
-		AST_STRING_FIELD(call_forward); /*!< Where to forward to if asked to dial on this interface */
-		AST_STRING_FIELD(parkinglot);   /*! Default parking lot, if empty, default parking lot  */
-		AST_STRING_FIELD(hangupsource); /*! Who is responsible for hanging up this channel */
-		AST_STRING_FIELD(dialcontext);  /*!< Dial: Extension context that we were called from */
-	);
-
-	struct ast_channel_id uniqueid;		/*!< Unique Channel Identifier - can be specified on creation */
-	struct ast_channel_id linkedid;		/*!< Linked Channel Identifier - oldest propagated when bridged */
-
-	struct timeval whentohangup; /*!< Non-zero, set to actual time when channel is to be hung up */
-	pthread_t blocker;           /*!< If anyone is blocking, this is them */
-
-	/*!
-	 * \brief Dialed/Called information.
-	 * \note Set on incoming channels to indicate the originally dialed party.
-	 * \note Dialed Number Identifier (DNID)
-	 */
-	struct ast_party_dialed dialed;
-
-	/*!
-	 * \brief Channel Caller ID information.
-	 * \note The caller id information is the caller id of this
-	 * channel when it is used to initiate a call.
-	 */
-	struct ast_party_caller caller;
-
-	/*!
-	 * \brief Channel Connected Line ID information.
-	 * \note The connected line information identifies the channel
-	 * connected/bridged to this channel.
-	 */
-	struct ast_party_connected_line connected;
-
-	/*!
-	 * \brief Channel Connected Line ID information that was last indicated.
-	 */
-	struct ast_party_connected_line connected_indicated;
-
-	/*! \brief Redirecting/Diversion information */
-	struct ast_party_redirecting redirecting;
-
-	struct ast_frame dtmff;				/*!< DTMF frame */
-	struct varshead varshead;			/*!< A linked list for channel variables. See \ref AstChanVar */
-	ast_group_t callgroup;				/*!< Call group for call pickups */
-	ast_group_t pickupgroup;			/*!< Pickup group - which calls groups can be picked up? */
-	struct ast_namedgroups *named_callgroups;	/*!< Named call group for call pickups */
-	struct ast_namedgroups *named_pickupgroups;	/*!< Named pickup group - which call groups can be picked up? */
-	struct timeval creationtime;			/*!< The time of channel creation */
-	struct timeval answertime;				/*!< The time the channel was answered */
-	struct ast_readq_list readq;
-	struct ast_jb jb;				/*!< The jitterbuffer state */
-	struct timeval dtmf_tv;				/*!< The time that an in process digit began, or the last digit ended */
-	struct ast_hangup_handler_list hangup_handlers;/*!< Hangup handlers on the channel. */
-	struct ast_datastore_list datastores; /*!< Data stores on the channel */
-	struct ast_autochan_list autochans; /*!< Autochans on the channel */
-	unsigned long insmpl;				/*!< Track the read/written samples for monitor use */
-	unsigned long outsmpl;				/*!< Track the read/written samples for monitor use */
-
-	int blocker_tid;					/*!< If anyone is blocking, this is their thread id */
-	AST_VECTOR(, int) fds;				/*!< File descriptors for channel -- Drivers will poll on
-							 *   these file descriptors, so at least one must be non -1.
-							 *   See \arg \ref AstFileDesc */
-	int softhangup;				/*!< Whether or not we have been hung up...  Do not set this value
-							 *   directly, use ast_softhangup() */
-	int fdno;					/*!< Which fd had an event detected on */
-	int streamid;					/*!< For streaming playback, the schedule ID */
-	int vstreamid;					/*!< For streaming video playback, the schedule ID */
-	struct ast_format *oldwriteformat;  /*!< Original writer format */
-	int timingfd;					/*!< Timing fd */
-	enum ast_channel_state state;			/*!< State of line -- Don't write directly, use ast_setstate() */
-	int rings;					/*!< Number of rings so far */
-	int priority;					/*!< Dialplan: Current extension priority */
-	int macropriority;				/*!< Macro: Current non-macro priority. See app_macro.c */
-	int amaflags;					/*!< Set BEFORE PBX is started to determine AMA flags */
-	enum ast_channel_adsicpe adsicpe;		/*!< Whether or not ADSI is detected on CPE */
-	unsigned int fin;				/*!< Frames in counters. The high bit is a debug mask, so
-							 *   the counter is only in the remaining bits */
-	unsigned int fout;				/*!< Frames out counters. The high bit is a debug mask, so
-							 *   the counter is only in the remaining bits */
-	int hangupcause;				/*!< Why is the channel hanged up. See causes.h */
-	unsigned int finalized:1;       /*!< Whether or not the channel has been successfully allocated */
-	struct ast_flags flags;				/*!< channel flags of AST_FLAG_ type */
-	int alertpipe[2];
-	struct ast_format_cap *nativeformats;         /*!< Kinds of data this channel can natively handle */
-	struct ast_format *readformat;            /*!< Requested read format (after translation) */
-	struct ast_format *writeformat;           /*!< Requested write format (before translation) */
-	struct ast_format *rawreadformat;         /*!< Raw read format (before translation) */
-	struct ast_format *rawwriteformat;        /*!< Raw write format (after translation) */
-	unsigned int emulate_dtmf_duration;		/*!< Number of ms left to emulate DTMF for */
-	int visible_indication;                         /*!< Indication currently playing on the channel */
-	int hold_state;							/*!< Current Hold/Unhold state */
-
-	unsigned short transfercapability;		/*!< ISDN Transfer Capability - AST_FLAG_DIGITAL is not enough */
-
-	struct ast_bridge *bridge;                      /*!< Bridge this channel is participating in */
-	struct ast_bridge_channel *bridge_channel;/*!< The bridge_channel this channel is linked with. */
-	struct ast_timer *timer;			/*!< timer object that provided timingfd */
-
-	char context[AST_MAX_CONTEXT];			/*!< Dialplan: Current extension context */
-	char exten[AST_MAX_EXTENSION];			/*!< Dialplan: Current extension number */
-	char lastcontext[AST_MAX_CONTEXT];		/*!< Dialplan: Previous extension context */
-	char lastexten[AST_MAX_EXTENSION];		/*!< Dialplan: Previous extension number */
-	char macrocontext[AST_MAX_CONTEXT];		/*!< Macro: Current non-macro context. See app_macro.c */
-	char macroexten[AST_MAX_EXTENSION];		/*!< Macro: Current non-macro extension. See app_macro.c */
-	char unbridged;							/*!< non-zero if the bridge core needs to re-evaluate the current
-											 bridging technology which is in use by this channel's bridge. */
-	char is_t38_active;						/*!< non-zero if T.38 is active on this channel. */
-	char dtmf_digit_to_emulate;			/*!< Digit being emulated */
-	char sending_dtmf_digit;			/*!< Digit this channel is currently sending out. (zero if not sending) */
-	struct timeval sending_dtmf_tv;		/*!< The time this channel started sending the current digit. (Invalid if sending_dtmf_digit is zero.) */
-	struct stasis_topic *topic;		/*!< Topic for this channel */
-	struct stasis_forward *channel_forward; /*!< Subscription for event forwarding to all channel topic */
-	struct stasis_forward *endpoint_forward;	/*!< Subscription for event forwarding to endpoint's topic */
-	struct ast_stream_topology *stream_topology; /*!< Stream topology */
-	void *stream_topology_change_source; /*!< Source that initiated a stream topology change */
-	struct ast_stream *default_streams[AST_MEDIA_TYPE_END]; /*!< Default streams indexed by media type */
-	struct ast_channel_snapshot *snapshot; /*!< The current up to date snapshot of the channel */
-	struct ast_flags snapshot_segment_flags; /*!< Flags regarding the segments of the snapshot */
-};
+/*! \brief The current channel storage driver */
+const struct ast_channelstorage_driver *current_channel_storage_driver;
+/*! \brief The current channel storage instance */
+struct ast_channelstorage_instance *current_channel_storage_instance;
 
 /*! \brief The monotonically increasing integer counter for channel uniqueids */
 static int uniqueint;
@@ -275,7 +105,6 @@ void ast_channel_##field##_build(struct ast_channel *chan, const char *fmt, ...)
 	va_end(ap); \
 }
 
-DEFINE_STRINGFIELD_SETTERS_AND_INVALIDATE_FOR(name, 0, 1, AST_CHANNEL_SNAPSHOT_INVALIDATE_BASE);
 DEFINE_STRINGFIELD_SETTERS_AND_INVALIDATE_FOR(language, 1, 0, AST_CHANNEL_SNAPSHOT_INVALIDATE_BASE);
 DEFINE_STRINGFIELD_SETTERS_FOR(musicclass, 0);
 DEFINE_STRINGFIELD_SETTERS_FOR(latest_musicclass, 0);
@@ -304,6 +133,31 @@ DEFINE_STRINGFIELD_GETTER_FOR(parkinglot);
 DEFINE_STRINGFIELD_GETTER_FOR(hangupsource);
 DEFINE_STRINGFIELD_GETTER_FOR(dialcontext);
 
+void ast_channel_name_set(struct ast_channel *chan, const char *value)
+{
+	ast_assert(!ast_strlen_zero(value));
+	ast_assert(!chan->linked_in_container);
+	if (!strcmp(value, chan->name)) return;
+	ast_string_field_set(chan, name, value);
+	ast_channel_snapshot_invalidate_segment(chan, AST_CHANNEL_SNAPSHOT_INVALIDATE_BASE);
+}
+
+void ast_channel_name_build_va(struct ast_channel *chan, const char *fmt, va_list ap)
+{
+	ast_assert(!chan->linked_in_container);
+	ast_string_field_build_va(chan, name, fmt, ap);
+	ast_channel_snapshot_invalidate_segment(chan, AST_CHANNEL_SNAPSHOT_INVALIDATE_BASE); \
+}
+
+void ast_channel_name_build(struct ast_channel *chan, const char *fmt, ...)
+{
+	va_list ap;
+	ast_assert(!chan->linked_in_container);
+	va_start(ap, fmt);
+	ast_channel_name_build_va(chan, fmt, ap);
+	va_end(ap);
+}
+
 const char *ast_channel_uniqueid(const struct ast_channel *chan)
 {
 	ast_assert(chan->uniqueid.unique_id[0] != '\0');
@@ -314,6 +168,21 @@ const char *ast_channel_linkedid(const struct ast_channel *chan)
 {
 	ast_assert(chan->linkedid.unique_id[0] != '\0');
 	return chan->linkedid.unique_id;
+}
+
+const char *ast_channel_tenantid(const struct ast_channel *chan)
+{
+	/* It's ok for tenantid to be empty, so no need to assert */
+	return chan->linkedid.tenant_id;
+}
+
+void ast_channel_tenantid_set(struct ast_channel *chan, const char *value)
+{
+	if (ast_strlen_zero(value)) {
+		return;
+	}
+	ast_copy_string(chan->linkedid.tenant_id, value, sizeof(chan->linkedid.tenant_id));
+	ast_channel_snapshot_invalidate_segment(chan, AST_CHANNEL_SNAPSHOT_INVALIDATE_BASE);
 }
 
 const char *ast_channel_appl(const struct ast_channel *chan)
@@ -377,22 +246,6 @@ void ast_channel_exten_set(struct ast_channel *chan, const char *value)
 	ast_copy_string(chan->exten, value, sizeof(chan->exten));
 	ast_channel_snapshot_invalidate_segment(chan, AST_CHANNEL_SNAPSHOT_INVALIDATE_DIALPLAN);
 }
-const char *ast_channel_macrocontext(const struct ast_channel *chan)
-{
-	return chan->macrocontext;
-}
-void ast_channel_macrocontext_set(struct ast_channel *chan, const char *value)
-{
-	ast_copy_string(chan->macrocontext, value, sizeof(chan->macrocontext));
-}
-const char *ast_channel_macroexten(const struct ast_channel *chan)
-{
-	return chan->macroexten;
-}
-void ast_channel_macroexten_set(struct ast_channel *chan, const char *value)
-{
-	ast_copy_string(chan->macroexten, value, sizeof(chan->macroexten));
-}
 
 char ast_channel_dtmf_digit_to_emulate(const struct ast_channel *chan)
 {
@@ -450,14 +303,6 @@ void ast_channel_hangupcause_set(struct ast_channel *chan, int value)
 {
 	chan->hangupcause = value;
 	ast_channel_snapshot_invalidate_segment(chan, AST_CHANNEL_SNAPSHOT_INVALIDATE_HANGUP);
-}
-int ast_channel_macropriority(const struct ast_channel *chan)
-{
-	return chan->macropriority;
-}
-void ast_channel_macropriority_set(struct ast_channel *chan, int value)
-{
-	chan->macropriority = value;
 }
 int ast_channel_priority(const struct ast_channel *chan)
 {
@@ -587,6 +432,9 @@ void *ast_channel_tech_pvt(const struct ast_channel *chan)
 void ast_channel_tech_pvt_set(struct ast_channel *chan, void *value)
 {
 	chan->tech_pvt = value;
+	if (value != NULL) {
+		ast_channel_snapshot_invalidate_segment(chan, AST_CHANNEL_SNAPSHOT_INVALIDATE_BASE);
+	}
 }
 void *ast_channel_timingdata(const struct ast_channel *chan)
 {
@@ -627,14 +475,6 @@ struct ast_channel *ast_channel_masqr(const struct ast_channel *chan)
 void ast_channel_masqr_set(struct ast_channel *chan, struct ast_channel *value)
 {
 	chan->masqr = value;
-}
-struct ast_channel_monitor *ast_channel_monitor(const struct ast_channel *chan)
-{
-	return chan->monitor;
-}
-void ast_channel_monitor_set(struct ast_channel *chan, struct ast_channel_monitor *value)
-{
-	chan->monitor = value;
 }
 struct ast_filestream *ast_channel_stream(const struct ast_channel *chan)
 {
@@ -1280,7 +1120,8 @@ struct ast_flags *ast_channel_flags(struct ast_channel *chan)
 	return &chan->flags;
 }
 
-static int collect_names_cb(void *obj, void *arg, int flags) {
+static int collect_names_cb(void *obj, void *arg, int flags)
+{
 	struct ast_control_pvt_cause_code *cause_code = obj;
 	struct ast_str **str = arg;
 
@@ -1346,7 +1187,8 @@ static int pvt_cause_cmp_fn(void *obj, void *vstr, int flags)
 
 #define DIALED_CAUSES_BUCKETS 37
 
-struct ast_channel *__ast_channel_internal_alloc(void (*destructor)(void *obj), const struct ast_assigned_ids *assignedids, const struct ast_channel *requestor, const char *file, int line, const char *function)
+struct ast_channel *__ast_channel_internal_alloc_with_initializers(void (*destructor)(void *obj), const struct ast_assigned_ids *assignedids,
+	const struct ast_channel *requestor, const struct ast_channel_initializers *initializers, const char *file, int line, const char *function)
 {
 	struct ast_channel *tmp;
 
@@ -1365,6 +1207,20 @@ struct ast_channel *__ast_channel_internal_alloc(void (*destructor)(void *obj), 
 		DIALED_CAUSES_BUCKETS, pvt_cause_hash_fn, NULL, pvt_cause_cmp_fn);
 	if (!tmp->dialed_causes) {
 		return ast_channel_unref(tmp);
+	}
+
+	/* Check initializers validity here for early abort. Unfortunately, we can't do much here because
+	 * tenant ID is part of linked ID, which would overwrite it further down. */
+	if (initializers) {
+		if (initializers->version == 0) {
+			ast_log(LOG_ERROR, "Channel initializers must have a non-zero version.\n");
+			return ast_channel_unref(tmp);
+		} else if (initializers->version != AST_CHANNEL_INITIALIZERS_VERSION) {
+			ast_log(LOG_ERROR, "ABI mismatch for ast_channel_initializers. "
+				"Please ensure all modules were compiled for "
+				"this version of Asterisk.\n");
+			return ast_channel_unref(tmp);
+		}
 	}
 
 	/* set the creation time in the uniqueid */
@@ -1392,6 +1248,12 @@ struct ast_channel *__ast_channel_internal_alloc(void (*destructor)(void *obj), 
 		tmp->linkedid = tmp->uniqueid;
 	}
 
+	/* Things like tenant ID need to be set here, otherwise they would be overwritten by
+	 * things like inheriting linked ID above. */
+	if (initializers) {
+		ast_copy_string(tmp->linkedid.tenant_id, initializers->tenantid, sizeof(tmp->linkedid.tenant_id));
+	}
+
 	AST_VECTOR_INIT(&tmp->fds, AST_MAX_FDS);
 
 	/* Force all channel snapshot segments to be created on first use, so we don't have to check if
@@ -1400,6 +1262,12 @@ struct ast_channel *__ast_channel_internal_alloc(void (*destructor)(void *obj), 
 	ast_set_flag(&tmp->snapshot_segment_flags, AST_FLAGS_ALL);
 
 	return tmp;
+}
+
+struct ast_channel *__ast_channel_internal_alloc(void (*destructor)(void *obj), const struct ast_assigned_ids *assignedids,
+	const struct ast_channel *requestor, const char *file, int line, const char *function)
+{
+	return __ast_channel_internal_alloc_with_initializers(destructor, assignedids, requestor, NULL, file, line, function);
 }
 
 struct ast_channel *ast_channel_internal_oldest_linkedid(struct ast_channel *a, struct ast_channel *b)
@@ -1438,6 +1306,13 @@ void ast_channel_internal_swap_uniqueid_and_linkedid(struct ast_channel *a, stru
 	/* This operation is used as part of masquerading and so does not invalidate the peer
 	 * segment. This is due to the masquerade process invalidating all segments.
 	 */
+
+	/*
+	 * Since unique ids can be a key in the channel storage backend,
+	 * ensure that neither channel is linked in or the keys will be
+	 * invalid.
+	 */
+	ast_assert(!a->linked_in_container && !b->linked_in_container);
 
 	temp = a->uniqueid;
 	a->uniqueid = b->uniqueid;

@@ -44,6 +44,7 @@
 #include "asterisk/dial.h"
 #include "asterisk/max_forwards.h"
 #include "asterisk/rtp_engine.h"
+#include "asterisk/websocket_client.h"
 #include "resource_channels.h"
 
 #include <limits.h>
@@ -1779,7 +1780,7 @@ void ast_ari_channels_create(struct ast_variable *headers,
 	struct ast_ari_channels_create_args *args,
 	struct ast_ari_response *response)
 {
-	struct ast_variable *variables = NULL;
+	RAII_VAR(struct ast_variable *, variables, NULL, ast_variables_destroy);
 	struct ast_assigned_ids assignedids;
 	struct ari_channel_thread_data *chan_data;
 	struct ast_channel_snapshot *snapshot;
@@ -2081,18 +2082,19 @@ void ast_ari_channels_rtpstatistics(struct ast_variable *headers,
 	return;
 }
 
-static void external_media_rtp_udp(struct ast_ari_channels_external_media_args *args,
+static int external_media_rtp_udp(struct ast_ari_channels_external_media_args *args,
 	struct ast_variable *variables,
 	struct ast_ari_response *response)
 {
-	size_t endpoint_len;
 	char *endpoint;
 	struct ast_channel *chan;
 	struct varshead *vars;
 
-	endpoint_len = strlen("UnicastRTP/") + strlen(args->external_host) + 1;
-	endpoint = ast_alloca(endpoint_len);
-	snprintf(endpoint, endpoint_len, "UnicastRTP/%s", args->external_host);
+	if (ast_asprintf(&endpoint, "UnicastRTP/%s/c(%s)",
+			args->external_host,
+			args->format) == -1) {
+		return 1;
+	}
 
 	chan = ari_channels_handle_originate_with_id(
 		endpoint,
@@ -2110,10 +2112,11 @@ static void external_media_rtp_udp(struct ast_ari_channels_external_media_args *
 		NULL,
 		args->format,
 		response);
-	ast_variables_destroy(variables);
+
+	ast_free(endpoint);
 
 	if (!chan) {
-		return;
+		return 1;
 	}
 
 	ast_channel_lock(chan);
@@ -2123,26 +2126,26 @@ static void external_media_rtp_udp(struct ast_ari_channels_external_media_args *
 	}
 	ast_channel_unlock(chan);
 	ast_channel_unref(chan);
+	return 0;
 }
 
-static void external_media_audiosocket_tcp(struct ast_ari_channels_external_media_args *args,
+static int external_media_audiosocket_tcp(struct ast_ari_channels_external_media_args *args,
 	struct ast_variable *variables,
 	struct ast_ari_response *response)
 {
-	size_t endpoint_len;
 	char *endpoint;
 	struct ast_channel *chan;
 	struct varshead *vars;
 
 	if (ast_strlen_zero(args->data)) {
 		ast_ari_response_error(response, 400, "Bad Request", "data can not be empty");
-		return;
+		return 1;
 	}
 
-	endpoint_len = strlen("AudioSocket/") + strlen(args->external_host) + 1 + strlen(args->data) + 1;
-	endpoint = ast_alloca(endpoint_len);
-	/* The UUID is stored in the arbitrary data field */
-	snprintf(endpoint, endpoint_len, "AudioSocket/%s/%s", args->external_host, args->data);
+	if (ast_asprintf(&endpoint, "AudioSocket/%s/%s",
+		args->external_host, args->data) == -1) {
+		return 1;
+	}
 
 	chan = ari_channels_handle_originate_with_id(
 		endpoint,
@@ -2160,10 +2163,11 @@ static void external_media_audiosocket_tcp(struct ast_ari_channels_external_medi
 		NULL,
 		args->format,
 		response);
-	ast_variables_destroy(variables);
+
+	ast_free(endpoint);
 
 	if (!chan) {
-		return;
+		return 1;
 	}
 
 	ast_channel_lock(chan);
@@ -2173,6 +2177,54 @@ static void external_media_audiosocket_tcp(struct ast_ari_channels_external_medi
 	}
 	ast_channel_unlock(chan);
 	ast_channel_unref(chan);
+	return 0;
+}
+
+static int external_media_websocket(struct ast_ari_channels_external_media_args *args,
+	struct ast_variable *variables,
+	struct ast_ari_response *response)
+{
+	char *endpoint;
+	struct ast_channel *chan;
+	struct varshead *vars;
+
+	if (ast_asprintf(&endpoint, "WebSocket/%s/c(%s)",
+			args->external_host,
+			args->format) == -1) {
+		return 1;
+	}
+
+	chan = ari_channels_handle_originate_with_id(
+		endpoint,
+		NULL,
+		NULL,
+		0,
+		NULL,
+		args->app,
+		args->data,
+		NULL,
+		0,
+		variables,
+		args->channel_id,
+		NULL,
+		NULL,
+		args->format,
+		response);
+
+	ast_free(endpoint);
+
+	if (!chan) {
+		return 1;
+	}
+
+	ast_channel_lock(chan);
+	vars = ast_channel_varshead(chan);
+	if (vars && !AST_LIST_EMPTY(vars)) {
+		ast_json_object_set(response->message, "channelvars", ast_json_channel_vars(vars));
+	}
+	ast_channel_unlock(chan);
+	ast_channel_unref(chan);
+	return 0;
 }
 
 #include "asterisk/config.h"
@@ -2181,7 +2233,7 @@ static void external_media_audiosocket_tcp(struct ast_ari_channels_external_medi
 void ast_ari_channels_external_media(struct ast_variable *headers,
 	struct ast_ari_channels_external_media_args *args, struct ast_ari_response *response)
 {
-	struct ast_variable *variables = NULL;
+	RAII_VAR(struct ast_variable *, variables, NULL, ast_variables_destroy);
 	char *external_host;
 	char *host = NULL;
 	char *port = NULL;
@@ -2205,15 +2257,70 @@ void ast_ari_channels_external_media(struct ast_variable *headers,
 		return;
 	}
 
-	if (ast_strlen_zero(args->external_host)) {
-		ast_ari_response_error(response, 400, "Bad Request", "external_host cannot be empty");
-		return;
+	if (ast_strlen_zero(args->transport)) {
+		args->transport = "udp";
 	}
 
-	external_host = ast_strdupa(args->external_host);
-	if (!ast_sockaddr_split_hostport(external_host, &host, &port, PARSE_PORT_REQUIRE)) {
-		ast_ari_response_error(response, 400, "Bad Request", "external_host must be <host>:<port>");
-		return;
+	if (ast_strlen_zero(args->encapsulation)) {
+		args->encapsulation = "rtp";
+	}
+	if (ast_strings_equal(args->transport, "websocket")) {
+		if (!ast_strings_equal(args->encapsulation, "none")) {
+			ast_ari_response_error(response, 400, "Bad Request", "encapsulation must be 'none' for websocket transport");
+			return;
+		}
+	}
+
+	if (ast_strings_equal(args->encapsulation, "rtp")) {
+		if (!ast_strings_equal(args->transport, "udp")) {
+			ast_ari_response_error(response, 400, "Bad Request", "transport must be 'udp' for rtp encapsulation");
+			return;
+		}
+	}
+
+	if (ast_strings_equal(args->encapsulation, "audiosocket")) {
+		if (!ast_strings_equal(args->transport, "tcp")) {
+			ast_ari_response_error(response, 400, "Bad Request", "transport must be 'tcp' for audiosocket encapsulation");
+			return;
+		}
+	}
+
+	if (ast_strlen_zero(args->connection_type)) {
+		args->connection_type = "client";
+	}
+	if (!ast_strings_equal(args->transport, "websocket")) {
+		if (ast_strings_equal(args->connection_type, "server")) {
+			ast_ari_response_error(response, 400, "Bad Request", "'server' connection_type can only be used with the websocket transport");
+			return;
+		}
+	}
+
+	if (ast_strlen_zero(args->external_host)) {
+		if (ast_strings_equal(args->connection_type, "client")) {
+			ast_ari_response_error(response, 400, "Bad Request", "external_host is required for all but websocket server connections");
+			return;
+		} else {
+			/* server is only valid for websocket, enforced above */
+			args->external_host = "INCOMING";
+		}
+	}
+
+	if (ast_strings_equal(args->transport, "websocket")) {
+		if (ast_strings_equal(args->connection_type, "client")) {
+			struct ast_websocket_client *ws_client =
+				ast_websocket_client_retrieve_by_id(args->external_host);
+			ao2_cleanup(ws_client);
+			if (!ws_client) {
+				ast_ari_response_error(response, 400, "Bad Request", "external_host must be a valid websocket_client connection id.");
+				return;
+			}
+		}
+	} else {
+		external_host = ast_strdupa(args->external_host);
+		if (!ast_sockaddr_split_hostport(external_host, &host, &port, PARSE_PORT_REQUIRE)) {
+			ast_ari_response_error(response, 400, "Bad Request", "external_host must be <host>:<port> for all transports other than websocket");
+			return;
+		}
 	}
 
 	if (ast_strlen_zero(args->format)) {
@@ -2221,26 +2328,72 @@ void ast_ari_channels_external_media(struct ast_variable *headers,
 		return;
 	}
 
-	if (ast_strlen_zero(args->encapsulation)) {
-		args->encapsulation = "rtp";
-	}
-	if (ast_strlen_zero(args->transport)) {
-		args->transport = "udp";
-	}
-	if (ast_strlen_zero(args->connection_type)) {
-		args->connection_type = "client";
-	}
 	if (ast_strlen_zero(args->direction)) {
 		args->direction = "both";
 	}
 
 	if (strcasecmp(args->encapsulation, "rtp") == 0 && strcasecmp(args->transport, "udp") == 0) {
-		external_media_rtp_udp(args, variables, response);
+		if (external_media_rtp_udp(args, variables, response)) {
+			ast_ari_response_error(
+				response, 500, "Internal Server Error",
+				"An internal error prevented this request from being handled");
+		}
 	} else if (strcasecmp(args->encapsulation, "audiosocket") == 0 && strcasecmp(args->transport, "tcp") == 0) {
-		external_media_audiosocket_tcp(args, variables, response);
+		if (external_media_audiosocket_tcp(args, variables, response)) {
+			ast_ari_response_error(
+				response, 500, "Internal Server Error",
+				"An internal error prevented this request from being handled");
+		}
+	} else if (strcasecmp(args->encapsulation, "none") == 0 && strcasecmp(args->transport, "websocket") == 0) {
+		if (external_media_websocket(args, variables, response)) {
+			ast_ari_response_error(
+				response, 500, "Internal Server Error",
+				"An internal error prevented this request from being handled");
+		}
 	} else {
 		ast_ari_response_error(
 			response, 501, "Not Implemented",
 			"The encapsulation and/or transport is not supported");
 	}
+}
+
+void ast_ari_channels_transfer_progress(struct ast_variable *headers, struct ast_ari_channels_transfer_progress_args *args, struct ast_ari_response *response)
+{
+	enum ast_control_transfer message;
+	RAII_VAR(struct stasis_app_control *, control, NULL, ao2_cleanup);
+	RAII_VAR(struct ast_channel *, chan, NULL, ast_channel_cleanup);
+
+	control = find_control(response, args->channel_id);
+	if (control == NULL) {
+		/* Response filled in by find_control */
+		return;
+	}
+
+	chan = ast_channel_get_by_name(args->channel_id);
+	if (!chan) {
+		ast_ari_response_error(response, 404, "Not Found",
+			"Callee not found");
+		return;
+	}
+
+	if (ast_strlen_zero(args->states)) {
+		ast_ari_response_error(response, 400, "Bad Request", "states must not be empty");
+		return;
+	}
+
+	if (strcasecmp(args->states, "channel_progress") == 0) {
+		message = AST_TRANSFER_PROGRESS;
+	} else if (strcasecmp(args->states, "channel_answered") == 0) {
+		message = AST_TRANSFER_SUCCESS;
+	} else if (strcasecmp(args->states, "channel_unavailable") == 0) {
+		message = AST_TRANSFER_UNAVAILABLE;
+	} else if (strcasecmp(args->states, "channel_declined") == 0) {
+		message = AST_TRANSFER_FAILED;
+	} else {
+		ast_ari_response_error(response, 400, "Bad Request", "Invalid states value");
+		return;
+	}
+
+	ast_indicate_data(chan, AST_CONTROL_TRANSFER, &message, sizeof(message));
+	ast_ari_response_no_content(response);
 }

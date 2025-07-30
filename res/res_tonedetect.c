@@ -39,6 +39,7 @@
 #include "asterisk/channel.h"
 #include "asterisk/dsp.h"
 #include "asterisk/pbx.h"
+#include "asterisk/stasis_channels.h"
 #include "asterisk/audiohook.h"
 #include "asterisk/app.h"
 #include "asterisk/indications.h"
@@ -46,6 +47,10 @@
 
 /*** DOCUMENTATION
 	<application name="WaitForTone" language="en_US">
+		<since>
+			<version>16.21.0</version>
+			<version>18.7.0</version>
+		</since>
 		<synopsis>
 			Wait for tone
 		</synopsis>
@@ -94,6 +99,11 @@
 		</see-also>
 	</application>
 	<application name="ToneScan" language="en_US">
+		<since>
+			<version>16.23.0</version>
+			<version>18.9.0</version>
+			<version>19.1.0</version>
+		</since>
 		<synopsis>
 			Wait for period of time while scanning for call progress tones
 		</synopsis>
@@ -169,6 +179,10 @@
 		</see-also>
 	</application>
 	<function name="TONE_DETECT" language="en_US">
+		<since>
+			<version>16.21.0</version>
+			<version>18.7.0</version>
+		</since>
 		<synopsis>
 			Asynchronously detects a tone
 		</synopsis>
@@ -212,6 +226,10 @@
 						<para>Number of times the tone should be detected (subject to the
 						provided timeout) before going to the destination provided in the <literal>g</literal>
 						or <literal>h</literal> option. Default is 1.</para>
+					</option>
+					<option name="p">
+						<para>Match immediately on audible ringback tone, instead of or in addition to
+						a particular frequency.</para>
 					</option>
 					<option name="r">
 						<para>Apply to received frames only. Default is both directions.</para>
@@ -282,6 +300,7 @@ enum td_opts {
 	OPT_SIT = (1 << 9),
 	OPT_BUSY = (1 << 10),
 	OPT_DIALTONE = (1 << 11),
+	OPT_RINGING = (1 << 12),
 };
 
 enum {
@@ -301,6 +320,7 @@ AST_APP_OPTIONS(td_opts, {
 	AST_APP_OPTION_ARG('g', OPT_GOTO_RX, OPT_ARG_GOTO_RX),
 	AST_APP_OPTION_ARG('h', OPT_GOTO_TX, OPT_ARG_GOTO_TX),
 	AST_APP_OPTION_ARG('n', OPT_HITS_REQ, OPT_ARG_HITS_REQ),
+	AST_APP_OPTION('p', OPT_RINGING),
 	AST_APP_OPTION('s', OPT_SQUELCH),
 	AST_APP_OPTION('t', OPT_TX),
 	AST_APP_OPTION('r', OPT_RX),
@@ -334,6 +354,7 @@ static int detect_callback(struct ast_audiohook *audiohook, struct ast_channel *
 {
 	struct ast_datastore *datastore = NULL;
 	struct detect_information *di = NULL;
+	struct stasis_message *message;
 	int match = 0;
 
 	/* If the audiohook is stopping it means the channel is shutting down.... but we let the datastore destroy take care of it */
@@ -352,7 +373,7 @@ static int detect_callback(struct ast_audiohook *audiohook, struct ast_channel *
 		return 0;
 	}
 
-	if (!(direction == AST_AUDIOHOOK_DIRECTION_READ ? &di->rx : &di->tx)) {
+	if (!(direction == AST_AUDIOHOOK_DIRECTION_READ ? di->rx : di->tx)) {
 		return 0;
 	}
 
@@ -373,6 +394,16 @@ static int detect_callback(struct ast_audiohook *audiohook, struct ast_channel *
 			}
 			ast_debug(1, "TONE_DETECT just got a hit (#%d in this direction, waiting for %d total)\n", now, di->hitsrequired);
 			if (now >= di->hitsrequired) {
+				message = ast_channel_blob_create_from_cache(ast_channel_uniqueid(chan), ast_channel_tone_detect(), NULL);
+
+				if (!message) {
+					ast_log(LOG_ERROR, "Unable to publish tone detected event for ARI on channel '%s'", ast_channel_name(chan));
+					return 1;
+				} else {
+					stasis_publish(ast_channel_topic(chan), message);
+					ao2_ref(message, -1);
+				}
+
 				if (direction == AST_AUDIOHOOK_DIRECTION_READ && di->gotorx) {
 					ast_async_parseable_goto(chan, di->gotorx);
 				} else if (di->gototx) {
@@ -388,18 +419,31 @@ static int detect_callback(struct ast_audiohook *audiohook, struct ast_channel *
 		if (tstate > 0) {
 			ast_debug(3, "tcount: %d, tstate: %d\n", tcount, tstate);
 			switch (tstate) {
+			case DSP_TONE_STATE_RINGING:
+				if (di->signalfeatures & DSP_PROGRESS_RINGING) {
+					ast_debug(1, "Detected ringing on %s in %s direction\n", ast_channel_name(chan),
+						direction == AST_AUDIOHOOK_DIRECTION_READ ? "read" : "write");
+					match = 1;
+				}
+				break;
 			case DSP_TONE_STATE_DIALTONE:
 				if (di->signalfeatures & DSP_FEATURE_WAITDIALTONE) {
+					ast_debug(1, "Detected dial tone on %s in %s direction\n", ast_channel_name(chan),
+						direction == AST_AUDIOHOOK_DIRECTION_READ ? "read" : "write");
 					match = 1;
 				}
 				break;
 			case DSP_TONE_STATE_BUSY:
 				if (di->signalfeatures & DSP_PROGRESS_BUSY) {
+					ast_debug(1, "Detected busy tone on %s in %s direction\n", ast_channel_name(chan),
+						direction == AST_AUDIOHOOK_DIRECTION_READ ? "read" : "write");
 					match = 1;
 				}
 				break;
 			case DSP_TONE_STATE_SPECIAL3:
 				if (di->signalfeatures & DSP_PROGRESS_CONGESTION) {
+					ast_debug(1, "Detected SIT on %s in %s direction\n", ast_channel_name(chan),
+						direction == AST_AUDIOHOOK_DIRECTION_READ ? "read" : "write");
 					match = 1;
 				}
 				break;
@@ -412,7 +456,8 @@ static int detect_callback(struct ast_audiohook *audiohook, struct ast_channel *
 				} else if (di->gototx) {
 					ast_async_parseable_goto(chan, di->gototx);
 				} else {
-					ast_debug(3, "Detected call progress signal, but don't know where to go\n");
+					ast_debug(3, "Detected call progress signal in %s direction, but don't know where to go\n",
+						direction == AST_AUDIOHOOK_DIRECTION_READ ? "read" : "write");
 				}
 			}
 		}
@@ -567,6 +612,9 @@ static int parse_signal_features(struct ast_flags *flags)
 	}
 	if (ast_test_flag(flags, OPT_DIALTONE)) {
 		features |= DSP_FEATURE_WAITDIALTONE;
+	}
+	if (ast_test_flag(flags, OPT_RINGING)) {
+		features |= DSP_PROGRESS_RINGING;
 	}
 
 	return features;
@@ -887,7 +935,7 @@ static int scan_exec(struct ast_channel *chan, const char *data)
 	}
 	ast_dsp_set_features(dsp, features);
 	/* all modems begin negotiating with Bell 103. An answering modem just sends mark tone, or 2225 Hz */
-	ast_dsp_set_freqmode(dsp, 2225, 400, 16, 0); /* this needs to be pretty short, or the progress tones code will thing this is voice */
+	ast_dsp_set_freqmode(dsp, 2225, 400, 16, 0); /* this needs to be pretty short, or the progress tones code will think this is voice */
 
 	if (fax) { /* fax detect uses same tone detect internals as modem and causes things to not work as intended, so use a separate DSP if needed. */
 		ast_dsp_set_features(dsp2, DSP_FEATURE_FAX_DETECT); /* fax tone */
@@ -925,8 +973,8 @@ static int scan_exec(struct ast_channel *chan, const char *data)
 				} else if (fax) {
 					char result;
 					frame2 = ast_dsp_process(chan, dsp2, frame2);
-					result = frame->subclass.integer;
-					if (result == AST_FRAME_DTMF) {
+					result = frame2->subclass.integer;
+					if (frame2->frametype == AST_FRAME_DTMF) {
 						if (result == 'e') {
 							pbx_builtin_setvar_helper(chan, "TONESCANSTATUS", "FAX");
 							match = 1;

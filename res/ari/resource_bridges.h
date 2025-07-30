@@ -52,7 +52,7 @@ struct ast_ari_bridges_list_args {
 void ast_ari_bridges_list(struct ast_variable *headers, struct ast_ari_bridges_list_args *args, struct ast_ari_response *response);
 /*! Argument struct for ast_ari_bridges_create() */
 struct ast_ari_bridges_create_args {
-	/*! Comma separated list of bridge type attributes (mixing, holding, dtmf_events, proxy_media, video_sfu, video_single). */
+	/*! Comma separated list of bridge type attributes (mixing, holding, dtmf_events, proxy_media, video_sfu, video_single, sdp_label). */
 	const char *type;
 	/*! Unique ID to give to the bridge being created. */
 	const char *bridge_id;
@@ -82,7 +82,7 @@ int ast_ari_bridges_create_parse_body(
 void ast_ari_bridges_create(struct ast_variable *headers, struct ast_ari_bridges_create_args *args, struct ast_ari_response *response);
 /*! Argument struct for ast_ari_bridges_create_with_id() */
 struct ast_ari_bridges_create_with_id_args {
-	/*! Comma separated list of bridge type attributes (mixing, holding, dtmf_events, proxy_media, video_sfu, video_single) to set. */
+	/*! Comma separated list of bridge type attributes (mixing, holding, dtmf_events, proxy_media, video_sfu, video_single, sdp_label) to set. */
 	const char *type;
 	/*! Unique ID to give to the bridge being created. */
 	const char *bridge_id;
@@ -101,7 +101,7 @@ int ast_ari_bridges_create_with_id_parse_body(
 	struct ast_ari_bridges_create_with_id_args *args);
 
 /*!
- * \brief Create a new bridge or updates an existing one.
+ * \brief Create a new bridge.
  *
  * This bridge persists until it has been shut down, or Asterisk has been shut down.
  *

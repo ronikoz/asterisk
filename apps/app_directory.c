@@ -39,9 +39,13 @@
 #include "asterisk/say.h"
 #include "asterisk/app.h"
 #include "asterisk/utils.h"
+#include "asterisk/adsi.h"
 
 /*** DOCUMENTATION
 	<application name="Directory" language="en_US">
+		<since>
+			<version>0.1.0</version>
+		</since>
 		<synopsis>
 			Provide directory of voicemail extensions.
 		</synopsis>
@@ -103,23 +107,36 @@
 						receiver to their ear while entering DTMF.</para>
 						<argument name="n" required="true" />
 					</option>
+					<option name="c">
+						<para>Load the specified config file instead of voicemail.conf</para>
+						<argument name="filename" required="true" />
+					</option>
+					<option name="s">
+						<para>Skip calling the extension, instead set it in the <variable>DIRECTORY_EXTEN</variable>
+						channel variable.</para>
+					</option>
+					<option name="d">
+						<para>Enable ADSI support for screen phone searching and retrieval
+						of directory results.</para>
+						<para>Additionally, the channel must be ADSI-enabled and you must
+						have an ADSI-compatible (Type III) CPE for this to work.</para>
+					</option>
 				</optionlist>
 				<note><para>Only one of the <replaceable>f</replaceable>, <replaceable>l</replaceable>, or <replaceable>b</replaceable>
 				options may be specified. <emphasis>If more than one is specified</emphasis>, then Directory will act as
 				if <replaceable>b</replaceable> was specified.  The number
 				of characters for the user to type defaults to <literal>3</literal>.</para></note>
-
 			</parameter>
 		</syntax>
 		<description>
 			<para>This application will present the calling channel with a directory of extensions from which they can search
 			by name. The list of names and corresponding extensions is retrieved from the
-			voicemail configuration file, <filename>voicemail.conf</filename>.</para>
+			voicemail configuration file, <filename>voicemail.conf</filename>, or from the specified filename.</para>
 			<para>This application will immediately exit if one of the following DTMF digits are
 			received and the extension to jump to exists:</para>
 			<para><literal>0</literal> - Jump to the 'o' extension, if it exists.</para>
 			<para><literal>*</literal> - Jump to the 'a' extension, if it exists.</para>
-			<para>This application will set the following channel variable before completion:</para>
+			<para>This application will set the following channel variables before completion:</para>
 			<variablelist>
 				<variable name="DIRECTORY_RESULT">
 					<para>Reason Directory application exited.</para>
@@ -130,6 +147,10 @@
 					<value name="SELECTED">User selected a user to call from the directory</value>
 					<value name="USEREXIT">User exited with '#' during selection</value>
 					<value name="FAILED">The application failed</value>
+				</variable>
+				<variable name="DIRECTORY_EXTEN">
+					<para>If the skip calling option is set this will be set to the selected extension
+					provided one is selected.</para>
 				</variable>
 			</variablelist>
 		</description>
@@ -153,6 +174,9 @@ enum {
 	OPT_PAUSE =           (1 << 5),
 	OPT_NOANSWER =        (1 << 6),
 	OPT_ALIAS =           (1 << 7),
+	OPT_CONFIG_FILE =     (1 << 8),
+	OPT_SKIP =            (1 << 9),
+	OPT_ADSI =            (1 << 10),
 };
 
 enum {
@@ -160,8 +184,9 @@ enum {
 	OPT_ARG_LASTNAME =    1,
 	OPT_ARG_EITHER =      2,
 	OPT_ARG_PAUSE =       3,
+	OPT_ARG_FILENAME =    4,
 	/* This *must* be the last value in this enum! */
-	OPT_ARG_ARRAY_SIZE =  4,
+	OPT_ARG_ARRAY_SIZE =  5,
 };
 
 struct directory_item {
@@ -183,7 +208,73 @@ AST_APP_OPTIONS(directory_app_options, {
 	AST_APP_OPTION('m', OPT_SELECTFROMMENU),
 	AST_APP_OPTION('n', OPT_NOANSWER),
 	AST_APP_OPTION('a', OPT_ALIAS),
+	AST_APP_OPTION_ARG('c', OPT_CONFIG_FILE, OPT_ARG_FILENAME),
+	AST_APP_OPTION('s', OPT_SKIP),
+	AST_APP_OPTION('d', OPT_ADSI), /* (Would've used 'a', but that was taken already) */
 });
+
+static int adsi_search_input(struct ast_channel *chan)
+{
+	unsigned char buf[256];
+	int bytes = 0;
+	unsigned char keys[6];
+
+	memset(keys, 0, sizeof(keys));
+
+	bytes += ast_adsi_display(buf + bytes, ADSI_COMM_PAGE, 3, ADSI_JUST_CENT, 0, " ", "");
+	bytes += ast_adsi_display(buf + bytes, ADSI_COMM_PAGE, 4, ADSI_JUST_CENT, 0, " ", "");
+	bytes += ast_adsi_set_line(buf + bytes, ADSI_COMM_PAGE, 1);
+	bytes += ast_adsi_input_format(buf + bytes, 1, ADSI_DIR_FROM_LEFT, 0, "Query: ***", "");
+	bytes += ast_adsi_input_control(buf + bytes, ADSI_COMM_PAGE, 4, 1, 1, ADSI_JUST_LEFT);
+	bytes += ast_adsi_load_soft_key(buf + bytes, ADSI_KEY_APPS + 3, "Search", "Search", "#", 1);
+	bytes += ast_adsi_set_keys(buf + bytes, keys);
+	bytes += ast_adsi_voice_mode(buf + bytes, 0);
+
+	ast_debug(3, "Sending ADSI search input screen on %s\n", ast_channel_name(chan));
+
+	return ast_adsi_transmit_message(chan, buf, bytes, ADSI_MSG_DISPLAY);
+}
+
+static int adsi_confirm_match(struct ast_channel *chan, int seq, int total, const char *exten, const char *name, int showexten)
+{
+	unsigned char buf[4096];
+	int alignments[5] = {ADSI_JUST_CENT, ADSI_JUST_CENT, ADSI_JUST_CENT, ADSI_JUST_CENT};
+	char *lines[5] = {NULL, NULL, NULL, NULL, NULL};
+	int x, bytes = 0;
+	unsigned char keys[8];
+	char matchbuf[32];
+
+	snprintf(matchbuf, sizeof(matchbuf), "%d of %d", seq + 1, total); /* Make it 1-indexed for user consumption */
+
+	lines[0] = " "; /* Leave the first line empty so the following lines stand out more */
+	lines[1] = matchbuf;
+	lines[2] = (char*) name;
+
+	if (showexten) {
+		/* If say extension option is set, show it for ADSI as well */
+		lines[3] = (char*) exten;
+	}
+
+	/* Don't use ast_adsi_print here, this way we can send it all at once instead of in 2 transmissions */
+	for (x = 0; lines[x]; x++) {
+		bytes += ast_adsi_display(buf + bytes, ADSI_INFO_PAGE, x + 1, alignments[x], 0, lines[x], "");
+	}
+	bytes += ast_adsi_set_line(buf + bytes, ADSI_INFO_PAGE, 1);
+
+	keys[3] = ADSI_KEY_APPS + 3;
+	keys[4] = ADSI_KEY_APPS + 4;
+	keys[5] = ADSI_KEY_APPS + 5;
+	/* You might think we only need to set the keys up the first time, but nope, we've got to do it each time. */
+	bytes += ast_adsi_load_soft_key(buf + bytes, ADSI_KEY_APPS + 3, "Dial", "Dial", "1", 0);
+	bytes += ast_adsi_load_soft_key(buf + bytes, ADSI_KEY_APPS + 4, "Next", "Next", "*", 0);
+	bytes += ast_adsi_load_soft_key(buf + bytes, ADSI_KEY_APPS + 5, "Exit", "Exit", "#", 0);
+	bytes += ast_adsi_set_keys(buf + bytes, keys);
+	bytes += ast_adsi_voice_mode(buf + bytes, 0);
+
+	ast_debug(3, "Sending ADSI confirmation menu for %s\n", name);
+
+	return ast_adsi_transmit_message(chan, buf, bytes, ADSI_MSG_DISPLAY);
+}
 
 static int compare(const char *text, const char *template)
 {
@@ -267,9 +358,7 @@ static int compare(const char *text, const char *template)
 
 static int goto_exten(struct ast_channel *chan, const char *dialcontext, char *ext)
 {
-	if (!ast_goto_if_exists(chan, S_OR(dialcontext, ast_channel_context(chan)), ext, 1) ||
-		(!ast_strlen_zero(ast_channel_macrocontext(chan)) &&
-		!ast_goto_if_exists(chan, ast_channel_macrocontext(chan), ext, 1))) {
+	if (!ast_goto_if_exists(chan, S_OR(dialcontext, ast_channel_context(chan)), ext, 1)) {
 		return 0;
 	} else {
 		ast_log(LOG_WARNING, "Can't find extension '%s' in current context.  "
@@ -318,6 +407,9 @@ static int select_entry(struct ast_channel *chan, const char *dialcontext, const
 	if (ast_test_flag(flags, OPT_FROMVOICEMAIL)) {
 		/* We still want to set the exten though */
 		ast_channel_exten_set(chan, item->exten);
+	} else if (ast_test_flag(flags, OPT_SKIP)) {
+		/* Skip calling the extension, only set it in the channel variable. */
+		pbx_builtin_setvar_helper(chan, "DIRECTORY_EXTEN", item->exten);
 	} else if (ast_goto_if_exists(chan, S_OR(dialcontext, item->context), item->exten, 1)) {
 		ast_log(LOG_WARNING,
 			"Can't find extension '%s' in context '%s'.  "
@@ -355,6 +447,10 @@ static int select_item_seq(struct ast_channel *chan, struct directory_item **ite
 
 	for (ptr = items, i = 0; i < count; i++, ptr++) {
 		item = *ptr;
+
+		if (ast_test_flag(flags, OPT_ADSI) && adsi_confirm_match(chan, i, count, item->exten, item->name, ast_test_flag(flags, OPT_SAYEXTENSION))) {
+			return -1;
+		}
 
 		for (loop = 3 ; loop > 0; loop--) {
 			if (!res)
@@ -458,7 +554,7 @@ static int select_item_menu(struct ast_channel *chan, struct directory_item **it
 
 AST_THREADSTORAGE(commonbuf);
 
-static struct ast_config *realtime_directory(char *context)
+static struct ast_config *realtime_directory(char *context, const char *filename)
 {
 	struct ast_config *cfg;
 	struct ast_config *rtdata = NULL;
@@ -475,14 +571,14 @@ static struct ast_config *realtime_directory(char *context)
 	}
 
 	/* Load flat file config. */
-	cfg = ast_config_load(VOICEMAIL_CONFIG, config_flags);
+	cfg = ast_config_load(filename, config_flags);
 
 	if (!cfg) {
 		/* Loading config failed. */
 		ast_log(LOG_WARNING, "Loading config failed.\n");
 		return NULL;
 	} else if (cfg == CONFIG_STATUS_FILEINVALID) {
-		ast_log(LOG_ERROR, "Config file %s is in an invalid format.  Aborting.\n", VOICEMAIL_CONFIG);
+		ast_log(LOG_ERROR, "Config file %s is in an invalid format.  Aborting.\n", filename);
 		return NULL;
 	}
 
@@ -603,14 +699,13 @@ static int check_match(struct directory_item **result, const char *item_context,
 
 typedef AST_LIST_HEAD_NOLOCK(, directory_item) itemlist;
 
-static int search_directory_sub(const char *context, struct ast_config *vmcfg, struct ast_config *ucfg, const char *ext, struct ast_flags flags, itemlist *alist)
+static int search_directory_sub(const char *context, struct ast_config *vmcfg, const char *ext, struct ast_flags flags, itemlist *alist)
 {
 	struct ast_variable *v;
 	struct ast_str *buf = ast_str_thread_get(&commonbuf, 100);
 	char *name;
 	char *options;
 	char *alias;
-	char *cat;
 	struct directory_item *item;
 	int res;
 
@@ -669,52 +764,10 @@ static int search_directory_sub(const char *context, struct ast_config *vmcfg, s
 
 		AST_LIST_INSERT_TAIL(alist, item, entry);
 	}
-
-	if (ucfg) {
-		for (cat = ast_category_browse(ucfg, NULL); cat ; cat = ast_category_browse(ucfg, cat)) {
-			const char *position;
-
-			if (!strcasecmp(cat, "general")) {
-				continue;
-			}
-			if (!ast_true(ast_config_option(ucfg, cat, "hasdirectory"))) {
-				continue;
-			}
-
-			/* Find all candidate extensions */
-			if (!(position = ast_variable_retrieve(ucfg, cat, "fullname"))) {
-				continue;
-			}
-
-			res = 0;
-			if (ast_test_flag(&flags, OPT_LISTBYLASTNAME)) {
-				res = check_match(&item, context, position, cat, ext, 0 /* use_first_name */);
-			}
-			if (!res && ast_test_flag(&flags, OPT_LISTBYFIRSTNAME)) {
-				res = check_match(&item, context, position, cat, ext, 1 /* use_first_name */);
-			}
-			if (!res && ast_test_flag(&flags, OPT_ALIAS)) {
-				for (v = ast_variable_browse(ucfg, cat); v; v = v->next) {
-					if (!strcasecmp(v->name, "alias")
-						&& (res = check_match(&item, context, v->value, cat, ext, 1))) {
-						break;
-					}
-				}
-			}
-
-			if (!res) {
-				continue;
-			} else if (res < 0) {
-				return -1;
-			}
-
-			AST_LIST_INSERT_TAIL(alist, item, entry);
-		}
-	}
 	return 0;
 }
 
-static int search_directory(const char *context, struct ast_config *vmcfg, struct ast_config *ucfg, const char *ext, struct ast_flags flags, itemlist *alist)
+static int search_directory(const char *context, struct ast_config *vmcfg, const char *ext, struct ast_flags flags, itemlist *alist)
 {
 	const char *searchcontexts = ast_variable_retrieve(vmcfg, "general", "searchcontexts");
 	if (ast_strlen_zero(context)) {
@@ -727,19 +780,19 @@ static int search_directory(const char *context, struct ast_config *vmcfg, struc
 					continue;
 				}
 
-				if ((res = search_directory_sub(catg, vmcfg, ucfg, ext, flags, alist))) {
+				if ((res = search_directory_sub(catg, vmcfg, ext, flags, alist))) {
 					return res;
 				}
 			}
 			return 0;
 		} else {
 			ast_debug(1, "Searching by category default\n");
-			return search_directory_sub("default", vmcfg, ucfg, ext, flags, alist);
+			return search_directory_sub("default", vmcfg, ext, flags, alist);
 		}
 	} else {
 		/* Browse only the listed context for a match */
 		ast_debug(1, "Searching by category %s\n", context);
-		return search_directory_sub(context, vmcfg, ucfg, ext, flags, alist);
+		return search_directory_sub(context, vmcfg, ext, flags, alist);
 	}
 }
 
@@ -765,7 +818,7 @@ static void sort_items(struct directory_item **sorted, int count)
 	} while (reordered);
 }
 
-static int do_directory(struct ast_channel *chan, struct ast_config *vmcfg, struct ast_config *ucfg, char *context, char *dialcontext, char digit, int digits, struct ast_flags *flags, char *opts[])
+static int do_directory(struct ast_channel *chan, struct ast_config *vmcfg, char *context, char *dialcontext, char digit, int digits, struct ast_flags *flags, char *opts[])
 {
 	/* Read in the first three digits..  "digit" is the first digit, already read */
 	int res = 0;
@@ -788,7 +841,7 @@ static int do_directory(struct ast_channel *chan, struct ast_config *vmcfg, stru
 	if (ast_readstring(chan, ext + 1, digits - 1, 3000, 3000, "#") < 0)
 		return -1;
 
-	res = search_directory(context, vmcfg, ucfg, ext, *flags, &alist);
+	res = search_directory(context, vmcfg, ext, *flags, &alist);
 	if (res)
 		goto exit;
 
@@ -847,11 +900,10 @@ exit:
 static int directory_exec(struct ast_channel *chan, const char *data)
 {
 	int res = 0, digit = 3;
-	struct ast_config *cfg, *ucfg;
+	struct ast_config *cfg;
 	const char *dirintro;
 	char *parse, *opts[OPT_ARG_ARRAY_SIZE] = { 0, };
 	struct ast_flags flags = { 0 };
-	struct ast_flags config_flags = { 0 };
 	enum { FIRST, LAST, BOTH } which = LAST;
 	char digits[9] = "digits/3";
 	AST_DECLARE_APP_ARGS(args,
@@ -867,14 +919,11 @@ static int directory_exec(struct ast_channel *chan, const char *data)
 	if (args.options && ast_app_parse_options(directory_app_options, &flags, opts, args.options))
 		return -1;
 
-	if (!(cfg = realtime_directory(args.vmcontext))) {
+	cfg = realtime_directory(args.vmcontext, S_OR(opts[OPT_ARG_FILENAME], VOICEMAIL_CONFIG));
+
+	if (!cfg) {
 		ast_log(LOG_ERROR, "Unable to read the configuration data!\n");
 		return -1;
-	}
-
-	if ((ucfg = ast_config_load("users.conf", config_flags)) == CONFIG_STATUS_FILEINVALID) {
-		ast_log(LOG_ERROR, "Config file users.conf is in an invalid format.  Aborting.\n");
-		ucfg = NULL;
 	}
 
 	dirintro = ast_variable_retrieve(cfg, args.vmcontext, "directoryintro");
@@ -913,6 +962,18 @@ static int directory_exec(struct ast_channel *chan, const char *data)
 	}
 	digits[7] = digit + '0';
 
+	if (ast_test_flag(&flags, OPT_ADSI)) {
+		if (!ast_adsi_available(chan)) {
+			ast_log(LOG_WARNING, "ADSI not available on %s\n", ast_channel_name(chan));
+			ast_clear_flag(&flags, OPT_ADSI);
+		} else {
+			res = ast_adsi_load_session(chan, NULL, 0, 1);
+			if (res < 0) {
+				return res;
+			}
+		}
+	}
+
 	if (ast_channel_state(chan) != AST_STATE_UP) {
 		if (!ast_test_flag(&flags, OPT_NOANSWER)) {
 			/* Otherwise answer unless we're supposed to read while on-hook */
@@ -920,6 +981,9 @@ static int directory_exec(struct ast_channel *chan, const char *data)
 		}
 	}
 	for (;;) {
+		if (ast_test_flag(&flags, OPT_ADSI) && adsi_search_input(chan)) {
+			return -1;
+		}
 		if (!ast_strlen_zero(dirintro) && !res) {
 			res = ast_stream_and_wait(chan, dirintro, AST_DIGIT_ANY);
 		} else if (!res) {
@@ -952,7 +1016,7 @@ static int directory_exec(struct ast_channel *chan, const char *data)
 			break;
 		}
 
-		res = do_directory(chan, cfg, ucfg, args.vmcontext, args.dialcontext, res, digit, &flags, opts);
+		res = do_directory(chan, cfg, args.vmcontext, args.dialcontext, res, digit, &flags, opts);
 		if (res)
 			break;
 
@@ -963,8 +1027,6 @@ static int directory_exec(struct ast_channel *chan, const char *data)
 		}
 	}
 
-	if (ucfg)
-		ast_config_destroy(ucfg);
 	ast_config_destroy(cfg);
 
 	if (ast_check_hangup(chan)) {

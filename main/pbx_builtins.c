@@ -42,6 +42,9 @@
 
 /*** DOCUMENTATION
 	<application name="Answer" language="en_US">
+		<since>
+			<version>13.8.0</version>
+		</since>
 		<synopsis>
 			Answer a channel if ringing.
 		</synopsis>
@@ -49,22 +52,44 @@
 			<parameter name="delay">
 				<para>Asterisk will wait this number of milliseconds before returning to
 				the dialplan after answering the call.</para>
+				<para>The minimum is 500 ms. To answer immediately without waiting for media,
+				use the i option.</para>
+			</parameter>
+			<parameter name="options">
+				<optionlist>
+					<option name="i">
+						<para>Answer the channel immediately without waiting for media.</para>
+					</option>
+				</optionlist>
 			</parameter>
 		</syntax>
 		<description>
 			<para>If the call has not been answered, this application will
 			answer it. Otherwise, it has no effect on the call.</para>
+			<para>By default, Asterisk will wait for media for up to 500 ms, or
+			the user specified delay, whichever is longer. If you do not want
+			to wait for media at all, use the i option.</para>
 		</description>
 		<see-also>
 			<ref type="application">Hangup</ref>
 		</see-also>
 	</application>
 	<application name="BackGround" language="en_US">
+		<since>
+			<version>13.8.0</version>
+		</since>
 		<synopsis>
 			Play an audio file while waiting for digits of an extension to go to.
 		</synopsis>
 		<syntax>
 			<parameter name="filenames" required="true" argsep="&amp;">
+				<para>Ampersand separated list of filenames. If the filename
+				is a relative filename (it does not begin with a slash), it
+				will be searched for in the Asterisk sounds directory. If the
+				filename is able to be parsed as a URL, Asterisk will
+				download the file and then begin playback on it. To include a
+				literal <literal>&amp;</literal> in the URL you can enclose
+				the URL in single quotes.</para>
 				<argument name="filename1" required="true" />
 				<argument name="filename2" multiple="true" />
 			</parameter>
@@ -119,6 +144,9 @@
 		</see-also>
 	</application>
 	<application name="Busy" language="en_US">
+		<since>
+			<version>13.8.0</version>
+		</since>
 		<synopsis>
 			Indicate the Busy condition.
 		</synopsis>
@@ -134,11 +162,14 @@
 		<see-also>
 			<ref type="application">Congestion</ref>
 			<ref type="application">Progress</ref>
-			<ref type="application">Playtones</ref>
+			<ref type="application">PlayTones</ref>
 			<ref type="application">Hangup</ref>
 		</see-also>
 	</application>
 	<application name="Congestion" language="en_US">
+		<since>
+			<version>13.8.0</version>
+		</since>
 		<synopsis>
 			Indicate the Congestion condition.
 		</synopsis>
@@ -154,11 +185,14 @@
 		<see-also>
 			<ref type="application">Busy</ref>
 			<ref type="application">Progress</ref>
-			<ref type="application">Playtones</ref>
+			<ref type="application">PlayTones</ref>
 			<ref type="application">Hangup</ref>
 		</see-also>
 	</application>
 	<application name="ExecIfTime" language="en_US">
+		<since>
+			<version>13.8.0</version>
+		</since>
 		<synopsis>
 			Conditional application execution based on the current time.
 		</synopsis>
@@ -186,13 +220,16 @@
 		</see-also>
 	</application>
 	<application name="Goto" language="en_US">
+		<since>
+			<version>13.8.0</version>
+		</since>
 		<synopsis>
 			Jump to a particular priority, extension, or context.
 		</synopsis>
 		<syntax>
-			<parameter name="context" />
-			<parameter name="extensions" />
-			<parameter name="priority" required="true" />
+			<parameter name="context" documentationtype="dialplan_context" />
+			<parameter name="extension" documentationtype="dialplan_extension" />
+			<parameter name="priority" documentationtype="dialplan_priority" required="true" />
 		</syntax>
 		<description>
 			<para>This application will set the current context, extension, and priority in the channel structure.
@@ -215,10 +252,12 @@
 			<ref type="application">GotoIf</ref>
 			<ref type="application">GotoIfTime</ref>
 			<ref type="application">Gosub</ref>
-			<ref type="application">Macro</ref>
 		</see-also>
 	</application>
 	<application name="GotoIf" language="en_US">
+		<since>
+			<version>13.8.0</version>
+		</since>
 		<synopsis>
 			Conditional goto.
 		</synopsis>
@@ -254,10 +293,12 @@
 			<ref type="application">Goto</ref>
 			<ref type="application">GotoIfTime</ref>
 			<ref type="application">GosubIf</ref>
-			<ref type="application">MacroIf</ref>
 		</see-also>
 	</application>
 	<application name="GotoIfTime" language="en_US">
+		<since>
+			<version>13.8.0</version>
+		</since>
 		<synopsis>
 			Conditional Goto based on the current time.
 		</synopsis>
@@ -298,29 +339,10 @@
 			<ref type="function">TESTTIME</ref>
 		</see-also>
 	</application>
-	<application name="ImportVar" language="en_US">
-		<synopsis>
-			Import a variable from a channel into a new variable.
-		</synopsis>
-		<syntax argsep="=">
-			<parameter name="newvar" required="true" />
-			<parameter name="vardata" required="true">
-				<argument name="channelname" required="true" />
-				<argument name="variable" required="true" />
-			</parameter>
-		</syntax>
-		<description>
-			<para>This application imports a <replaceable>variable</replaceable> from the specified
-			<replaceable>channel</replaceable> (as opposed to the current one) and stores it as a variable
-			(<replaceable>newvar</replaceable>) in the current channel (the channel that is calling this
-			application). Variables created by this application have the same inheritance properties as those
-			created with the <literal>Set</literal> application.</para>
-		</description>
-		<see-also>
-			<ref type="application">Set</ref>
-		</see-also>
-	</application>
 	<application name="Hangup" language="en_US">
+		<since>
+			<version>13.8.0</version>
+		</since>
 		<synopsis>
 			Hang up the calling channel.
 		</synopsis>
@@ -340,6 +362,9 @@
 		</see-also>
 	</application>
 	<application name="Incomplete" language="en_US">
+		<since>
+			<version>13.8.0</version>
+		</since>
 		<synopsis>
 			Returns AST_PBX_INCOMPLETE value.
 		</synopsis>
@@ -357,6 +382,9 @@
 		</description>
 	</application>
 	<application name="NoOp" language="en_US">
+		<since>
+			<version>13.8.0</version>
+		</since>
 		<synopsis>
 			Do Nothing (No Operation).
 		</synopsis>
@@ -375,6 +403,9 @@
 		</see-also>
 	</application>
 	<application name="Proceeding" language="en_US">
+		<since>
+			<version>13.8.0</version>
+		</since>
 		<synopsis>
 			Indicate proceeding.
 		</synopsis>
@@ -384,6 +415,9 @@
 		</description>
 	</application>
 	<application name="Progress" language="en_US">
+		<since>
+			<version>13.8.0</version>
+		</since>
 		<synopsis>
 			Indicate progress.
 		</synopsis>
@@ -395,10 +429,13 @@
 			<ref type="application">Busy</ref>
 			<ref type="application">Congestion</ref>
 			<ref type="application">Ringing</ref>
-			<ref type="application">Playtones</ref>
+			<ref type="application">PlayTones</ref>
 		</see-also>
 	</application>
 	<application name="RaiseException" language="en_US">
+		<since>
+			<version>13.8.0</version>
+		</since>
 		<synopsis>
 			Handle an exceptional condition.
 		</synopsis>
@@ -410,10 +447,13 @@
 			dialplan function EXCEPTION(). If the <literal>e</literal> extension does not exist, the call will hangup.</para>
 		</description>
 		<see-also>
-			<ref type="function">Exception</ref>
+			<ref type="function">EXCEPTION</ref>
 		</see-also>
 	</application>
 	<application name="Ringing" language="en_US">
+		<since>
+			<version>13.8.0</version>
+		</since>
 		<synopsis>
 			Indicate ringing tone.
 		</synopsis>
@@ -425,10 +465,13 @@
 			<ref type="application">Busy</ref>
 			<ref type="application">Congestion</ref>
 			<ref type="application">Progress</ref>
-			<ref type="application">Playtones</ref>
+			<ref type="application">PlayTones</ref>
 		</see-also>
 	</application>
 	<application name="SayAlpha" language="en_US">
+		<since>
+			<version>13.8.0</version>
+		</since>
 		<synopsis>
 			Say Alpha.
 		</synopsis>
@@ -440,7 +483,7 @@
 			of the given <replaceable>string</replaceable>. If the channel variable
 			<variable>SAY_DTMF_INTERRUPT</variable> is set to 'true' (case insensitive),
 			then this application will react to DTMF in the	same way as
-			<literal>Background</literal>.</para>
+			<literal>BackGround</literal>.</para>
 		</description>
 		<see-also>
 			<ref type="application">SayDigits</ref>
@@ -453,6 +496,9 @@
 		</see-also>
 	</application>
 	<application name="SayAlphaCase" language="en_US">
+		<since>
+			<version>13.8.0</version>
+		</since>
 		<synopsis>
 			Say Alpha.
 		</synopsis>
@@ -484,7 +530,7 @@
 			given <replaceable>string</replaceable>.  Optionally, a <replaceable>casetype</replaceable> may be
 			specified.  This will be used for case-insensitive or case-sensitive pronunciations. If the channel
 			variable <variable>SAY_DTMF_INTERRUPT</variable> is set to 'true' (case insensitive), then this
-			application will react to DTMF in the same way as <literal>Background</literal>.</para>
+			application will react to DTMF in the same way as <literal>BackGround</literal>.</para>
 		</description>
 		<see-also>
 			<ref type="application">SayDigits</ref>
@@ -497,6 +543,9 @@
 		</see-also>
 	</application>
 	<application name="SayDigits" language="en_US">
+		<since>
+			<version>13.8.0</version>
+		</since>
 		<synopsis>
 			Say Digits.
 		</synopsis>
@@ -508,7 +557,7 @@
 			the given number. This will use the language that is currently set for the channel.
 			If the channel variable <variable>SAY_DTMF_INTERRUPT</variable> is set to 'true'
 			(case insensitive), then this application will react to DTMF in the same way as
-			<literal>Background</literal>.</para>
+			<literal>BackGround</literal>.</para>
 		</description>
 		<see-also>
 			<ref type="application">SayAlpha</ref>
@@ -521,6 +570,10 @@
 		</see-also>
 	</application>
 	<application name="SayMoney" language="en_US">
+		<since>
+			<version>16.21.0</version>
+			<version>18.7.0</version>
+		</since>
 		<synopsis>
 			Say Money.
 		</synopsis>
@@ -532,7 +585,7 @@
 			in the current language. Currently only English and US Dollars is supported.
 			If the channel variable <variable>SAY_DTMF_INTERRUPT</variable> is set to 'true'
 			(case insensitive), then this application will react to DTMF in the same way as
-			<literal>Background</literal>.</para>
+			<literal>BackGround</literal>.</para>
 		</description>
 		<see-also>
 			<ref type="application">SayAlpha</ref>
@@ -544,6 +597,9 @@
 		</see-also>
 	</application>
 	<application name="SayNumber" language="en_US">
+		<since>
+			<version>13.8.0</version>
+		</since>
 		<synopsis>
 			Say Number.
 		</synopsis>
@@ -557,7 +613,7 @@
 			specified. This will use the language that is currently set for the channel. See the CHANNEL()
 			function for more information on setting the language for the channel. If the channel variable
 			<variable>SAY_DTMF_INTERRUPT</variable> is set to 'true' (case insensitive), then this
-			application will react to DTMF in the same way as <literal>Background</literal>.</para>
+			application will react to DTMF in the same way as <literal>BackGround</literal>.</para>
 		</description>
 		<see-also>
 			<ref type="application">SayAlpha</ref>
@@ -569,6 +625,10 @@
 		</see-also>
 	</application>
 	<application name="SayOrdinal" language="en_US">
+		<since>
+			<version>16.21.0</version>
+			<version>18.7.0</version>
+		</since>
 		<synopsis>
 			Say Ordinal Number.
 		</synopsis>
@@ -583,7 +643,7 @@
 			specified. This will use the language that is currently set for the channel. See the CHANNEL()
 			function for more information on setting the language for the channel. If the channel variable
 			<variable>SAY_DTMF_INTERRUPT</variable> is set to 'true' (case insensitive), then this
-			application will react to DTMF in the same way as <literal>Background</literal>.</para>
+			application will react to DTMF in the same way as <literal>BackGround</literal>.</para>
 		</description>
 		<see-also>
 			<ref type="application">SayAlpha</ref>
@@ -596,6 +656,9 @@
 		</see-also>
 	</application>
 	<application name="SayPhonetic" language="en_US">
+		<since>
+			<version>13.8.0</version>
+		</since>
 		<synopsis>
 			Say Phonetic.
 		</synopsis>
@@ -606,7 +669,7 @@
 			<para>This application will play the sounds from the phonetic alphabet that correspond to the
 			letters in the given <replaceable>string</replaceable>. If the channel variable
 			<variable>SAY_DTMF_INTERRUPT</variable> is set to 'true' (case insensitive), then this
-			application will react to DTMF in the same way as <literal>Background</literal>.</para>
+			application will react to DTMF in the same way as <literal>BackGround</literal>.</para>
 		</description>
 		<see-also>
 			<ref type="application">SayAlpha</ref>
@@ -617,23 +680,10 @@
 			<ref type="function">SAYFILES</ref>
 		</see-also>
 	</application>
-	<application name="SetAMAFlags" language="en_US">
-		<synopsis>
-			Set the AMA Flags.
-		</synopsis>
-		<syntax>
-			<parameter name="flag" />
-		</syntax>
-		<description>
-			<para>This application will set the channel's AMA Flags for billing purposes.</para>
-			<warning><para>This application is deprecated. Please use the CHANNEL function instead.</para></warning>
-		</description>
-		<see-also>
-			<ref type="function">CDR</ref>
-			<ref type="function">CHANNEL</ref>
-		</see-also>
-	</application>
 	<application name="Wait" language="en_US">
+		<since>
+			<version>13.8.0</version>
+		</since>
 		<synopsis>
 			Waits for some time.
 		</synopsis>
@@ -648,6 +698,9 @@
 		</description>
 	</application>
 	<application name="WaitDigit" language="en_US">
+		<since>
+			<version>15.0.0</version>
+		</since>
 		<synopsis>
 			Waits for a digit to be entered.
 		</synopsis>
@@ -684,6 +737,9 @@
 		</see-also>
 	</application>
 	<application name="WaitExten" language="en_US">
+		<since>
+			<version>13.8.0</version>
+		</since>
 		<synopsis>
 			Waits for an extension to be entered.
 		</synopsis>
@@ -711,10 +767,9 @@
 		<description>
 			<para>This application waits for the user to enter a new extension for a specified number
 			of <replaceable>seconds</replaceable>.</para>
-			<xi:include xpointer="xpointer(/docs/application[@name='Macro']/description/warning[2])" />
 		</description>
 		<see-also>
-			<ref type="application">Background</ref>
+			<ref type="application">BackGround</ref>
 			<ref type="function">TIMEOUT</ref>
 		</see-also>
 	</application>
@@ -818,7 +873,7 @@ static int pbx_builtin_answer(struct ast_channel *chan, const char *data)
 	char *parse;
 	AST_DECLARE_APP_ARGS(args,
 		AST_APP_ARG(delay);
-		AST_APP_ARG(answer_cdr);
+		AST_APP_ARG(options);
 	);
 
 	if (ast_strlen_zero(data)) {
@@ -836,8 +891,8 @@ static int pbx_builtin_answer(struct ast_channel *chan, const char *data)
 		delay = 0;
 	}
 
-	if (!ast_strlen_zero(args.answer_cdr) && !strcasecmp(args.answer_cdr, "nocdr")) {
-		ast_log(AST_LOG_WARNING, "The nocdr option for the Answer application has been removed and is no longer supported.\n");
+	if (!ast_strlen_zero(args.options) && !strcmp(args.options, "i")) {
+		return ast_raw_answer(chan);
 	}
 
 	return __ast_answer(chan, delay);
@@ -863,34 +918,6 @@ static int pbx_builtin_incomplete(struct ast_channel *chan, const char *data)
 	ast_indicate(chan, AST_CONTROL_INCOMPLETE);
 
 	return AST_PBX_INCOMPLETE;
-}
-
-/*!
- * \ingroup applications
- */
-static int pbx_builtin_setamaflags(struct ast_channel *chan, const char *data)
-{
-	ast_log(AST_LOG_WARNING, "The SetAMAFlags application is deprecated. Please use the CHANNEL function instead.\n");
-
-	if (ast_strlen_zero(data)) {
-		ast_log(AST_LOG_WARNING, "No parameter passed to SetAMAFlags\n");
-		return 0;
-	}
-	/* Copy the AMA Flags as specified */
-	ast_channel_lock(chan);
-	if (isdigit(data[0])) {
-		int amaflags;
-		if (sscanf(data, "%30d", &amaflags) != 1) {
-			ast_log(AST_LOG_WARNING, "Unable to set AMA flags on channel %s\n", ast_channel_name(chan));
-			ast_channel_unlock(chan);
-			return 0;
-		}
-		ast_channel_amaflags_set(chan, amaflags);
-	} else {
-		ast_channel_amaflags_set(chan, ast_channel_string2amaflag(data));
-	}
-	ast_channel_unlock(chan);
-	return 0;
 }
 
 /*!
@@ -1000,7 +1027,6 @@ static int pbx_builtin_execiftime(struct ast_channel *chan, const char *data)
 {
 	char *s, *appname;
 	struct ast_timing timing;
-	struct ast_app *app;
 	static const char * const usage = "ExecIfTime requires an argument:\n  <time range>,<days of week>,<days of month>,<months>[,<timezone>]?<appname>[(<appargs>)]";
 
 	if (ast_strlen_zero(data)) {
@@ -1038,13 +1064,7 @@ static int pbx_builtin_execiftime(struct ast_channel *chan, const char *data)
 			ast_log(LOG_WARNING, "Failed to find closing parenthesis\n");
 	}
 
-
-	if ((app = pbx_findapp(appname))) {
-		return pbx_exec(chan, app, S_OR(s, ""));
-	} else {
-		ast_log(LOG_WARNING, "Cannot locate application %s\n", appname);
-		return -1;
-	}
+	return ast_pbx_exec_application(chan, appname, S_OR(s, ""));
 }
 
 /*!
@@ -1207,13 +1227,8 @@ static int pbx_builtin_background(struct ast_channel *chan, const char *data)
 		args.lang = (char *)ast_channel_language(chan);	/* XXX this is const */
 
 	if (ast_strlen_zero(args.context)) {
-		const char *context;
 		ast_channel_lock(chan);
-		if ((context = pbx_builtin_getvar_helper(chan, "MACRO_CONTEXT"))) {
-			args.context = ast_strdupa(context);
-		} else {
-			args.context = ast_strdupa(ast_channel_context(chan));
-		}
+		args.context = ast_strdupa(ast_channel_context(chan));
 		ast_channel_unlock(chan);
 	}
 
@@ -1241,7 +1256,7 @@ static int pbx_builtin_background(struct ast_channel *chan, const char *data)
 
 		ast_stopstream(chan);		/* Stop anything playing */
 		/* Stream the list of files */
-		while (!res && (front = strsep(&back, "&")) ) {
+		while (!res && (front = ast_strsep(&back, '&', AST_STRSEP_STRIP | AST_STRSEP_TRIM))) {
 			if ( (res = ast_streamfile(chan, front, args.lang)) ) {
 				ast_log(LOG_WARNING, "ast_streamfile failed on %s for %s\n", ast_channel_name(chan), (char*)data);
 				res = 0;
@@ -1269,9 +1284,7 @@ static int pbx_builtin_background(struct ast_channel *chan, const char *data)
 	/*
 	 * If the single digit DTMF is an extension in the specified context, then
 	 * go there and signal no DTMF.  Otherwise, we should exit with that DTMF.
-	 * If we're in Macro, we'll exit and seek that DTMF as the beginning of an
-	 * extension in the Macro's calling context.  If we're not in Macro, then
-	 * we'll simply seek that extension in the calling context.  Previously,
+	 * We'll simply seek that extension in the calling context.  Previously,
 	 * someone complained about the behavior as it related to the interior of a
 	 * Gosub routine, and the fix (#14011) inadvertently broke FreePBX
 	 * (#14940).  This change should fix both of these situations, but with the
@@ -1521,41 +1534,6 @@ static int pbx_builtin_sayphonetic(struct ast_channel *chan, const char *data)
 	return res;
 }
 
-static int pbx_builtin_importvar(struct ast_channel *chan, const char *data)
-{
-	char *name;
-	char *value;
-	char *channel;
-	char tmp[VAR_BUF_SIZE];
-	static int deprecation_warning = 0;
-
-	if (ast_strlen_zero(data)) {
-		ast_log(LOG_WARNING, "Ignoring, since there is no variable to set\n");
-		return 0;
-	}
-	tmp[0] = 0;
-	if (!deprecation_warning) {
-		ast_log(LOG_WARNING, "ImportVar is deprecated.  Please use Set(varname=${IMPORT(channel,variable)}) instead.\n");
-		deprecation_warning = 1;
-	}
-
-	value = ast_strdupa(data);
-	name = strsep(&value,"=");
-	channel = strsep(&value,",");
-	if (channel && value && name) { /*! \todo XXX should do !ast_strlen_zero(..) of the args ? */
-		struct ast_channel *chan2 = ast_channel_get_by_name(channel);
-		if (chan2) {
-			char *s = ast_alloca(strlen(value) + 4);
-			sprintf(s, "${%s}", value);
-			pbx_substitute_variables_helper(chan2, s, tmp, sizeof(tmp) - 1);
-			chan2 = ast_channel_unref(chan2);
-		}
-		pbx_builtin_setvar_helper(chan, name, tmp);
-	}
-
-	return(0);
-}
-
 /*! \brief Declaration of builtin applications */
 struct pbx_builtin {
 	char name[AST_MAX_APP];
@@ -1573,7 +1551,6 @@ struct pbx_builtin {
 	{ "Goto",           pbx_builtin_goto },
 	{ "GotoIf",         pbx_builtin_gotoif },
 	{ "GotoIfTime",     pbx_builtin_gotoiftime },
-	{ "ImportVar",      pbx_builtin_importvar },
 	{ "Hangup",         pbx_builtin_hangup },
 	{ "Incomplete",     pbx_builtin_incomplete },
 	{ "NoOp",           pbx_builtin_noop },
@@ -1588,7 +1565,6 @@ struct pbx_builtin {
 	{ "SayNumber",      pbx_builtin_saynumber },
 	{ "SayOrdinal",     pbx_builtin_sayordinal },
 	{ "SayPhonetic",    pbx_builtin_sayphonetic },
-	{ "SetAMAFlags",    pbx_builtin_setamaflags },
 	{ "Wait",           pbx_builtin_wait },
 	{ "WaitDigit",      pbx_builtin_waitdigit },
 	{ "WaitExten",      pbx_builtin_waitexten }

@@ -45,8 +45,8 @@ asterisk
 provides Private Branch eXchange (PBX), Interactive Voice Response (IVR),
 Automated Call Distribution (ACD), Voice over IP (VoIP) gatewaying,
 Conferencing, and a plethora of other telephony applications to a broad
-range of telephony devices including packet voice (SIP, IAX2, MGCP, Skinny,
-H.323, Unistim) devices (both endpoints and proxies), as well as traditional TDM
+range of telephony devices including packet voice (SIP, IAX2, H.323, Unistim)
+devices (both endpoints and proxies), as well as traditional TDM
 hardware including T1, E1, ISDN PRI, GR-303, RBS, Loopstart, Groundstart,
 ISDN BRI and many more.
 .PP
@@ -158,6 +158,7 @@ too many simultaneous calls.
 .TP
 \-n
 Disable ANSI colors even on terminals capable of displaying them.
+This option can be used only at startup (e.g. not with remote console).
 .TP
 \-p
 If supported by the operating system (and executing as root),
@@ -241,13 +242,13 @@ Enables executing of includes via \fB#exec\fR directive inside
 .PP
 \fBasterisk \-rx "core show channels"\fR - Display channels on running server
 .SH BUGS
-Bug reports and feature requests may be filed at https://issues.asterisk.org
+Bug reports and feature requests may be filed at https://github.com/asterisk/asterisk/issues/
 .SH "SEE ALSO"
 https://www.asterisk.org - The Asterisk Home Page
 .PP
 http://www.asteriskdocs.org - The Asterisk Documentation Project
 .PP
-https://wiki.asterisk.org - The Asterisk Wiki
+https://docs.asterisk.org - The Asterisk documentation
 .PP
 https://www.digium.com/ - Asterisk is sponsored by Digium
 .SH AUTHOR

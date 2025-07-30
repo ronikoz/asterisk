@@ -373,6 +373,7 @@ struct ast_sip_contact *ast_sip_location_create_contact(struct ast_sip_aor *aor,
 	contact->expiration_time = expiration_time;
 	contact->qualify_frequency = aor->qualify_frequency;
 	contact->qualify_timeout = aor->qualify_timeout;
+	contact->qualify_2xx_only = aor->qualify_2xx_only;
 	contact->authenticate_qualify = aor->authenticate_qualify;
 	if (path_info && aor->support_path) {
 		ast_string_field_set(contact, path, path_info);
@@ -1135,6 +1136,11 @@ static int cli_contact_print_body(void *obj, void *arg, int flags)
 		ast_sip_get_contact_short_status_label(status ? status->status : UNKNOWN),
 		(status && (status->status == AVAILABLE)) ? ((long long) status->rtt) / 1000.0 : NAN);
 
+	if (context->show_details || (context->show_details_only_level_0 && context->indent_level == 0)) {
+		ast_str_append(&context->output_buffer, 0, "\n");
+		ast_sip_cli_print_sorcery_objectset(contact, context, 0);
+	}
+
 	ao2_cleanup(status);
 	return 0;
 }
@@ -1394,6 +1400,7 @@ int ast_sip_initialize_sorcery_location(void)
 	ast_sorcery_object_field_register(sorcery, "contact", "qualify_frequency", 0, OPT_UINT_T,
 		PARSE_IN_RANGE, FLDSET(struct ast_sip_contact, qualify_frequency), 0, 86400);
 	ast_sorcery_object_field_register(sorcery, "contact", "qualify_timeout", "3.0", OPT_DOUBLE_T, 0, FLDSET(struct ast_sip_contact, qualify_timeout));
+	ast_sorcery_object_field_register(sorcery, "contact", "qualify_2xx_only", "no", OPT_BOOL_T, 1, FLDSET(struct ast_sip_contact, qualify_2xx_only));
 	ast_sorcery_object_field_register(sorcery, "contact", "authenticate_qualify", "no", OPT_YESNO_T, 1, FLDSET(struct ast_sip_contact, authenticate_qualify));
 	ast_sorcery_object_field_register(sorcery, "contact", "outbound_proxy", "", OPT_STRINGFIELD_T, 0, STRFLDSET(struct ast_sip_contact, outbound_proxy));
 	ast_sorcery_object_field_register(sorcery, "contact", "user_agent", "", OPT_STRINGFIELD_T, 0, STRFLDSET(struct ast_sip_contact, user_agent));
@@ -1410,6 +1417,7 @@ int ast_sip_initialize_sorcery_location(void)
 	ast_sorcery_object_field_register(sorcery, "aor", "default_expiration", "3600", OPT_UINT_T, 0, FLDSET(struct ast_sip_aor, default_expiration));
 	ast_sorcery_object_field_register(sorcery, "aor", "qualify_frequency", 0, OPT_UINT_T, PARSE_IN_RANGE, FLDSET(struct ast_sip_aor, qualify_frequency), 0, 86400);
 	ast_sorcery_object_field_register(sorcery, "aor", "qualify_timeout", "3.0", OPT_DOUBLE_T, 0, FLDSET(struct ast_sip_aor, qualify_timeout));
+	ast_sorcery_object_field_register(sorcery, "aor", "qualify_2xx_only", "no", OPT_BOOL_T, 1, FLDSET(struct ast_sip_aor, qualify_2xx_only));
 	ast_sorcery_object_field_register(sorcery, "aor", "authenticate_qualify", "no", OPT_BOOL_T, 1, FLDSET(struct ast_sip_aor, authenticate_qualify));
 	ast_sorcery_object_field_register(sorcery, "aor", "max_contacts", "0", OPT_UINT_T, 0, FLDSET(struct ast_sip_aor, max_contacts));
 	ast_sorcery_object_field_register(sorcery, "aor", "remove_existing", "no", OPT_BOOL_T, 1, FLDSET(struct ast_sip_aor, remove_existing));

@@ -155,6 +155,10 @@ static icalcomponent *fetch_icalendar(struct icalendar_pvt *pvt)
 
 	if (!ast_strlen_zero(ast_str_buffer(response))) {
 		comp = icalparser_parse_string(ast_str_buffer(response));
+		if (!comp) {
+			ast_debug(3, "iCalendar response data: %s\n", ast_str_buffer(response));
+			ast_log(LOG_WARNING, "Failed to parse iCalendar data: %s\n", icalerror_perror());
+		}
 	}
 	ast_free(response);
 
@@ -465,6 +469,7 @@ static void *ical_load_calendar(void *void_data)
 	pvt->session = ne_session_create(pvt->uri.scheme, pvt->uri.host, pvt->uri.port);
 	ne_redirect_register(pvt->session);
 	ne_set_server_auth(pvt->session, auth_credentials, pvt);
+	ne_set_useragent(pvt->session, "Asterisk");
 	if (!strcasecmp(pvt->uri.scheme, "https")) {
 		ne_ssl_trust_default_ca(pvt->session);
 	}

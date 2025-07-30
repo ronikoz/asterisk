@@ -183,6 +183,9 @@
 
 /*** DOCUMENTATION
 <application name="MinivmRecord" language="en_US">
+    <since>
+    	<version>1.6.1.0</version>
+    </since>
 	<synopsis>
 		Receive Mini-Voicemail and forward via e-mail.
 	</synopsis>
@@ -233,6 +236,9 @@
 	</description>
 </application>
 <application name="MinivmGreet" language="en_US">
+    <since>
+    	<version>1.6.1.0</version>
+    </since>
 	<synopsis>
 		Play Mini-Voicemail prompts.
 	</synopsis>
@@ -262,7 +268,7 @@
 	<description>
 		<para>This application is part of the Mini-Voicemail system, configured in minivm.conf.</para>
 		<para>MinivmGreet() plays default prompts or user specific prompts for an account.</para>
-		<para>Busy and unavailable messages can be choosen, but will be overridden if a temporary
+		<para>Busy and unavailable messages can be chosen, but will be overridden if a temporary
 		message exists for the account.</para>
 		<variablelist>
 			<variable name="MVM_GREET_STATUS">
@@ -275,6 +281,9 @@
 	</description>
 </application>
 <application name="MinivmNotify" language="en_US">
+    <since>
+    	<version>1.6.1.0</version>
+    </since>
 	<synopsis>
 		Notify voicemail owner about new messages.
 	</synopsis>
@@ -314,6 +323,9 @@
 	</description>
 </application>
 <application name="MinivmDelete" language="en_US">
+    <since>
+    	<version>1.6.1.0</version>
+    </since>
 	<synopsis>
 		Delete Mini-Voicemail voicemail messages.
 	</synopsis>
@@ -336,6 +348,9 @@
 </application>
 
 <application name="MinivmAccMess" language="en_US">
+    <since>
+    	<version>1.6.1.0</version>
+    </since>
 	<synopsis>
 		Record account specific messages.
 	</synopsis>
@@ -381,6 +396,9 @@
 	</description>
 </application>
 <application name="MinivmMWI" language="en_US">
+    <since>
+    	<version>1.6.1.0</version>
+    </since>
 	<synopsis>
 		Send Message Waiting Notification to subscriber(s) of mailbox.
 	</synopsis>
@@ -410,6 +428,9 @@
 	</description>
 </application>
 <function name="MINIVMCOUNTER" language="en_US">
+    <since>
+    	<version>1.6.0</version>
+    </since>
 	<synopsis>
 		Reads or sets counters for MiniVoicemail message.
 	</synopsis>
@@ -444,6 +465,9 @@
 	</see-also>
 </function>
 <function name="MINIVMACCOUNT" language="en_US">
+    <since>
+    	<version>1.6.0</version>
+    </since>
 	<synopsis>
 		Gets MiniVoicemail account information.
 	</synopsis>
@@ -503,6 +527,9 @@
 </function>
 	<managerEvent language="en_US" name="MiniVoiceMail">
 		<managerEventInstance class="EVENT_FLAG_CALL">
+			<since>
+				<version>12.0.0</version>
+			</since>
 			<synopsis>Raised when a notification is sent out by a MiniVoiceMail application</synopsis>
 			<syntax>
 				<channel_snapshot/>
@@ -1071,7 +1098,7 @@ static const char *ast_str_encode_mime(struct ast_str **end, ssize_t maxlen, con
 }
 
 /*!\internal
- * \brief Wraps a character sequence in double quotes, escaping occurences of quotes within the string.
+ * \brief Wraps a character sequence in double quotes, escaping occurrences of quotes within the string.
  * \param from The string to work with.
  * \param buf The destination buffer to write the modified quoted string.
  * \param maxlen Always zero.  \see ast_str
@@ -1878,11 +1905,10 @@ static int leave_voicemail(struct ast_channel *chan, char *username, struct leav
 			S_COR(ast_channel_caller(chan)->id.number.valid, ast_channel_caller(chan)->id.number.str, NULL),
 			"Unknown");
 		snprintf(logbuf, sizeof(logbuf),
-			/* "Mailbox:domain:macrocontext:exten:priority:callerchan:callerid:origdate:origtime:duration:durationstatus:accountcode" */
-			"%s:%s:%s:%s:%d:%s:%s:%s:%s:%d:%s:%s\n",
+			/* "Mailbox:domain:exten:priority:callerchan:callerid:origdate:origtime:duration:durationstatus:accountcode" */
+			"%s:%s:%s:%d:%s:%s:%s:%s:%d:%s:%s\n",
 			username,
 			ast_channel_context(chan),
-			ast_channel_macrocontext(chan),
 			ast_channel_exten(chan),
 			ast_channel_priority(chan),
 			ast_channel_name(chan),
@@ -1962,7 +1988,7 @@ static void queue_mwi_event(const char *channel_id, const char *mbx, const char 
 }
 
 /*!\internal
- * \brief Send MWI using interal Asterisk event subsystem */
+ * \brief Send MWI using internal Asterisk event subsystem */
 static int minivm_mwi_exec(struct ast_channel *chan, const char *data)
 {
 	int argc;
@@ -2140,8 +2166,6 @@ static int minivm_greet_exec(struct ast_channel *chan, const char *data)
 	struct ast_flags flags = { 0 };
 	char *opts[OPT_ARG_ARRAY_SIZE];
 	int res = 0;
-	int ausemacro = 0;
-	int ousemacro = 0;
 	int ouseexten = 0;
 	char tmp[PATH_MAX];
 	char dest[PATH_MAX];
@@ -2212,7 +2236,7 @@ static int minivm_greet_exec(struct ast_channel *chan, const char *data)
 	}
 	ast_debug(2, "Preparing to play message ...\n");
 
-	/* Check current or macro-calling context for special extensions */
+	/* Check current context for special extensions */
 	if (ast_test_flag(vmu, MVM_OPERATOR)) {
 		if (!ast_strlen_zero(vmu->exit)) {
 			if (ast_exists_extension(chan, vmu->exit, "o", 1,
@@ -2225,12 +2249,6 @@ static int minivm_greet_exec(struct ast_channel *chan, const char *data)
 			strncat(ecodes, "0", sizeof(ecodes) - strlen(ecodes) - 1);
 			ouseexten = 1;
 		}
-		else if (!ast_strlen_zero(ast_channel_macrocontext(chan))
-			&& ast_exists_extension(chan, ast_channel_macrocontext(chan), "o", 1,
-				S_COR(ast_channel_caller(chan)->id.number.valid, ast_channel_caller(chan)->id.number.str, NULL))) {
-			strncat(ecodes, "0", sizeof(ecodes) - strlen(ecodes) - 1);
-			ousemacro = 1;
-		}
 	}
 
 	if (!ast_strlen_zero(vmu->exit)) {
@@ -2241,11 +2259,6 @@ static int minivm_greet_exec(struct ast_channel *chan, const char *data)
 	} else if (ast_exists_extension(chan, ast_channel_context(chan), "a", 1,
 		S_COR(ast_channel_caller(chan)->id.number.valid, ast_channel_caller(chan)->id.number.str, NULL))) {
 		strncat(ecodes, "*", sizeof(ecodes) -  strlen(ecodes) - 1);
-	} else if (!ast_strlen_zero(ast_channel_macrocontext(chan))
-		&& ast_exists_extension(chan, ast_channel_macrocontext(chan), "a", 1,
-			S_COR(ast_channel_caller(chan)->id.number.valid, ast_channel_caller(chan)->id.number.str, NULL))) {
-		strncat(ecodes, "*", sizeof(ecodes) -  strlen(ecodes) - 1);
-		ausemacro = 1;
 	}
 
 	res = 0;	/* Reset */
@@ -2286,19 +2299,15 @@ static int minivm_greet_exec(struct ast_channel *chan, const char *data)
 		ast_channel_exten_set(chan, "a");
 		if (!ast_strlen_zero(vmu->exit)) {
 			ast_channel_context_set(chan, vmu->exit);
-		} else if (ausemacro && !ast_strlen_zero(ast_channel_macrocontext(chan))) {
-			ast_channel_context_set(chan, ast_channel_macrocontext(chan));
 		}
 		ast_channel_priority_set(chan, 0);
 		pbx_builtin_setvar_helper(chan, "MVM_GREET_STATUS", "USEREXIT");
 		res = 0;
 	} else if (res == '0') { /* Check for a '0' here */
-		if(ouseexten || ousemacro) {
+		if(ouseexten) {
 			ast_channel_exten_set(chan, "o");
 			if (!ast_strlen_zero(vmu->exit)) {
 				ast_channel_context_set(chan, vmu->exit);
-			} else if (ousemacro && !ast_strlen_zero(ast_channel_macrocontext(chan))) {
-				ast_channel_context_set(chan, ast_channel_macrocontext(chan));
 			}
 			ast_play_and_wait(chan, "transfer");
 			ast_channel_priority_set(chan, 0);
@@ -3416,7 +3425,7 @@ static int reload(void)
 	return(load_config(1));
 }
 
-/*! \brief Reload cofiguration */
+/*! \brief Reload configuration */
 static char *handle_minivm_reload(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
 {
 

@@ -37,6 +37,9 @@
 
 /*** DOCUMENTATION
 	<application name="Echo" language="en_US">
+		<since>
+			<version>0.1.2</version>
+		</since>
 		<synopsis>
 			Echo media, DTMF back to the calling party
 		</synopsis>
@@ -46,7 +49,7 @@
 			channel back to itself. This will not echo CONTROL, MODEM, or NULL
 			frames. Note: If '#' detected application exits.</para>
 			<para>This application does not automatically answer and should be
-			preceeded by an application such as Answer() or Progress().</para>
+			preceded by an application such as Answer() or Progress().</para>
 		</description>
 	</application>
  ***/

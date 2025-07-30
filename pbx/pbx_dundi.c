@@ -76,6 +76,9 @@
 
 /*** DOCUMENTATION
 	<function name="DUNDILOOKUP" language="en_US">
+		<since>
+			<version>1.8.0</version>
+		</since>
 		<synopsis>
 			Do a DUNDi lookup of a phone number.
 		</synopsis>
@@ -101,6 +104,9 @@
 
 
 	<function name="DUNDIQUERY" language="en_US">
+		<since>
+			<version>1.8.0</version>
+		</since>
 		<synopsis>
 			Initiate a DUNDi query.
 		</synopsis>
@@ -125,6 +131,9 @@
 	</function>
 
 	<function name="DUNDIRESULT" language="en_US">
+		<since>
+			<version>1.8.0</version>
+		</since>
 		<synopsis>
 			Retrieve results from a DUNDIQUERY.
 		</synopsis>
@@ -208,6 +217,8 @@ static char phone[80];
 static char secretpath[80];
 static char cursecret[80];
 static char ipaddr[80];
+static int outgoing_sip_tech;
+static char pjsip_outgoing_endpoint[80];
 static time_t rotatetime;
 static dundi_eid empty_eid = { { 0, 0, 0, 0, 0, 0 } };
 static int dundi_shutdown = 0;
@@ -388,12 +399,14 @@ static char *tech2str(int tech)
 		return "SIP";
 	case DUNDI_PROTO_H323:
 		return "H323";
+	case DUNDI_PROTO_PJSIP:
+		return "PJSIP";
 	default:
 		return "Unknown";
 	}
 }
 
-static int str2tech(char *str)
+static int str2tech(const char *str)
 {
 	if (!strcasecmp(str, "IAX") || !strcasecmp(str, "IAX2"))
 		return DUNDI_PROTO_IAX;
@@ -401,6 +414,8 @@ static int str2tech(char *str)
 		return DUNDI_PROTO_SIP;
 	else if (!strcasecmp(str, "H323"))
 		return DUNDI_PROTO_H323;
+	else if (!strcasecmp(str, "PJSIP"))
+		return DUNDI_PROTO_PJSIP;
 	else
 		return -1;
 }
@@ -4786,29 +4801,9 @@ static int dundi_helper(struct ast_channel *chan, const char *context, const cha
 	int res;
 	int x;
 	int found = 0;
-	if (!strncasecmp(context, "macro-", 6)) {
-		if (!chan) {
-			ast_log(LOG_NOTICE, "Can't use macro mode without a channel!\n");
-			return -1;
-		}
-		/* If done as a macro, use macro extension */
-		if (!strcasecmp(exten, "s")) {
-			exten = pbx_builtin_getvar_helper(chan, "ARG1");
-			if (ast_strlen_zero(exten))
-				exten = ast_channel_macroexten(chan);
-			if (ast_strlen_zero(exten))
-				exten = ast_channel_exten(chan);
-			if (ast_strlen_zero(exten)) {
-				ast_log(LOG_WARNING, "Called in Macro mode with no ARG1 or MACRO_EXTEN?\n");
-				return -1;
-			}
-		}
-		if (ast_strlen_zero(data))
-			data = "e164";
-	} else {
-		if (ast_strlen_zero(data))
-			data = context;
-	}
+	if (ast_strlen_zero(data))
+		data = context;
+
 	res = dundi_lookup(results, MAX_RESULTS, chan, data, exten, 0);
 	for (x=0;x<res;x++) {
 		if (ast_test_flag(results + x, flag))
@@ -4836,31 +4831,10 @@ static int dundi_exec(struct ast_channel *chan, const char *context, const char 
 	int x=0;
 	char req[1024];
 	const char *dundiargs;
-	struct ast_app *dial;
 
-	if (!strncasecmp(context, "macro-", 6)) {
-		if (!chan) {
-			ast_log(LOG_NOTICE, "Can't use macro mode without a channel!\n");
-			return -1;
-		}
-		/* If done as a macro, use macro extension */
-		if (!strcasecmp(exten, "s")) {
-			exten = pbx_builtin_getvar_helper(chan, "ARG1");
-			if (ast_strlen_zero(exten))
-				exten = ast_channel_macroexten(chan);
-			if (ast_strlen_zero(exten))
-				exten = ast_channel_exten(chan);
-			if (ast_strlen_zero(exten)) {
-				ast_log(LOG_WARNING, "Called in Macro mode with no ARG1 or MACRO_EXTEN?\n");
-				return -1;
-			}
-		}
-		if (ast_strlen_zero(data))
-			data = "e164";
-	} else {
-		if (ast_strlen_zero(data))
-			data = context;
-	}
+	if (ast_strlen_zero(data))
+		data = context;
+
 	res = dundi_lookup(results, MAX_RESULTS, chan, data, exten, 0);
 	if (res > 0) {
 		sort_results(results, res);
@@ -4874,13 +4848,42 @@ static int dundi_exec(struct ast_channel *chan, const char *context, const char 
 	if (x < res) {
 		/* Got a hit! */
 		dundiargs = pbx_builtin_getvar_helper(chan, "DUNDIDIALARGS");
-		snprintf(req, sizeof(req), "%s/%s,,%s", results[x].tech, results[x].dest,
-			S_OR(dundiargs, ""));
-		dial = pbx_findapp("Dial");
-		if (dial)
-			res = pbx_exec(chan, dial, req);
-	} else
+		/* Backwards compatibility with lookups using chan_sip even if we don't have it anymore:
+		 * At a protocol level, "SIP" will always be specified, but depending on our configuration,
+		 * we will use the user-specified channel driver (from dundi.conf) to complete the call.
+		 */
+		if (!strcasecmp(results[x].tech, "SIP") || !strcasecmp(results[x].tech, "PJSIP")) {
+			/* Only "SIP" is a valid technology for a DUNDi peer to communicate.
+			 * But if they tell use to use "PJSIP" instead, just interpret it as if they said "SIP" instead. */
+			if (strcasecmp(results[x].tech, "SIP")) {
+				ast_log(LOG_WARNING, "%s cannot be specified by DUNDi peers (peer should use SIP for DUNDi lookups instead)\n", results[x].tech);
+			}
+			/* Use whatever we're configured to use for SIP protocol calls. */
+			results[x].techint = outgoing_sip_tech;
+			ast_copy_string(results[x].tech, tech2str(outgoing_sip_tech), sizeof(results[x].tech));
+		}
+		/* PJSIP requires an endpoint to be specified explicitly. */
+		if (outgoing_sip_tech == DUNDI_PROTO_PJSIP) {
+			char *number, *ip = ast_strdupa(results[x].dest);
+			if (ast_strlen_zero(pjsip_outgoing_endpoint)) {
+				ast_log(LOG_WARNING, "PJSIP calls require an endpoint to be specified explicitly (use the pjsip_outgoing_endpoint option in dundi.conf)\n");
+				return -1;
+			}
+			/* Take IP/number and turn it into sip:number@IP */
+			if (ast_strlen_zero(ip)) {
+				ast_log(LOG_WARNING, "PJSIP destination is empty?\n");
+				return -1;
+			}
+			number = strsep(&ip, "/");
+			snprintf(req, sizeof(req), "%s/%s/sip:%s@%s,,%s", results[x].tech, pjsip_outgoing_endpoint, S_OR(number, ""), ip, S_OR(dundiargs, ""));
+			ast_debug(1, "Finalized PJSIP Dial: %s\n", req);
+		} else { /* SIP, or something else. */
+			snprintf(req, sizeof(req), "%s/%s,,%s", results[x].tech, results[x].dest, S_OR(dundiargs, ""));
+		}
+		res = ast_pbx_exec_application(chan, "Dial", req);
+	} else {
 		res = -1;
+	}
 	return res;
 }
 
@@ -4956,6 +4959,7 @@ static int set_config(char *config_file, struct ast_sockaddr *sin, int reload, s
 	dundi_ttl = DUNDI_DEFAULT_TTL;
 	dundi_cache_time = DUNDI_DEFAULT_CACHE_TIME;
 	any_peer = NULL;
+	outgoing_sip_tech = DUNDI_PROTO_PJSIP; /* Default for new versions */
 
 	AST_LIST_LOCK(&peers);
 
@@ -5026,6 +5030,15 @@ static int set_config(char *config_file, struct ast_sockaddr *sin, int reload, s
 			ast_copy_string(phone, v->value, sizeof(phone));
 		} else if (!strcasecmp(v->name, "storehistory")) {
 			global_storehistory = ast_true(v->value);
+		} else if (!strcasecmp(v->name, "outgoing_sip_tech")) {
+			int outgoing_tech = str2tech(v->value);
+			if (outgoing_tech != DUNDI_PROTO_SIP && outgoing_tech != DUNDI_PROTO_PJSIP) {
+				ast_log(LOG_WARNING, "outgoing_sip_tech must be SIP or PJSIP\n");
+			} else {
+				outgoing_sip_tech = outgoing_tech;
+			}
+		} else if (!strcasecmp(v->name, "pjsip_outgoing_endpoint")) {
+			ast_copy_string(pjsip_outgoing_endpoint, v->value, sizeof(pjsip_outgoing_endpoint));
 		} else if (!strcasecmp(v->name, "cachetime")) {
 			if ((sscanf(v->value, "%30d", &x) == 1)) {
 				dundi_cache_time = x;

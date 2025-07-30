@@ -52,8 +52,8 @@
    provides Private Branch eXchange (PBX), Interactive Voice Response (IVR),
    Automated Call Distribution (ACD), Voice over IP (VoIP) gatewaying,
    Conferencing, and a plethora of other telephony applications to a broad
-   range of telephony devices including packet voice (SIP, IAX2, MGCP, Skinny,
-   H.323, Unistim) devices (both endpoints and proxies), as well as traditional TDM
+   range of telephony devices including packet voice (SIP, IAX2 H.323, Unistim)
+   devices (both endpoints and proxies), as well as traditional TDM
    hardware including T1, E1, ISDN PRI, GR-303, RBS, Loopstart, Groundstart,
    ISDN BRI and many more.
   </para>
@@ -415,7 +415,7 @@
  <refsect1>
   <title>BUGS</title>
   <para>
-  Bug reports and feature requests may be filed at https://issues.asterisk.org
+    Bug reports and feature requests may be filed at https://github.com/asterisk/asterisk/issues/
   </para>
  </refsect1>
  <refsect1>
@@ -427,7 +427,7 @@
    http://www.asteriskdocs.org - The Asterisk Documentation Project
   </para>
   <para>
-   https://wiki.asterisk.org - The Asterisk Wiki
+   https://docs.asterisk.org/ - The Asterisk documentation
   </para>
   <para>
    https://www.digium.com/ - Asterisk is sponsored by Digium

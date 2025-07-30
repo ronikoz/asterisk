@@ -53,6 +53,9 @@
 
 /*** DOCUMENTATION
 	<application name="MP3Player" language="en_US">
+		<since>
+			<version>0.1.0</version>
+		</since>
 		<synopsis>
 			Play an MP3 file or M3U playlist file or stream.
 		</synopsis>
@@ -71,7 +74,7 @@
 			<example title="Play an MP3 playlist">
 			exten => 1234,1,MP3Player(/var/lib/asterisk/playlist.m3u)
 			</example>
-			<para>This application does not automatically answer and should be preceeded by an
+			<para>This application does not automatically answer and should be preceded by an
 			application such as Answer() or Progress().</para>
 		</description>
 	</application>
@@ -101,7 +104,7 @@ static int mp3play(const char *filename, unsigned int sampling_rate, int fd)
 	/* Execute mpg123, but buffer if it's a net connection */
 	if (!strncasecmp(filename, "http://", 7) && strstr(filename, ".m3u")) {
 	    char buffer_size_str[8];
-	    snprintf(buffer_size_str, 8, "%u", (int) 0.5*2*sampling_rate/1000); // 0.5 seconds for a live stream
+	    snprintf(buffer_size_str, 8, "%u", (int) 0.5*2*sampling_rate/1000); /* 0.5 seconds for a live stream */
 		/* Most commonly installed in /usr/local/bin */
 	    execl(LOCAL_MPG_123, "mpg123", "-e", "s16", "-q", "-s", "-b", buffer_size_str, "-f", "8192", "--mono", "-r", sampling_rate_str, "-@", filename, (char *)NULL);
 		/* But many places has it in /usr/bin */
@@ -111,7 +114,7 @@ static int mp3play(const char *filename, unsigned int sampling_rate, int fd)
 	}
 	else if (!strncasecmp(filename, "http://", 7)) {
 	    char buffer_size_str[8];
-	    snprintf(buffer_size_str, 8, "%u", 6*2*sampling_rate/1000); // 6 seconds for a remote MP3 file
+	    snprintf(buffer_size_str, 8, "%u", 6*2*sampling_rate/1000); /* 6 seconds for a remote MP3 file */
 		/* Most commonly installed in /usr/local/bin */
 	    execl(LOCAL_MPG_123, "mpg123", "-e", "s16", "-q", "-s", "-b", buffer_size_str, "-f", "8192", "--mono", "-r", sampling_rate_str, filename, (char *)NULL);
 		/* But many places has it in /usr/bin */

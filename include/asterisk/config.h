@@ -914,7 +914,7 @@ void ast_category_rename(struct ast_category *cat, const char *name);
 struct ast_variable *_ast_variable_new(const char *name, const char *value, const char *filename, const char *file, const char *function, int lineno);
 #define ast_variable_new(name, value, filename) _ast_variable_new(name, value, filename, __FILE__, __PRETTY_FUNCTION__, __LINE__)
 
-struct ast_config_include *ast_include_new(struct ast_config *conf, const char *from_file, const char *included_file, int is_exec, const char *exec_file, int from_lineno, char *real_included_file_name, int real_included_file_name_size);
+struct ast_config_include *ast_include_new(struct ast_config *conf, const char *from_file, const char *included_file, int include_type, const char *exec_file, int from_lineno, char *real_included_file_name, int real_included_file_name_size);
 struct ast_config_include *ast_include_find(struct ast_config *conf, const char *included_file);
 void ast_include_rename(struct ast_config *conf, const char *from_file, const char *to_file);
 void ast_variable_append(struct ast_category *category, struct ast_variable *variable);
@@ -970,10 +970,10 @@ int ast_variable_list_replace(struct ast_variable **head, struct ast_variable *r
 /*!
  * \brief Replace a variable in the given list with a new variable
  *
- * \param head A pointer to the current variable list head.  Since the variable to be
- *             replaced, this pointer may be updated with the new head.
- * \param old  A pointer to the existing variable to be replaced.
- * \param new  A pointer to the new variable that will replace the old one.
+ * \param head   A pointer to the current variable list head.  Since the variable to be
+ *               replaced, this pointer may be updated with the new head.
+ * \param oldvar A pointer to the existing variable to be replaced.
+ * \param newvar A pointer to the new variable that will replace the old one.
  *
  * \retval 0 if a variable was replaced in the list
  * \retval -1 if no replacement occured
@@ -981,8 +981,9 @@ int ast_variable_list_replace(struct ast_variable **head, struct ast_variable *r
  * \note The search for the old variable is done simply on the pointer.
  * \note If a variable is replaced, its memory is freed.
  */
-int ast_variable_list_replace_variable(struct ast_variable **head, struct ast_variable *old,
-	struct ast_variable *new);
+int ast_variable_list_replace_variable(struct ast_variable **head,
+	struct ast_variable *oldvar,
+	struct ast_variable *newvar);
 
 /*!
  * \brief Join an ast_variable list with specified separators and quoted values
@@ -1021,6 +1022,26 @@ struct ast_str *ast_variable_list_join(const struct ast_variable *head, const ch
  */
 struct ast_variable *ast_variable_list_from_string(const char *input, const char *item_separator,
 	const char *name_value_separator);
+
+/*!
+ * \brief Parse a string into an ast_variable list.  The reverse of ast_variable_list_join
+ *
+ * \param input                The name-value pair string to parse.
+ * \param item_separator       The string used to separate the list items.
+ *                             Only the first character in the string will be used.
+ *                             If NULL, "," will be used.
+ * \param name_value_separator The string used to separate each item's name and value.
+ *                             Only the first character in the string will be used.
+ *                             If NULL, "=" will be used.
+ * \param quote_str            The string used to quote values.
+ *                             Only the first character in the string will be used.
+ *                             If NULL, '"' will be used.
+ *
+ * \retval A pointer to a list of ast_variables.
+ * \retval NULL if there was an error or no variables could be parsed.
+ */
+struct ast_variable *ast_variable_list_from_quoted_string(const char *input, const char *item_separator,
+	const char *name_value_separator, const char *quote_str);
 
 /*!
  * \brief Update variable value within a config

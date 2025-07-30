@@ -35,6 +35,9 @@
 
 /*** DOCUMENTATION
 	<function name="GROUP_COUNT" language="en_US">
+		<since>
+			<version>1.2.0</version>
+		</since>
 		<synopsis>
 			Counts the number of channels in the specified group.
 		</synopsis>
@@ -52,6 +55,9 @@
 		</description>
 	</function>
 	<function name="GROUP_MATCH_COUNT" language="en_US">
+		<since>
+			<version>1.2.0</version>
+		</since>
 		<synopsis>
 			Counts the number of channels in the groups matching the specified pattern.
 		</synopsis>
@@ -70,6 +76,9 @@
 		</description>
 	</function>
 	<function name="GROUP" language="en_US">
+		<since>
+			<version>1.2.0</version>
+		</since>
 		<synopsis>
 			Gets or sets the channel group.
 		</synopsis>
@@ -84,6 +93,9 @@
 		</description>
 	</function>
 	<function name="GROUP_LIST" language="en_US">
+		<since>
+			<version>1.2.0</version>
+		</since>
 		<synopsis>
 			Gets a list of the groups set on a channel.
 		</synopsis>

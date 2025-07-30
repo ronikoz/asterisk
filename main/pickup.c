@@ -36,6 +36,9 @@
 /*** DOCUMENTATION
 	<managerEvent language="en_US" name="Pickup">
 		<managerEventInstance class="EVENT_FLAG_CALL">
+			<since>
+				<version>12.0.0</version>
+			</since>
 			<synopsis>Raised when a call pickup occurs.</synopsis>
 			<syntax>
 				<channel_snapshot/>
@@ -66,7 +69,7 @@ STASIS_MESSAGE_TYPE_DEFN(
 
 /*!
  * The presence of this datastore on the channel indicates that
- * someone is attemting to pickup or has picked up the channel.
+ * someone is attempting to pickup or has picked up the channel.
  * The purpose is to prevent a race between two channels
  * attempting to pickup the same channel.
  */
@@ -328,8 +331,7 @@ int ast_do_pickup(struct ast_channel *chan, struct ast_channel *target)
 	ast_party_id_reset(&connected_caller.priv);
 
 	connected_caller.source = AST_CONNECTED_LINE_UPDATE_SOURCE_ANSWER;
-	if (ast_channel_connected_line_sub(NULL, chan, &connected_caller, 0) &&
-		ast_channel_connected_line_macro(NULL, chan, &connected_caller, 0, 0)) {
+	if (ast_channel_connected_line_sub(NULL, chan, &connected_caller, 0)) {
 		ast_channel_update_connected_line(chan, &connected_caller, NULL);
 	}
 	ast_party_connected_line_free(&connected_caller);

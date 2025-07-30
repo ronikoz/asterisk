@@ -74,77 +74,14 @@
 /*** MODULEINFO
 	<depend type="module">res_http_websocket</depend>
 	<depend type="module">res_stasis</depend>
+	<depend type="module">res_websocket_client</depend>
 	<support_level>core</support_level>
  ***/
-
-/*** DOCUMENTATION
-	<configInfo name="res_ari" language="en_US">
-		<synopsis>HTTP binding for the Stasis API</synopsis>
-		<configFile name="ari.conf">
-			<configObject name="general">
-				<synopsis>General configuration settings</synopsis>
-				<configOption name="enabled">
-					<synopsis>Enable/disable the ARI module</synopsis>
-					<description>
-						<para>This option enables or disables the ARI module.</para>
-						<note>
-							<para>ARI uses Asterisk's HTTP server, which must also be enabled in <filename>http.conf</filename>.</para>
-						</note>
-					</description>
-					<see-also>
-						<ref type="filename">http.conf</ref>
-						<ref type="link">https://wiki.asterisk.org/wiki/display/AST/Asterisk+Builtin+mini-HTTP+Server</ref>
-					</see-also>
-				</configOption>
-				<configOption name="websocket_write_timeout" default="100">
-					<synopsis>The timeout (in milliseconds) to set on WebSocket connections.</synopsis>
-					<description>
-						<para>If a websocket connection accepts input slowly, the timeout
-						for writes to it can be increased to keep it from being disconnected.
-						Value is in milliseconds.</para>
-					</description>
-				</configOption>
-				<configOption name="pretty">
-					<synopsis>Responses from ARI are formatted to be human readable</synopsis>
-				</configOption>
-				<configOption name="auth_realm">
-					<synopsis>Realm to use for authentication. Defaults to Asterisk REST Interface.</synopsis>
-				</configOption>
-				<configOption name="allowed_origins">
-					<synopsis>Comma separated list of allowed origins, for Cross-Origin Resource Sharing. May be set to * to allow all origins.</synopsis>
-				</configOption>
-				<configOption name="channelvars">
-					<synopsis>Comma separated list of channel variables to display in channel json.</synopsis>
-				</configOption>
-			</configObject>
-
-			<configObject name="user">
-				<synopsis>Per-user configuration settings</synopsis>
-				<configOption name="type">
-					<synopsis>Define this configuration section as a user.</synopsis>
-					<description>
-						<enumlist>
-							<enum name="user"><para>Configure this section as a <replaceable>user</replaceable></para></enum>
-						</enumlist>
-					</description>
-				</configOption>
-				<configOption name="read_only">
-					<synopsis>When set to yes, user is only authorized for read-only requests</synopsis>
-				</configOption>
-				<configOption name="password">
-					<synopsis>Crypted or plaintext password (see password_format)</synopsis>
-				</configOption>
-				<configOption name="password_format">
-					<synopsis>password_format may be set to plain (the default) or crypt. When set to crypt, crypt(3) is used to validate the password. A crypted password can be generated using mkpasswd -m sha-512. When set to plain, the password is in plaintext</synopsis>
-				</configOption>
-			</configObject>
-		</configFile>
-	</configInfo>
-***/
 
 #include "asterisk.h"
 
 #include "ari/internal.h"
+#include "ari/ari_websockets.h"
 #include "asterisk/ari.h"
 #include "asterisk/astobj2.h"
 #include "asterisk/module.h"
@@ -158,8 +95,8 @@
 /*! \brief Helper function to check if module is enabled. */
 static int is_enabled(void)
 {
-	RAII_VAR(struct ast_ari_conf *, cfg, ast_ari_config_get(), ao2_cleanup);
-	return cfg && cfg->general && cfg->general->enabled;
+	RAII_VAR(struct ari_conf_general *, general, ari_conf_get_general(), ao2_cleanup);
+	return general && general->enabled;
 }
 
 /*! Lock for \ref root_handler */
@@ -170,6 +107,22 @@ static struct stasis_rest_handlers *root_handler;
 
 /*! Pre-defined message for allocation failures. */
 static struct ast_json *oom_json;
+
+/*! \brief Callback for the root URI. */
+static int ast_ari_callback(struct ast_tcptls_session_instance *ser,
+	const struct ast_http_uri *urih, const char *uri,
+	enum ast_http_method method, struct ast_variable *get_params,
+	struct ast_variable *headers);
+
+static struct ast_http_uri http_uri = {
+	.callback = ast_ari_callback,
+	.description = "Asterisk RESTful API",
+	.uri = "ari",
+	.has_subtree = 1,
+	.data = NULL,
+	.key = __FILE__,
+	.no_decode_uri = 1,
+};
 
 struct ast_json *ast_ari_oom_json(void)
 {
@@ -329,9 +282,9 @@ static void add_allow_header(struct stasis_rest_handlers *handler,
 
 static int origin_allowed(const char *origin)
 {
-	RAII_VAR(struct ast_ari_conf *, cfg, ast_ari_config_get(), ao2_cleanup);
+	RAII_VAR(struct ari_conf_general *, general, ari_conf_get_general(), ao2_cleanup);
 
-	char *allowed = ast_strdupa(cfg->general->allowed_origins);
+	char *allowed = ast_strdupa(general ? general->allowed_origins : "");
 	char *current;
 
 	while ((current = strsep(&allowed, ","))) {
@@ -488,33 +441,186 @@ static void handle_options(struct stasis_rest_handlers *handler,
 	}
 }
 
-void ast_ari_invoke(struct ast_tcptls_session_instance *ser,
+/*!
+ * \brief Authenticate a <code>?api_key=userid:password</code>
+ *
+ * \param api_key API key query parameter
+ * \return User object for the authenticated user.
+ * \retval NULL if authentication failed.
+ */
+static struct ari_conf_user *authenticate_api_key(const char *api_key)
+{
+	RAII_VAR(char *, copy, NULL, ast_free);
+	char *username;
+	char *password;
+
+	password = copy = ast_strdup(api_key);
+	if (!copy) {
+		return NULL;
+	}
+
+	username = strsep(&password, ":");
+	if (!password) {
+		ast_log(LOG_WARNING, "Invalid api_key\n");
+		return NULL;
+	}
+
+	return ari_conf_validate_user(username, password);
+}
+
+/*!
+ * \brief Authenticate an HTTP request.
+ *
+ * \param get_params GET parameters of the request.
+ * \param headers HTTP headers.
+ * \return User object for the authenticated user.
+ * \retval NULL if authentication failed.
+ */
+static struct ari_conf_user *authenticate_user(struct ast_variable *get_params,
+	struct ast_variable *headers)
+{
+	RAII_VAR(struct ast_http_auth *, http_auth, NULL, ao2_cleanup);
+	struct ast_variable *v;
+
+	/* HTTP Basic authentication */
+	http_auth = ast_http_get_auth(headers);
+	if (http_auth) {
+		return ari_conf_validate_user(http_auth->userid,
+			http_auth->password);
+	}
+
+	/* ?api_key authentication */
+	for (v = get_params; v; v = v->next) {
+		if (strcasecmp("api_key", v->name) == 0) {
+			return authenticate_api_key(v->value);
+		}
+	}
+
+	return NULL;
+}
+
+static void remove_trailing_slash(const char *uri,
+				  struct ast_ari_response *response)
+{
+	char *slashless = ast_strdupa(uri);
+	slashless[strlen(slashless) - 1] = '\0';
+
+	/* While it's tempting to redirect the client to the slashless URL,
+	 * that is problematic. A 302 Found is the most appropriate response,
+	 * but most clients issue a GET on the location you give them,
+	 * regardless of the method of the original request.
+	 *
+	 * While there are some ways around this, it gets into a lot of client
+	 * specific behavior and corner cases in the HTTP standard. There's also
+	 * very little practical benefit of redirecting; only GET and HEAD can
+	 * be redirected automagically; all other requests "MUST NOT
+	 * automatically redirect the request unless it can be confirmed by the
+	 * user, since this might change the conditions under which the request
+	 * was issued."
+	 *
+	 * Given all of that, a 404 with a nice message telling them what to do
+	 * is probably our best bet.
+	 */
+	ast_ari_response_error(response, 404, "Not Found",
+		"ARI URLs do not end with a slash. Try /ari/%s", slashless);
+}
+
+enum ast_ari_invoke_result ast_ari_invoke(struct ast_tcptls_session_instance *ser,
+	enum ast_ari_invoke_source source, const struct ast_http_uri *urih,
 	const char *uri, enum ast_http_method method,
 	struct ast_variable *get_params, struct ast_variable *headers,
 	struct ast_json *body, struct ast_ari_response *response)
 {
 	RAII_VAR(struct stasis_rest_handlers *, root, NULL, ao2_cleanup);
-	struct stasis_rest_handlers *handler;
+	struct stasis_rest_handlers *handler = NULL;
 	struct stasis_rest_handlers *wildcard_handler = NULL;
 	RAII_VAR(struct ast_variable *, path_vars, NULL, ast_variables_destroy);
+	RAII_VAR(struct ari_conf_user *, user, NULL, ao2_cleanup);
+	RAII_VAR(struct ari_conf_general *, general, ari_conf_get_general(), ao2_cleanup);
+
 	char *path = ast_strdupa(uri);
-	char *path_segment;
+	char *path_segment = NULL;
 	stasis_rest_callback callback;
+	SCOPE_ENTER(3, "Request: %s %s, path:%s\n", ast_get_http_method(method), uri, path);
+
+
+	if (!general) {
+		if (ser && source == ARI_INVOKE_SOURCE_REST) {
+			ast_http_request_close_on_completion(ser);
+		}
+		ast_ari_response_error(response, 500, "Server Error", "URI handler config missing");
+		SCOPE_EXIT_RTN_VALUE(ARI_INVOKE_RESULT_ERROR_CLOSE, "Response: %d : %s\n",
+			response->response_code, response->response_text);
+	}
+
+	user = authenticate_user(get_params, headers);
+
+	if (!user && source == ARI_INVOKE_SOURCE_REST) {
+		/* Per RFC 2617, section 1.2: The 401 (Unauthorized) response
+		 * message is used by an origin server to challenge the
+		 * authorization of a user agent. This response MUST include a
+		 * WWW-Authenticate header field containing at least one
+		 * challenge applicable to the requested resource.
+		 */
+		ast_ari_response_error(response, 401, "Unauthorized", "Authentication required");
+
+		/* Section 1.2:
+		 *   realm       = "realm" "=" realm-value
+		 *   realm-value = quoted-string
+		 * Section 2:
+		 *   challenge   = "Basic" realm
+		 */
+		ast_str_append(&response->headers, 0,
+			"WWW-Authenticate: Basic realm=\"%s\"\r\n",
+			general->auth_realm);
+		SCOPE_EXIT_RTN_VALUE(ARI_INVOKE_RESULT_ERROR_CONTINUE, "Response: %d : %s\n",
+			response->response_code, response->response_text);
+	} else if (!ast_fully_booted) {
+		ast_ari_response_error(response, 503, "Service Unavailable", "Asterisk not booted");
+		SCOPE_EXIT_RTN_VALUE(ARI_INVOKE_RESULT_ERROR_CLOSE, "Response: %d : %s\n",
+			response->response_code, response->response_text);
+	} else if (user && user->read_only && method != AST_HTTP_GET && method != AST_HTTP_OPTIONS) {
+		ast_ari_response_error(response, 403, "Forbidden", "Write access denied");
+		SCOPE_EXIT_RTN_VALUE(ARI_INVOKE_RESULT_ERROR_CONTINUE, "Response: %d : %s\n",
+			response->response_code, response->response_text);
+	} else if (ast_ends_with(uri, "/")) {
+		remove_trailing_slash(uri, response);
+		SCOPE_EXIT_RTN_VALUE(ARI_INVOKE_RESULT_ERROR_CONTINUE, "Response: %d : %s\n",
+			response->response_code, response->response_text);
+	} else if (ast_begins_with(uri, "api-docs/")) {
+		/* Serving up API docs */
+		if (method != AST_HTTP_GET) {
+			ast_ari_response_error(response, 405, "Method Not Allowed", "Unsupported method");
+		} else {
+			if (urih) {
+				/* Skip the api-docs prefix */
+				ast_ari_get_docs(strchr(uri, '/') + 1, urih->prefix, headers, response);
+			} else {
+				/*
+				 * If we were invoked without a urih, we're probably
+				 * being called from the websocket so just use the
+				 * default prefix.  It's filled in by ast_http_uri_link().
+				 */
+				ast_ari_get_docs(strchr(uri, '/') + 1, http_uri.prefix, headers, response);
+			}
+		}
+		SCOPE_EXIT_RTN_VALUE(ARI_INVOKE_RESULT_ERROR_CONTINUE, "Response: %d : %s\n",
+			response->response_code, response->response_text);
+	}
 
 	root = handler = get_root_handler();
 	ast_assert(root != NULL);
 
-	ast_debug(3, "Finding handler for %s\n", path);
-
 	while ((path_segment = strsep(&path, "/")) && (strlen(path_segment) > 0)) {
 		struct stasis_rest_handlers *found_handler = NULL;
 		int i;
+		SCOPE_ENTER(4, "Finding handler for path segment %s\n", path_segment);
 
 		ast_uri_decode(path_segment, ast_uri_http_legacy);
-		ast_debug(3, "  Finding handler for %s\n", path_segment);
 
 		for (i = 0; found_handler == NULL && i < handler->num_children; ++i) {
 			struct stasis_rest_handlers *child = handler->children[i];
+			SCOPE_ENTER(5, "Checking handler path segment %s\n", child->path_segment);
 
 			if (child->is_wildcard) {
 				/* Record the path variable */
@@ -522,18 +628,19 @@ void ast_ari_invoke(struct ast_tcptls_session_instance *ser,
 				path_var->next = path_vars;
 				path_vars = path_var;
 				wildcard_handler = child;
-				ast_debug(3, "        Checking %s %s:  Matched wildcard.\n", handler->path_segment, child->path_segment);
+				ast_trace(-1, "        Checking %s %s:  Matched wildcard.\n", handler->path_segment, child->path_segment);
 
 			} else if (strcmp(child->path_segment, path_segment) == 0) {
 				found_handler = child;
-				ast_debug(3, "        Checking %s %s:  Explicit match with %s\n", handler->path_segment, child->path_segment, path_segment);
+				ast_trace(-1, "        Checking %s %s:  Explicit match with %s\n", handler->path_segment, child->path_segment, path_segment);
 			} else {
-				ast_debug(3, "        Checking %s %s:  Didn't match %s\n", handler->path_segment, child->path_segment, path_segment);
+				ast_trace(-1, "        Checking %s %s:  Didn't match %s\n", handler->path_segment, child->path_segment, path_segment);
 			}
+			SCOPE_EXIT("Done checking %s\n", child->path_segment);
 		}
 
 		if (!found_handler && wildcard_handler) {
-			ast_debug(3, "  No explicit handler found for %s.  Using wildcard %s.\n",
+			ast_trace(-1, "  No explicit handler found for %s.  Using wildcard %s.\n",
 				path_segment, wildcard_handler->path_segment);
 			found_handler = wildcard_handler;
 			wildcard_handler = NULL;
@@ -541,20 +648,26 @@ void ast_ari_invoke(struct ast_tcptls_session_instance *ser,
 
 		if (found_handler == NULL) {
 			/* resource not found */
-			ast_debug(3, "  Handler not found for %s\n", path_segment);
 			ast_ari_response_error(
 				response, 404, "Not Found",
 				"Resource not found");
-			return;
+			SCOPE_EXIT_EXPR(break, "Handler not found for %s\n", path_segment);
 		} else {
 			handler = found_handler;
 		}
+		SCOPE_EXIT("Done checking %s\n", path_segment);
+	}
+
+	if (handler == NULL || response->response_code == 404) {
+		/* resource not found */
+		SCOPE_EXIT_RTN_VALUE(ARI_INVOKE_RESULT_ERROR_CONTINUE, "Response: %d : %s %s\n",
+			response->response_code, response->response_text, uri);
 	}
 
 	ast_assert(handler != NULL);
 	if (method == AST_HTTP_OPTIONS) {
 		handle_options(handler, headers, response);
-		return;
+		SCOPE_EXIT_RTN_VALUE(ARI_INVOKE_RESULT_ERROR_CONTINUE, "Was options\n");
 	}
 
 	if (method < 0 || method >= AST_HTTP_MAX_METHOD) {
@@ -562,17 +675,26 @@ void ast_ari_invoke(struct ast_tcptls_session_instance *ser,
 		ast_ari_response_error(
 			response, 405, "Method Not Allowed",
 			"Invalid method");
-		return;
+		SCOPE_EXIT_RTN_VALUE(ARI_INVOKE_RESULT_ERROR_CONTINUE, "Response: %d : %s\n",
+			response->response_code, response->response_text);
 	}
 
-	if (handler->ws_server && method == AST_HTTP_GET) {
+	if (handler->is_websocket && method == AST_HTTP_GET) {
+		if (source == ARI_INVOKE_SOURCE_WEBSOCKET) {
+			ast_ari_response_error(
+				response, 400, "Bad request",
+				"Can't upgrade to websocket from a websocket");
+			SCOPE_EXIT_RTN_VALUE(ARI_INVOKE_RESULT_ERROR_CONTINUE, "Response: %d : %s\n",
+				response->response_code, response->response_text);
+		}
 		/* WebSocket! */
-		ari_handle_websocket(handler->ws_server, ser, uri, method,
+		ast_trace(-1, "Handling websocket %s\n", uri);
+		ari_handle_websocket(ser, uri, method,
 			get_params, headers);
 		/* Since the WebSocket code handles the connection, we shouldn't
 		 * do anything else; setting no_response */
 		response->no_response = 1;
-		return;
+		SCOPE_EXIT_RTN_VALUE(ARI_INVOKE_RESULT_ERROR_CONTINUE, "Upgrade to websocket\n");
 	}
 
 	callback = handler->callbacks[method];
@@ -581,9 +703,11 @@ void ast_ari_invoke(struct ast_tcptls_session_instance *ser,
 		ast_ari_response_error(
 			response, 405, "Method Not Allowed",
 			"Invalid method");
-		return;
+		SCOPE_EXIT_RTN_VALUE(ARI_INVOKE_RESULT_ERROR_CONTINUE, "Response: %d : %s\n",
+			response->response_code, response->response_text);
 	}
 
+	ast_trace(-1, "Running callback: %s\n", uri);
 	callback(ser, get_params, path_vars, headers, body, response);
 	if (response->message == NULL && response->response_code == 0) {
 		/* Really should not happen */
@@ -592,7 +716,11 @@ void ast_ari_invoke(struct ast_tcptls_session_instance *ser,
 		ast_ari_response_error(
 			response, 501, "Not Implemented",
 			"Method not implemented");
+		SCOPE_EXIT_RTN_VALUE(ARI_INVOKE_RESULT_ERROR_CONTINUE, "Response: %d : %s\n",
+			response->response_code, response->response_text);
 	}
+	SCOPE_EXIT_RTN_VALUE(ARI_INVOKE_RESULT_SUCCESS, "Response: %d : %s\n",
+		response->response_code, response->response_text);
 }
 
 void ast_ari_get_docs(const char *uri, const char *prefix, struct ast_variable *headers,
@@ -719,32 +847,6 @@ void ast_ari_get_docs(const char *uri, const char *prefix, struct ast_variable *
 	ast_ari_response_ok(response, obj);
 }
 
-static void remove_trailing_slash(const char *uri,
-				  struct ast_ari_response *response)
-{
-	char *slashless = ast_strdupa(uri);
-	slashless[strlen(slashless) - 1] = '\0';
-
-	/* While it's tempting to redirect the client to the slashless URL,
-	 * that is problematic. A 302 Found is the most appropriate response,
-	 * but most clients issue a GET on the location you give them,
-	 * regardless of the method of the original request.
-	 *
-	 * While there are some ways around this, it gets into a lot of client
-	 * specific behavior and corner cases in the HTTP standard. There's also
-	 * very little practical benefit of redirecting; only GET and HEAD can
-	 * be redirected automagically; all other requests "MUST NOT
-	 * automatically redirect the request unless it can be confirmed by the
-	 * user, since this might change the conditions under which the request
-	 * was issued."
-	 *
-	 * Given all of that, a 404 with a nice message telling them what to do
-	 * is probably our best bet.
-	 */
-	ast_ari_response_error(response, 404, "Not Found",
-		"ARI URLs do not end with a slash. Try /ari/%s", slashless);
-}
-
 /*!
  * \brief Handle CORS headers for simple requests.
  *
@@ -805,67 +907,8 @@ static void process_cors_request(struct ast_variable *headers,
 
 enum ast_json_encoding_format ast_ari_json_format(void)
 {
-	RAII_VAR(struct ast_ari_conf *, cfg, NULL, ao2_cleanup);
-	cfg = ast_ari_config_get();
-	return cfg->general->format;
-}
-
-/*!
- * \brief Authenticate a <code>?api_key=userid:password</code>
- *
- * \param api_key API key query parameter
- * \return User object for the authenticated user.
- * \retval NULL if authentication failed.
- */
-static struct ast_ari_conf_user *authenticate_api_key(const char *api_key)
-{
-	RAII_VAR(char *, copy, NULL, ast_free);
-	char *username;
-	char *password;
-
-	password = copy = ast_strdup(api_key);
-	if (!copy) {
-		return NULL;
-	}
-
-	username = strsep(&password, ":");
-	if (!password) {
-		ast_log(LOG_WARNING, "Invalid api_key\n");
-		return NULL;
-	}
-
-	return ast_ari_config_validate_user(username, password);
-}
-
-/*!
- * \brief Authenticate an HTTP request.
- *
- * \param get_params GET parameters of the request.
- * \param headers HTTP headers.
- * \return User object for the authenticated user.
- * \retval NULL if authentication failed.
- */
-static struct ast_ari_conf_user *authenticate_user(struct ast_variable *get_params,
-	struct ast_variable *headers)
-{
-	RAII_VAR(struct ast_http_auth *, http_auth, NULL, ao2_cleanup);
-	struct ast_variable *v;
-
-	/* HTTP Basic authentication */
-	http_auth = ast_http_get_auth(headers);
-	if (http_auth) {
-		return ast_ari_config_validate_user(http_auth->userid,
-			http_auth->password);
-	}
-
-	/* ?api_key authentication */
-	for (v = get_params; v; v = v->next) {
-		if (strcasecmp("api_key", v->name) == 0) {
-			return authenticate_api_key(v->value);
-		}
-	}
-
-	return NULL;
+	RAII_VAR(struct ari_conf_general *, general, ari_conf_get_general(), ao2_cleanup);
+	return general ? general->format : AST_JSON_COMPACT;
 }
 
 /*!
@@ -889,35 +932,28 @@ static int ast_ari_callback(struct ast_tcptls_session_instance *ser,
 				struct ast_variable *get_params,
 				struct ast_variable *headers)
 {
-	RAII_VAR(struct ast_ari_conf *, conf, NULL, ao2_cleanup);
 	RAII_VAR(struct ast_str *, response_body, ast_str_create(256), ast_free);
-	RAII_VAR(struct ast_ari_conf_user *, user, NULL, ao2_cleanup);
 	struct ast_ari_response response = { .fd = -1, 0 };
 	RAII_VAR(struct ast_variable *, post_vars, NULL, ast_variables_destroy);
 	struct ast_variable *var;
 	const char *app_name = NULL;
 	RAII_VAR(struct ast_json *, body, ast_json_null(), ast_json_unref);
 	int debug_app = 0;
+	enum ast_ari_invoke_result result;
+	SCOPE_ENTER(2, "%s: Request: %s %s\n", ast_sockaddr_stringify(&ser->remote_address),
+		ast_get_http_method(method), uri);
 
 	if (!response_body) {
 		ast_http_request_close_on_completion(ser);
 		ast_http_error(ser, 500, "Server Error", "Out of memory");
-		return 0;
+		SCOPE_EXIT_RTN_VALUE(0, "Out of memory\n");
 	}
 
 	response.headers = ast_str_create(40);
 	if (!response.headers) {
 		ast_http_request_close_on_completion(ser);
 		ast_http_error(ser, 500, "Server Error", "Out of memory");
-		return 0;
-	}
-
-	conf = ast_ari_config_get();
-	if (!conf || !conf->general) {
-		ast_free(response.headers);
-		ast_http_request_close_on_completion(ser);
-		ast_http_error(ser, 500, "Server Error", "URI handler config missing");
-		return 0;
+		SCOPE_EXIT_RTN_VALUE(0, "Out of memory\n");
 	}
 
 	process_cors_request(headers, &response);
@@ -928,6 +964,7 @@ static int ast_ari_callback(struct ast_tcptls_session_instance *ser,
 	 */
 	post_vars = ast_http_get_post_vars(ser, headers);
 	if (!post_vars) {
+		ast_trace(-1, "No post_vars\n");
 		switch (errno) {
 		case EFBIG:
 			ast_ari_response_error(&response, 413,
@@ -950,6 +987,7 @@ static int ast_ari_callback(struct ast_tcptls_session_instance *ser,
 		 * If there were post_vars, then the request body would already have
 		 * been consumed and can not be read again.
 		 */
+		ast_trace(-1, "Checking body for vars\n");
 		body = ast_http_get_json(ser, headers);
 		if (!body) {
 			switch (errno) {
@@ -966,10 +1004,12 @@ static int ast_ari_callback(struct ast_tcptls_session_instance *ser,
 		}
 	}
 	if (get_params == NULL) {
+		ast_trace(-1, "No get_params, using post_vars if any\n");
 		get_params = post_vars;
 	} else if (get_params && post_vars) {
 		/* Has both post_vars and get_params */
 		struct ast_variable *last_var = post_vars;
+		ast_trace(-1, "Has get_params and post_vars.  Merging\n");
 		while (last_var->next) {
 			last_var = last_var->next;
 		}
@@ -987,6 +1027,7 @@ static int ast_ari_callback(struct ast_tcptls_session_instance *ser,
 
 		app_name = (app ? ast_json_string_get(app) : NULL);
 	}
+	ast_trace(-1, "app_name: %s\n", app_name);
 
 	/* stasis_app_get_debug_by_name returns an "||" of the app's debug flag
 	 * and the global debug flag.
@@ -1006,6 +1047,7 @@ static int ast_ari_callback(struct ast_tcptls_session_instance *ser,
 
 		ast_str_append(&buf, 0, "<--- ARI request received from: %s --->\n",
 			ast_sockaddr_stringify(&ser->remote_address));
+		ast_str_append(&buf, 0, "%s %s\n", ast_get_http_method(method), uri);
 		for (var = headers; var; var = var->next) {
 			ast_str_append(&buf, 0, "%s: %s\n", var->name, var->value);
 		}
@@ -1017,53 +1059,18 @@ static int ast_ari_callback(struct ast_tcptls_session_instance *ser,
 		ast_free(buf);
 	}
 
-	user = authenticate_user(get_params, headers);
-	if (response.response_code > 0) {
-		/* POST parameter processing error. Do nothing. */
-	} else if (!user) {
-		/* Per RFC 2617, section 1.2: The 401 (Unauthorized) response
-		 * message is used by an origin server to challenge the
-		 * authorization of a user agent. This response MUST include a
-		 * WWW-Authenticate header field containing at least one
-		 * challenge applicable to the requested resource.
-		 */
-		ast_ari_response_error(&response, 401, "Unauthorized", "Authentication required");
-
-		/* Section 1.2:
-		 *   realm       = "realm" "=" realm-value
-		 *   realm-value = quoted-string
-		 * Section 2:
-		 *   challenge   = "Basic" realm
-		 */
-		ast_str_append(&response.headers, 0,
-			"WWW-Authenticate: Basic realm=\"%s\"\r\n",
-			conf->general->auth_realm);
-	} else if (!ast_fully_booted) {
+	result = SCOPE_CALL_WITH_RESULT(-1, enum ast_ari_invoke_result,
+		ast_ari_invoke, ser, ARI_INVOKE_SOURCE_REST,
+		urih, uri, method, get_params, headers, body, &response);
+	if (result == ARI_INVOKE_RESULT_ERROR_CLOSE) {
 		ast_http_request_close_on_completion(ser);
-		ast_ari_response_error(&response, 503, "Service Unavailable", "Asterisk not booted");
-	} else if (user->read_only && method != AST_HTTP_GET && method != AST_HTTP_OPTIONS) {
-		ast_ari_response_error(&response, 403, "Forbidden", "Write access denied");
-	} else if (ast_ends_with(uri, "/")) {
-		remove_trailing_slash(uri, &response);
-	} else if (ast_begins_with(uri, "api-docs/")) {
-		/* Serving up API docs */
-		if (method != AST_HTTP_GET) {
-			ast_ari_response_error(&response, 405, "Method Not Allowed", "Unsupported method");
-		} else {
-			/* Skip the api-docs prefix */
-			ast_ari_get_docs(strchr(uri, '/') + 1, urih->prefix, headers, &response);
-		}
-	} else {
-		/* Other RESTful resources */
-		ast_ari_invoke(ser, uri, method, get_params, headers, body,
-			&response);
 	}
 
 	if (response.no_response) {
 		/* The handler indicates no further response is necessary.
 		 * Probably because it already handled it */
 		ast_free(response.headers);
-		return 0;
+		SCOPE_EXIT_RTN_VALUE(0, "No response needed\n");
 	}
 
 request_failed:
@@ -1081,7 +1088,7 @@ request_failed:
 		ast_str_append(&response.headers, 0,
 			       "Content-type: application/json\r\n");
 		if (ast_json_dump_str_format(response.message, &response_body,
-				conf->general->format) != 0) {
+			ast_ari_json_format()) != 0) {
 			/* Error encoding response */
 			response.response_code = 500;
 			response.response_text = "Internal Server Error";
@@ -1107,29 +1114,22 @@ request_failed:
 	if (response.fd >= 0) {
 		close(response.fd);
 	}
-	return 0;
+	SCOPE_EXIT_RTN_VALUE(0, "Done.  response: %d : %s\n", response.response_code,
+		response.response_text);
 }
-
-static struct ast_http_uri http_uri = {
-	.callback = ast_ari_callback,
-	.description = "Asterisk RESTful API",
-	.uri = "ari",
-	.has_subtree = 1,
-	.data = NULL,
-	.key = __FILE__,
-	.no_decode_uri = 1,
-};
 
 static int unload_module(void)
 {
-	ast_ari_cli_unregister();
+	ari_websocket_unload_module();
+
+	ari_cli_unregister();
 
 	if (is_enabled()) {
 		ast_debug(3, "Disabling ARI\n");
 		ast_http_uri_unlink(&http_uri);
 	}
 
-	ast_ari_config_destroy();
+	ari_conf_destroy();
 
 	ao2_cleanup(root_handler);
 	root_handler = NULL;
@@ -1164,7 +1164,33 @@ static int load_module(void)
 		return AST_MODULE_LOAD_DECLINE;
 	}
 
-	if (ast_ari_config_init() != 0) {
+	/*
+	 * ari_websocket_load_module() needs to know if ARI is enabled
+	 * globally so it needs the "general" config to be loaded but it
+	 * also needs to register a sorcery object observer for
+	 * "outbound_websocket" BEFORE the outbound_websocket configs are loaded.
+	 * outbound_websocket in turn needs the users to be loaded so we'll
+	 * initialize sorcery and load "general" and "user" configs first, then
+	 * load the websocket module, then load the "outbound_websocket" configs
+	 * which will fire the observers.
+	 */
+	if (ari_conf_load(ARI_CONF_INIT | ARI_CONF_LOAD_GENERAL | ARI_CONF_LOAD_USER) != 0) {
+		unload_module();
+		return AST_MODULE_LOAD_DECLINE;
+	}
+
+	if (ari_websocket_load_module(is_enabled()) != AST_MODULE_LOAD_SUCCESS) {
+		unload_module();
+		return AST_MODULE_LOAD_DECLINE;
+	}
+
+	/*
+	 * Now we can load the outbound_websocket configs which will
+	 * fire the observers.
+	 */
+	ari_conf_load(ARI_CONF_LOAD_OWC);
+
+	if (ari_cli_register() != 0) {
 		unload_module();
 		return AST_MODULE_LOAD_DECLINE;
 	}
@@ -1176,26 +1202,22 @@ static int load_module(void)
 		ast_debug(3, "ARI disabled\n");
 	}
 
-	if (ast_ari_cli_register() != 0) {
-		unload_module();
-		return AST_MODULE_LOAD_DECLINE;
-	}
-
 	return AST_MODULE_LOAD_SUCCESS;
 }
 
 static int reload_module(void)
 {
 	char was_enabled = is_enabled();
+	int is_now_enabled = 0;
 
-	if (ast_ari_config_reload() != 0) {
-		return AST_MODULE_LOAD_DECLINE;
-	}
+	ari_conf_load(ARI_CONF_RELOAD | ARI_CONF_LOAD_ALL);
 
-	if (was_enabled && !is_enabled()) {
+	is_now_enabled = is_enabled();
+
+	if (was_enabled && !is_now_enabled) {
 		ast_debug(3, "Disabling ARI\n");
 		ast_http_uri_unlink(&http_uri);
-	} else if (!was_enabled && is_enabled()) {
+	} else if (!was_enabled && is_now_enabled) {
 		ast_debug(3, "Enabling ARI\n");
 		ast_http_uri_link(&http_uri);
 	}
@@ -1208,7 +1230,6 @@ AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_GLOBAL_SYMBOLS | AST_MODFLAG_LOAD_
 	.load = load_module,
 	.unload = unload_module,
 	.reload = reload_module,
-	.optional_modules = "res_http_websocket",
-	.requires = "http,res_stasis",
+	.requires = "http,res_stasis,res_http_websocket,res_websocket_client",
 	.load_pri = AST_MODPRI_APP_DEPEND,
 );

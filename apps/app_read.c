@@ -40,6 +40,9 @@
 
 /*** DOCUMENTATION
 	<application name="Read" language="en_US">
+		<since>
+			<version>1.6.1.0</version>
+		</since>
 		<synopsis>
 			Read a variable.
 		</synopsis>
@@ -49,9 +52,15 @@
 				name.</para>
 			</parameter>
 			<parameter name="filenames" argsep="&amp;">
-				<argument name="filename" required="true">
-					<para>file(s) to play before reading digits or tone with option i</para>
-				</argument>
+				<para>Ampersand separated list of filenames to play before
+				reading digits or tone with option <literal>i</literal>. If
+				the filename is a relative filename (it does not begin with a
+				slash), it will be searched for in the Asterisk sounds
+				directory. If the filename is able to be parsed as a URL,
+				Asterisk will download the file and then begin playback on
+				it. To include a literal <literal>&amp;</literal> in the URL
+				you can enclose	the URL in single quotes.</para>
+				<argument name="filename" required="true" />
 				<argument name="filename2" multiple="true" />
 			</parameter>
 			<parameter name="maxdigits">
@@ -84,6 +93,13 @@
 						digit is present, input cannot be ended using digits
 						and you will need to rely on duration and max digits
 						for ending input.</para>
+					</option>
+					<option name="e">
+						<para>to read the terminator as the digit string if the
+						only digit read is the terminator. This is for cases
+						where the terminator is a valid digit, but only by itself.
+						ie; <literal>1234</literal> and <literal>#</literal> are
+						valid, but <literal>1234#</literal> is not.</para>
 					</option>
 				</optionlist>
 			</parameter>
@@ -125,6 +141,7 @@ enum read_option_flags {
 	OPT_INDICATION = (1 << 1),
 	OPT_NOANSWER = (1 << 2),
 	OPT_TERMINATOR = (1 << 3),
+	OPT_KEEP_TERMINATOR = (1 << 4),
 };
 
 enum {
@@ -138,6 +155,7 @@ AST_APP_OPTIONS(read_app_options, {
 	AST_APP_OPTION('i', OPT_INDICATION),
 	AST_APP_OPTION('n', OPT_NOANSWER),
 	AST_APP_OPTION_ARG('t', OPT_TERMINATOR, OPT_ARG_TERMINATOR),
+	AST_APP_OPTION('e', OPT_KEEP_TERMINATOR),
 });
 
 static char *app = "Read";
@@ -261,12 +279,20 @@ static int read_exec(struct ast_channel *chan, const char *data)
 				}
 			} else {
 				res = ast_app_getdata_terminator(chan, arglist.filename, tmp, maxdigits, to, terminator);
-				if (res == AST_GETDATA_COMPLETE || res == AST_GETDATA_EMPTY_END_TERMINATED)
+				if (res == AST_GETDATA_COMPLETE) {
 					status = "OK";
-				else if (res == AST_GETDATA_TIMEOUT)
+				} else if (res == AST_GETDATA_EMPTY_END_TERMINATED) {
+					if (ast_test_flag(&flags, OPT_KEEP_TERMINATOR)) {
+						/* if the option is set to do so, read the
+						   returned string as the terminator string */
+						ast_copy_string(tmp, terminator, sizeof(tmp));
+					}
+					status = "OK";
+				} else if (res == AST_GETDATA_TIMEOUT) {
 					status = "TIMEOUT";
-				else if (res == AST_GETDATA_INTERRUPTED)
+				} else if (res == AST_GETDATA_INTERRUPTED) {
 					status = "INTERRUPTED";
+				}
 			}
 			if (res > -1) {
 				pbx_builtin_setvar_helper(chan, arglist.variable, tmp);

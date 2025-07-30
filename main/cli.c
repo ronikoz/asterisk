@@ -807,30 +807,35 @@ static char *handle_logger_mute(struct ast_cli_entry *e, int cmd, struct ast_cli
 
 static char *handle_refresh(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
 {
+	static const char * const completions[] = { "recursively", NULL };
+	int res;
 	/* "module refresh <mod>" */
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "module refresh";
 		e->usage =
-			"Usage: module refresh <module name>\n"
-			"       Unloads and loads the specified module into Asterisk.\n";
+			"Usage: module refresh <module name> [recursively]\n"
+			"       Unloads and loads the specified module into Asterisk.\n"
+			"       'recursively' will attempt to unload any modules with\n"
+			"       dependencies on this module for you and load them again\n"
+			"       afterwards.\n";
 		return NULL;
 
 	case CLI_GENERATE:
-		if (a->pos != e->args) {
-			return NULL;
+		if (a->pos == e->args) {
+			return ast_module_helper(a->line, a->word, a->pos, a->n, a->pos, AST_MODULE_HELPER_UNLOAD);
+		} else if (a->pos == e->args + 1) {
+			return ast_cli_complete(a->word, completions, a->n);
 		}
-		return ast_module_helper(a->line, a->word, a->pos, a->n, a->pos, AST_MODULE_HELPER_UNLOAD);
+		return NULL;
 	}
-	if (a->argc != e->args + 1) {
+	if (a->argc < 3 || a->argc > 4) {
 		return CLI_SHOWUSAGE;
 	}
-	if (ast_unload_resource(a->argv[e->args], AST_FORCE_SOFT)) {
-		ast_cli(a->fd, "Unable to unload resource %s\n", a->argv[e->args]);
-		return CLI_FAILURE;
-	}
-	if (ast_load_resource(a->argv[e->args])) {
-		ast_cli(a->fd, "Unable to load module %s\n", a->argv[e->args]);
+
+	res = ast_refresh_resource(a->argv[e->args], AST_FORCE_SOFT, a->argc == 4 && !strcasecmp(a->argv[3], "recursively"));
+	if (res) {
+		ast_cli(a->fd, "Unable to %s resource %s\n", res > 0 ? "unload" : "load", a->argv[e->args]);
 		return CLI_FAILURE;
 	}
 	ast_cli(a->fd, "Unloaded and loaded %s\n", a->argv[e->args]);
@@ -1098,11 +1103,11 @@ static char *handle_showcalls(struct ast_cli_entry *e, int cmd, struct ast_cli_a
 
 static char *handle_chanlist(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
 {
-#define FORMAT_STRING  "%-20.20s %-20.20s %-7.7s %-30.30s\n"
-#define FORMAT_STRING2 "%-20.20s %-20.20s %-7.7s %-30.30s\n"
+#define FORMAT_STRING  "%-64.64s %-32.32s %-7.7s %-30.30s\n"
+#define FORMAT_STRING2 "%-64.64s %-32.32s %-7.7s %-30.30s\n"
 #define CONCISE_FORMAT_STRING  "%s!%s!%s!%d!%s!%s!%s!%s!%s!%s!%d!%s!%s!%s\n"
-#define VERBOSE_FORMAT_STRING  "%-20.20s %-20.20s %-16.16s %4d %-7.7s %-12.12s %-25.25s %-15.15s %8.8s %-11.11s %-11.11s %-20.20s\n"
-#define VERBOSE_FORMAT_STRING2 "%-20.20s %-20.20s %-16.16s %-4.4s %-7.7s %-12.12s %-25.25s %-15.15s %8.8s %-11.11s %-11.11s %-20.20s\n"
+#define VERBOSE_FORMAT_STRING  "%-80.80s %-24.24s %-24.24s %4d %-7.7s %-12.12s %-25.25s %-15.15s %8.8s %-11.11s %-11.11s %-20.20s\n"
+#define VERBOSE_FORMAT_STRING2 "%-80.80s %-24.24s %-24.24s %-4.4s %-7.7s %-12.12s %-25.25s %-15.15s %8.8s %-11.11s %-11.11s %-20.20s\n"
 
 	struct ao2_container *channels;
 	struct ao2_iterator it_chans;
@@ -1118,9 +1123,7 @@ static char *handle_chanlist(struct ast_cli_entry *e, int cmd, struct ast_cli_ar
 			"       'concise' is specified, the format is abridged and in a more easily\n"
 			"       machine parsable format. If 'verbose' is specified, the output includes\n"
 			"       more and longer fields. If 'count' is specified only the channel and call\n"
-			"       count is output.\n"
-			"	The 'concise' option is deprecated and will be removed from future versions\n"
-			"	of Asterisk.\n";
+			"       count is output.\n";
 		return NULL;
 
 	case CLI_GENERATE:
@@ -1656,6 +1659,7 @@ static char *handle_showchan(struct ast_cli_entry *e, int cmd, struct ast_cli_ar
 	ast_callid callid;
 	char callid_buf[32];
 	int stream_num;
+	RAII_VAR(char *, tenant_id, NULL, ast_free);
 
 	switch (cmd) {
 	case CLI_INIT:
@@ -1714,12 +1718,17 @@ static char *handle_showchan(struct ast_cli_entry *e, int cmd, struct ast_cli_ar
 		ast_callid_strnprint(callid_buf, sizeof(callid_buf), callid);
 	}
 
+	if (!ast_strlen_zero(ast_channel_tenantid(chan))) {
+		ast_asprintf(&tenant_id, "       TenantID: %s\n", ast_channel_tenantid(chan));
+	}
+
 	ast_str_append(&output, 0,
 		" -- General --\n"
 		"           Name: %s\n"
 		"           Type: %s\n"
 		"       UniqueID: %s\n"
 		"       LinkedID: %s\n"
+		"%s"
 		"      Caller ID: %s\n"
 		" Caller ID Name: %s\n"
 		"Connected Line ID: %s\n"
@@ -1745,11 +1754,12 @@ static char *handle_showchan(struct ast_cli_entry *e, int cmd, struct ast_cli_ar
 		"   Pickup Group: %llu\n"
 		"    Application: %s\n"
 		"           Data: %s\n"
-		" Call Identifer: %s\n",
+		" Call Identifier: %s\n",
 		ast_channel_name(chan),
 		ast_channel_tech(chan)->type,
 		ast_channel_uniqueid(chan),
 		ast_channel_linkedid(chan),
+		!ast_strlen_zero(tenant_id) ? tenant_id : "",
 		S_COR(ast_channel_caller(chan)->id.number.valid,
 		      ast_channel_caller(chan)->id.number.str, "(N/A)"),
 		S_COR(ast_channel_caller(chan)->id.name.valid,
@@ -2016,56 +2026,43 @@ static char *handle_help(struct ast_cli_entry *e, int cmd, struct ast_cli_args *
 static struct ast_cli_entry cli_cli[] = {
 	AST_CLI_DEFINE(handle_commandmatchesarray, "Returns command matches array"),
 
-	AST_CLI_DEFINE(handle_nodebugchan_deprecated, "Disable debugging on channel(s)"),
-
-	AST_CLI_DEFINE(handle_chanlist, "Display information on channels"),
-
-	AST_CLI_DEFINE(handle_showcalls, "Display information on calls"),
-
-	AST_CLI_DEFINE(handle_showchan, "Display information on a specific channel"),
-
-	AST_CLI_DEFINE(handle_core_set_debug_channel, "Enable/disable debugging on a channel"),
-
 	AST_CLI_DEFINE(handle_debug_category, "Enable/disable debugging categories"),
 
 	AST_CLI_DEFINE(handle_debug, "Set level of debug chattiness"),
 	AST_CLI_DEFINE(handle_trace, "Set level of trace chattiness"),
 	AST_CLI_DEFINE(handle_verbose, "Set level of verbose chattiness"),
 
-	AST_CLI_DEFINE(group_show_channels, "Display active channels with group(s)"),
-
 	AST_CLI_DEFINE(handle_help, "Display help list, or specific help on a command"),
-
 	AST_CLI_DEFINE(handle_logger_mute, "Toggle logging output to a console"),
 
 	AST_CLI_DEFINE(handle_modlist, "List modules and info"),
-
 	AST_CLI_DEFINE(handle_load, "Load a module by name"),
-
 	AST_CLI_DEFINE(handle_reload, "Reload configuration for a module"),
-
 	AST_CLI_DEFINE(handle_core_reload, "Global reload"),
-
 	AST_CLI_DEFINE(handle_unload, "Unload a module by name"),
-
 	AST_CLI_DEFINE(handle_refresh, "Completely unloads and loads a module by name"),
 
 	AST_CLI_DEFINE(handle_showuptime, "Show uptime information"),
 
-	AST_CLI_DEFINE(handle_softhangup, "Request a hangup on a given channel"),
-
 	AST_CLI_DEFINE(handle_cli_reload_permissions, "Reload CLI permissions config"),
-
 	AST_CLI_DEFINE(handle_cli_show_permissions, "Show CLI permissions"),
-
 	AST_CLI_DEFINE(handle_cli_check_permissions, "Try a permissions config for a user"),
-
 	AST_CLI_DEFINE(handle_cli_wait_fullybooted, "Wait for Asterisk to be fully booted"),
 
 #ifdef HAVE_MALLOC_TRIM
 	AST_CLI_DEFINE(handle_cli_malloc_trim, "Return excess memory to the OS"),
 #endif
 
+};
+
+static struct ast_cli_entry cli_channels_cli[] = {
+	AST_CLI_DEFINE(handle_nodebugchan_deprecated, "Disable debugging on channel(s)"),
+	AST_CLI_DEFINE(handle_chanlist, "Display information on channels"),
+	AST_CLI_DEFINE(handle_showcalls, "Display information on calls"),
+	AST_CLI_DEFINE(handle_showchan, "Display information on a specific channel"),
+	AST_CLI_DEFINE(handle_core_set_debug_channel, "Enable/disable debugging on a channel"),
+	AST_CLI_DEFINE(group_show_channels, "Display active channels with group(s)"),
+	AST_CLI_DEFINE(handle_softhangup, "Request a hangup on a given channel"),
 };
 
 /*!
@@ -2239,12 +2236,23 @@ static void cli_shutdown(void)
 	ast_cli_unregister_multiple(cli_cli, ARRAY_LEN(cli_cli));
 }
 
+static void cli_channels_shutdown(void)
+{
+	ast_cli_unregister_multiple(cli_channels_cli, ARRAY_LEN(cli_channels_cli));
+}
+
 /*! \brief initialize the _full_cmd string in * each of the builtins. */
 void ast_builtins_init(void)
 {
 	AST_VECTOR_INIT(&shutdown_commands, 0);
 	ast_cli_register_multiple(cli_cli, ARRAY_LEN(cli_cli));
 	ast_register_cleanup(cli_shutdown);
+}
+
+void ast_cli_channels_init(void)
+{
+	ast_cli_register_multiple(cli_channels_cli, ARRAY_LEN(cli_channels_cli));
+	ast_register_cleanup(cli_channels_shutdown);
 }
 
 /*!

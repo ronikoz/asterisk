@@ -62,6 +62,9 @@
 
 /*** DOCUMENTATION
 	<application name="ChanSpy" language="en_US">
+		<since>
+			<version>1.2.0</version>
+		</since>
 		<synopsis>
 			Listen to a channel, and optionally whisper into it.
 		</synopsis>
@@ -204,6 +207,9 @@
 		</see-also>
 	</application>
 	<application name="ExtenSpy" language="en_US">
+		<since>
+			<version>1.4.0</version>
+		</since>
 		<synopsis>
 			Listen to a channel, and optionally whisper into it.
 		</synopsis>
@@ -244,6 +250,11 @@
 								<para>barge mode</para>
 							</enum>
 						</enumlist>
+					</option>
+					<option name="D">
+						<para>Interleave the audio coming from the channel and the audio coming to the channel in
+						the output audio as a dual channel stream, rather than mix it. Does nothing if 'o'
+						is also set.</para>
 					</option>
 					<option name="e">
 						<argument name="ext" required="true" />
@@ -346,6 +357,9 @@
 		</see-also>
 	</application>
 	<application name="DAHDIScan" language="en_US">
+		<since>
+			<version>1.4.22</version>
+		</since>
 		<synopsis>
 			Scan DAHDI channels to monitor calls.
 		</synopsis>
@@ -393,6 +407,7 @@ enum {
 	OPTION_EXITONHANGUP      = (1 << 18),   /* Hang up when the spied-on channel hangs up. */
 	OPTION_UNIQUEID          = (1 << 19),	/* The chanprefix is a channel uniqueid or fully specified channel name. */
 	OPTION_LONG_QUEUE        = (1 << 20),	/* Allow usage of a long queue to store audio frames. */
+	OPTION_INTERLEAVED       = (1 << 21),	/* Interleave the Read and Write frames in the output frame. */
 };
 
 enum {
@@ -411,6 +426,7 @@ AST_APP_OPTIONS(spy_opts, {
 	AST_APP_OPTION('B', OPTION_BARGE),
 	AST_APP_OPTION_ARG('c', OPTION_DTMF_CYCLE, OPT_ARG_CYCLE),
 	AST_APP_OPTION('d', OPTION_DTMF_SWITCH_MODES),
+	AST_APP_OPTION('D', OPTION_INTERLEAVED),
 	AST_APP_OPTION_ARG('e', OPTION_ENFORCED, OPT_ARG_ENFORCED),
 	AST_APP_OPTION('E', OPTION_EXITONHANGUP),
 	AST_APP_OPTION_ARG('g', OPTION_GROUP, OPT_ARG_GROUP),
@@ -471,6 +487,56 @@ static int spy_generate(struct ast_channel *chan, void *data, int len, int sampl
 	if (ast_test_flag(&csth->flags, OPTION_READONLY)) {
 		/* Option 'o' was set, so don't mix channel audio */
 		f = ast_audiohook_read_frame(&csth->spy_audiohook, samples, AST_AUDIOHOOK_DIRECTION_READ, ast_format_slin);
+	} else if (ast_test_flag(&csth->flags, OPTION_INTERLEAVED)) {
+		/* Option 'D' was set, so mix the spy frame as an interleaved dual channel frame. */
+		int i;
+		struct ast_frame *fr_read = NULL;
+		struct ast_frame *fr_write = NULL;
+		short read_buf[samples];
+		short write_buf[samples];
+		short stereo_buf[samples * 2];
+		struct ast_frame stereo_frame = {
+			.frametype = AST_FRAME_VOICE,
+			.datalen = sizeof(stereo_buf),
+			.samples = samples,
+		};
+
+		f = ast_audiohook_read_frame_all(&csth->spy_audiohook, samples, ast_format_slin, &fr_read, &fr_write);
+		if (f) {
+			ast_frame_free(f, 0);
+			f = NULL;
+		}
+
+		if (fr_read) {
+			memcpy(read_buf, fr_read->data.ptr, sizeof(read_buf));
+		} else {
+			/* silent out the output frame if we can't read the input */
+			memset(read_buf, 0, sizeof(read_buf));
+		}
+
+		if (fr_write) {
+			memcpy(write_buf, fr_write->data.ptr, sizeof(write_buf));
+		} else {
+			memset(write_buf, 0, sizeof(write_buf));
+		}
+
+		for (i = 0; i < samples; i++) {
+			stereo_buf[i*2] = read_buf[i];
+			stereo_buf[i*2+1] = write_buf[i];
+		}
+
+		stereo_frame.data.ptr = stereo_buf;
+		stereo_frame.subclass.format = ast_format_cache_get_slin_by_rate(samples);
+
+		f = ast_frdup(&stereo_frame);
+
+		if (fr_read) {
+			ast_frame_free(fr_read, 0);
+		}
+		if (fr_write) {
+			ast_frame_free(fr_write, 0);
+		}
+
 	} else {
 		f = ast_audiohook_read_frame(&csth->spy_audiohook, samples, AST_AUDIOHOOK_DIRECTION_BOTH, ast_format_slin);
 	}
@@ -513,12 +579,32 @@ static int start_spying(struct ast_autochan *autochan, const char *spychan_name,
 		spychan_name, ast_channel_name(autochan->chan));
 
 	if (ast_test_flag(flags, OPTION_READONLY)) {
+		ast_audiohook_set_frame_feed_direction(audiohook, AST_AUDIOHOOK_DIRECTION_READ);
 		ast_set_flag(audiohook, AST_AUDIOHOOK_MUTE_WRITE);
 	} else {
 		ast_set_flag(audiohook, AST_AUDIOHOOK_TRIGGER_SYNC);
 	}
 	if (ast_test_flag(flags, OPTION_LONG_QUEUE)) {
 		ast_debug(9, "Using a long queue to store audio frames in spy audiohook\n");
+	} else {
+		ast_set_flag(audiohook, AST_AUDIOHOOK_SMALL_QUEUE);
+	}
+	res = ast_audiohook_attach(autochan->chan, audiohook);
+	ast_autochan_channel_unlock(autochan);
+	return res;
+}
+
+static int start_whispering(struct ast_autochan *autochan, const char *spychan_name, struct ast_audiohook *audiohook, struct ast_flags *flags)
+{
+	int res;
+
+	ast_autochan_channel_lock(autochan);
+	ast_verb(3, "Attaching spy channel %s to %s\n",
+		spychan_name, ast_channel_name(autochan->chan));
+
+	ast_set_flag(audiohook, AST_AUDIOHOOK_TRIGGER_SYNC);
+	if (ast_test_flag(flags, OPTION_LONG_QUEUE)) {
+		ast_debug(9, "Using a long queue to store audio frames in whisper audiohook\n");
 	} else {
 		ast_set_flag(audiohook, AST_AUDIOHOOK_SMALL_QUEUE);
 	}
@@ -627,7 +713,7 @@ static int attach_barge(struct ast_autochan *spyee_autochan,
 		return -1;
 	}
 
-	if (start_spying(internal_bridge_autochan, spyer_name, bridge_whisper_audiohook, flags)) {
+	if (start_whispering(internal_bridge_autochan, spyer_name, bridge_whisper_audiohook, flags)) {
 		ast_log(LOG_WARNING, "Unable to attach barge audiohook on spyee '%s'. Barge mode disabled.\n", name);
 		retval = -1;
 	}
@@ -689,7 +775,7 @@ static int channel_spy(struct ast_channel *chan, struct ast_autochan *spyee_auto
 		*/
 		ast_audiohook_init(&csth.whisper_audiohook, AST_AUDIOHOOK_TYPE_WHISPER, "ChanSpy", 0);
 
-		if (start_spying(spyee_autochan, spyer_name, &csth.whisper_audiohook, flags)) {
+		if (start_whispering(spyee_autochan, spyer_name, &csth.whisper_audiohook, flags)) {
 			ast_log(LOG_WARNING, "Unable to attach whisper audiohook to spyee %s. Whisper mode disabled!\n", name);
 		}
 	}
@@ -907,8 +993,6 @@ static int common_exec(struct ast_channel *chan, struct ast_flags *flags,
 		ast_channel_lock(chan);
 		if ((c = pbx_builtin_getvar_helper(chan, "SPY_EXIT_CONTEXT"))) {
 			ast_copy_string(exitcontext, c, sizeof(exitcontext));
-		} else if (!ast_strlen_zero(ast_channel_macrocontext(chan))) {
-			ast_copy_string(exitcontext, ast_channel_macrocontext(chan), sizeof(exitcontext));
 		} else {
 			ast_copy_string(exitcontext, ast_channel_context(chan), sizeof(exitcontext));
 		}

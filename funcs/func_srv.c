@@ -38,6 +38,9 @@
 
 /*** DOCUMENTATION
 	<function name="SRVQUERY" language="en_US">
+		<since>
+			<version>1.8.0</version>
+		</since>
 		<synopsis>
 			Initiate an SRV query.
 		</synopsis>
@@ -52,6 +55,9 @@
 		</description>
 	</function>
 	<function name="SRVRESULT" language="en_US">
+		<since>
+			<version>1.8.0</version>
+		</since>
 		<synopsis>
 			Retrieve results from an SRVQUERY.
 		</synopsis>
@@ -64,6 +70,16 @@
 				<para>Results start at <literal>1</literal>. If this argument is specified
 				as <literal>getnum</literal>, then it will return the total number of results
 				that are available.</para>
+			</parameter>
+			<parameter name="field" required="false">
+				<para>The field of the result to retrieve.</para>
+				<para>The fields that can be retrieved are:</para>
+				<enumlist>
+					<enum name="host"/>
+					<enum name="port"/>
+					<enum name="priority"/>
+					<enum name="weight"/>
+				</enumlist>
 			</parameter>
 		</syntax>
 		<description>

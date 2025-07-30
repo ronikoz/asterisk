@@ -391,7 +391,7 @@ static struct aco_option *aco_option_find(struct aco_type *type, const char *nam
 	struct aco_option *opt;
 
 	if (!type || !type->internal || !type->internal->opts) {
-		ast_log(LOG_NOTICE, "Attempting to use NULL or unitialized config type\n");
+		ast_log(LOG_NOTICE, "Attempting to use NULL or uninitialized config type\n");
 		return NULL;
 	}
 
@@ -1099,7 +1099,9 @@ static int xmldoc_update_config_type(const char *module, const char *name, const
 	}
 
 	if (!(results = ast_xmldoc_query("/docs/configInfo[@name='%s']/configFile/configObject[@name='%s']", module, name))) {
-		ast_log(LOG_WARNING, "Cannot update type '%s' in module '%s' because it has no existing documentation!\n", name, module);
+		ast_log(LOG_WARNING, "Cannot update type '%s' in module '%s' because it has no existing documentation!"
+			" If this module was recently built, run 'xmldoc reload' to refresh documentation, then load the module again\n",
+			name, module);
 		return XMLDOC_STRICT ? -1 : 0;
 	}
 
@@ -1242,10 +1244,14 @@ static void cli_show_module_types(struct ast_cli_args *a)
 	}
 
 	if (ast_str_strlen(item->synopsis)) {
-		ast_cli(a->fd, "%s\n\n", ast_xmldoc_printable(ast_str_buffer(item->synopsis), 1));
+		char *value = ast_xmldoc_printable(ast_str_buffer(item->synopsis), 1);
+		ast_cli(a->fd, "%s\n\n", value);
+		ast_free(value);
 	}
 	if (ast_str_strlen(item->description)) {
-		ast_cli(a->fd, "%s\n\n", ast_xmldoc_printable(ast_str_buffer(item->description), 1));
+		char *value = ast_xmldoc_printable(ast_str_buffer(item->description), 1);
+		ast_cli(a->fd, "%s\n\n",value);
+		ast_free(value);
 	}
 
 	tmp = item;
@@ -1265,8 +1271,8 @@ static void cli_show_module_type(struct ast_cli_args *a)
 {
 	RAII_VAR(struct ast_xml_doc_item *, item, NULL, ao2_cleanup);
 	struct ast_xml_doc_item *tmp;
-	char option_type[64];
 	int match = 0;
+	char *synopsis, *since, *description, *syntax, *seealso;
 
 	ast_assert(a->argc == 5);
 
@@ -1279,19 +1285,48 @@ static void cli_show_module_type(struct ast_cli_args *a)
 	while ((tmp = AST_LIST_NEXT(tmp, next))) {
 		if (!strcasecmp(tmp->type, "configObject") && !strcasecmp(tmp->name, a->argv[4])) {
 			match = 1;
-			term_color(option_type, tmp->name, COLOR_MAGENTA, COLOR_BLACK, sizeof(option_type));
-			ast_cli(a->fd, "%s", option_type);
-			if (ast_str_strlen(tmp->syntax)) {
-				ast_cli(a->fd, ": [%s]\n\n", ast_xmldoc_printable(ast_str_buffer(tmp->syntax), 1));
-			} else {
-				ast_cli(a->fd, "\n\n");
+
+			synopsis = ast_xmldoc_printable(AS_OR(tmp->synopsis, "Not available"), 1);
+			since = ast_xmldoc_printable(AS_OR(tmp->since, "Not available"), 1);
+			description = ast_xmldoc_printable(AS_OR(tmp->description, "Not available"), 1);
+			syntax = ast_xmldoc_printable(AS_OR(tmp->syntax, "Not available"), 1);
+			seealso = ast_xmldoc_printable(AS_OR(tmp->seealso, "Not available"), 1);
+
+			if (!synopsis || !since || !description || !syntax || !seealso ) {
+				ast_free(synopsis);
+				ast_free(since);
+				ast_free(description);
+				ast_free(syntax);
+				ast_free(seealso);
+				ast_cli(a->fd, "Error: Memory allocation failed\n");
+				break;
 			}
-			if (ast_str_strlen(tmp->synopsis)) {
-				ast_cli(a->fd, "%s\n\n", ast_xmldoc_printable(ast_str_buffer(tmp->synopsis), 1));
-			}
-			if (ast_str_strlen(tmp->description)) {
-				ast_cli(a->fd, "%s\n\n", ast_xmldoc_printable(ast_str_buffer(tmp->description), 1));
-			}
+
+			ast_cli(a->fd, "\n"
+				"%s  -= Info about Config Object '%s:%s' =- %s\n\n"
+				COLORIZE_FMT "\n"
+				"%s\n\n"
+				COLORIZE_FMT "\n"
+				"%s\n\n"
+				COLORIZE_FMT "\n"
+				"%s\n\n"
+				COLORIZE_FMT "\n"
+				"%s [%s]\n\n"
+				COLORIZE_FMT "\n"
+				"%s\n\n",
+				ast_term_color(COLOR_MAGENTA, 0), a->argv[3], tmp->name, ast_term_reset(),
+				COLORIZE(COLOR_MAGENTA, 0, "[Synopsis]"), synopsis,
+				COLORIZE(COLOR_MAGENTA, 0, "[Since]"), since,
+				COLORIZE(COLOR_MAGENTA, 0, "[Description]"), description,
+				COLORIZE(COLOR_MAGENTA, 0, "[Syntax]"), tmp->name, syntax,
+				COLORIZE(COLOR_MAGENTA, 0, "[See Also]"), seealso
+				);
+			ast_free(synopsis);
+			ast_free(since);
+			ast_free(description);
+			ast_free(syntax);
+			ast_free(seealso);
+
 		}
 	}
 
@@ -1302,9 +1337,11 @@ static void cli_show_module_type(struct ast_cli_args *a)
 
 	/* Now iterate over the options for the type */
 	tmp = item;
+	ast_cli(a->fd, COLORIZE_FMT "\n", COLORIZE(COLOR_MAGENTA, 0, "[Config Options]"));
+
 	while ((tmp = AST_LIST_NEXT(tmp, next))) {
 		if (!strcasecmp(tmp->type, "configOption") && !strcasecmp(tmp->ref, a->argv[4])) {
-			ast_cli(a->fd, "%-25s -- %-65.65s\n", tmp->name,
+			ast_cli(a->fd, "%-25s -- %-120.120s\n", tmp->name,
 					ast_str_buffer(tmp->synopsis));
 		}
 	}
@@ -1317,8 +1354,8 @@ static void cli_show_module_options(struct ast_cli_args *a)
 {
 	RAII_VAR(struct ast_xml_doc_item *, item, NULL, ao2_cleanup);
 	struct ast_xml_doc_item *tmp;
-	char option_name[64];
 	int match = 0;
+	char *synopsis, *since, *description, *syntax, *seealso;
 
 	ast_assert(a->argc == 6);
 
@@ -1332,20 +1369,47 @@ static void cli_show_module_options(struct ast_cli_args *a)
 			if (match) {
 				ast_cli(a->fd, "\n");
 			}
-			term_color(option_name, tmp->ref, COLOR_MAGENTA, COLOR_BLACK, sizeof(option_name));
-			ast_cli(a->fd, "[%s%s]\n", option_name, ast_term_reset());
-			if (ast_str_strlen(tmp->syntax)) {
-				ast_cli(a->fd, "%s\n", ast_xmldoc_printable(ast_str_buffer(tmp->syntax), 1));
-			}
-			ast_cli(a->fd, "%s\n\n", ast_xmldoc_printable(AS_OR(tmp->synopsis, "No information available"), 1));
-			if (ast_str_strlen(tmp->description)) {
-				ast_cli(a->fd, "%s\n\n", ast_xmldoc_printable(ast_str_buffer(tmp->description), 1));
+
+			synopsis = ast_xmldoc_printable(AS_OR(tmp->synopsis, "Not available"), 1);
+			since = ast_xmldoc_printable(AS_OR(tmp->since, "Not available"), 1);
+			description = ast_xmldoc_printable(AS_OR(tmp->description, "Not available"), 1);
+			syntax = ast_xmldoc_printable(AS_OR(tmp->syntax, "Not available"), 1);
+			seealso = ast_xmldoc_printable(AS_OR(tmp->seealso, "Not available"), 1);
+
+			if (!synopsis || !since || !description || !syntax || !seealso ) {
+				ast_free(synopsis);
+				ast_free(since);
+				ast_free(description);
+				ast_free(syntax);
+				ast_free(seealso);
+				ast_cli(a->fd, "Error: Memory allocation failed\n");
+				break;
 			}
 
-			if (ast_str_strlen(tmp->seealso)) {
-				ast_cli(a->fd, "See Also:\n");
-				ast_cli(a->fd, "%s\n\n", ast_xmldoc_printable(ast_str_buffer(tmp->seealso), 1));
-			}
+			ast_cli(a->fd, "\n"
+				"%s  -= Info about Config Option '%s:%s:%s' =- %s\n\n"
+				COLORIZE_FMT "\n"
+				"%s\n\n"
+				COLORIZE_FMT "\n"
+				"%s\n\n"
+				COLORIZE_FMT "\n"
+				"%s\n\n"
+				COLORIZE_FMT "\n"
+				"%s\n\n"
+				COLORIZE_FMT "\n"
+				"%s\n\n",
+				ast_term_color(COLOR_MAGENTA, 0), a->argv[3], a->argv[4], tmp->name, ast_term_reset(),
+				COLORIZE(COLOR_MAGENTA, 0, "[Synopsis]"), synopsis,
+				COLORIZE(COLOR_MAGENTA, 0, "[Since]"), since,
+				COLORIZE(COLOR_MAGENTA, 0, "[Description]"), description,
+				COLORIZE(COLOR_MAGENTA, 0, "[Syntax]"), syntax,
+				COLORIZE(COLOR_MAGENTA, 0, "[See Also]"), seealso
+				);
+			ast_free(synopsis);
+			ast_free(since);
+			ast_free(description);
+			ast_free(syntax);
+			ast_free(seealso);
 
 			match = 1;
 		}

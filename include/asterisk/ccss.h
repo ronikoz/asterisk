@@ -363,22 +363,6 @@ unsigned int ast_get_cc_max_monitors(struct ast_cc_config_params *config);
 void ast_set_cc_max_monitors(struct ast_cc_config_params *config, unsigned int value);
 
 /*!
- * \since 1.8
- * \brief Get the name of the callback_macro
- * \param config The configuration to retrieve the callback_macro from
- * \return The callback_macro name
- */
-const char *ast_get_cc_callback_macro(struct ast_cc_config_params *config);
-
-/*!
- * \since 1.8
- * \brief Set the callback_macro name
- * \param config The configuration to set the callback_macro on
- * \param value The new callback macro we want to change to
- */
-void ast_set_cc_callback_macro(struct ast_cc_config_params *config, const char * const value);
-
-/*!
  * \since 11
  * \brief Get the name of the callback subroutine
  * \param config The configuration to retrieve the callback_sub from
@@ -518,7 +502,7 @@ struct ast_cc_monitor {
 	 * \details
 	 * When issuing a CC recall, some technologies will require
 	 * that a name other than the device name is dialed. For instance,
-	 * with SIP, a specific URI will be used which chan_sip will be able
+	 * with SIP, a specific URI will be used which sip will be able
 	 * to recognize as being a CC recall. Similarly, ISDN will need a specific
 	 * dial string to know that the call is a recall.
 	 */

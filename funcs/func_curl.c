@@ -53,6 +53,9 @@
 
 /*** DOCUMENTATION
 	<function name="CURL" language="en_US">
+		<since>
+			<version>10.0.0</version>
+		</since>
 		<synopsis>
 			Retrieve content from a remote web or ftp server
 		</synopsis>
@@ -95,6 +98,9 @@
 		</see-also>
 	</function>
 	<function name="CURLOPT" language="en_US">
+		<since>
+			<version>10.0.0</version>
+		</since>
 		<synopsis>
 			Sets various options for future invocations of CURL.
 		</synopsis>
@@ -172,6 +178,46 @@
 					<enum name="ssl_verifypeer">
 						<para>Whether to verify the server certificate against
 						a list of known root certificate authorities (boolean).</para>
+					</enum>
+					<enum name="ssl_verifyhost">
+						<para>Whether to verify the host in the server's TLS certificate.
+						Set to 2 to verify the host, 0 to ignore the host.</para>
+					</enum>
+					<enum name="ssl_cainfo">
+						<para>Path to a file holding one or more certificates to verify
+						the peer's certificate with. Only used when <literal>ssl_verifypeer</literal>
+						is enabled.</para>
+					</enum>
+					<enum name="ssl_capath">
+						<para>Path to a directory holding multiple CA certificates to
+						verify the peer's certificate with. Only used when <literal>ssl_verifypeer</literal>
+						is enabled.</para>
+					</enum>
+					<enum name="ssl_cert">
+						<para>Path to a file containing a client certificate. Default format
+						is PEM, and can be changed with <literal>ssl_certtype</literal>.</para>
+					</enum>
+					<enum name="ssl_certtype">
+						<para>The format of the <literal>ssl_cert</literal> file.</para>
+						<enumlist>
+							<enum name="PEM" />
+							<enum name="DER" />
+						</enumlist>
+					</enum>
+					<enum name="ssl_key">
+						<para>Path to a file containing a client private key. Default format
+						is PEM, and can be changed with <literal>ssl_keytype</literal></para>
+					</enum>
+					<enum name="ssl_keytype">
+						<para>The format of the <literal>ssl_key</literal> file.</para>
+						<enumlist>
+							<enum name="PEM" />
+							<enum name="DER" />
+							<enum name="ENG" />
+						</enumlist>
+					</enum>
+					<enum name="ssl_keypasswd">
+						<para>The passphrase to use the <literal>ssl_key</literal> file.</para>
 					</enum>
 					<enum name="hashcompat">
 						<para>Assuming the responses will be in <literal>key1=value1&amp;key2=value2</literal>
@@ -320,6 +366,30 @@ static int parse_curlopt_key(const char *name, CURLoption *key, enum optiontype 
 	} else if (!strcasecmp(name, "ssl_verifypeer")) {
 		*key = CURLOPT_SSL_VERIFYPEER;
 		*ot = OT_BOOLEAN;
+	} else if (!strcasecmp(name, "ssl_verifyhost")) {
+		*key = CURLOPT_SSL_VERIFYHOST;
+		*ot = OT_INTEGER;
+	} else if (!strcasecmp(name, "ssl_cainfo")) {
+		*key = CURLOPT_CAINFO;
+		*ot = OT_STRING;
+	} else if (!strcasecmp(name, "ssl_capath")) {
+		*key = CURLOPT_CAPATH;
+		*ot = OT_STRING;
+	} else if (!strcasecmp(name, "ssl_cert")) {
+		*key = CURLOPT_SSLCERT;
+		*ot = OT_STRING;
+	} else if (!strcasecmp(name, "ssl_certtype")) {
+		*key = CURLOPT_SSLCERTTYPE;
+		*ot = OT_STRING;
+	} else if (!strcasecmp(name, "ssl_key")) {
+		*key = CURLOPT_SSLKEY;
+		*ot = OT_STRING;
+	} else if (!strcasecmp(name, "ssl_keytype")) {
+		*key = CURLOPT_SSLKEYTYPE;
+		*ot = OT_STRING;
+	} else if (!strcasecmp(name, "ssl_keypasswd")) {
+		*key = CURLOPT_KEYPASSWD;
+		*ot = OT_STRING;
 	} else if (!strcasecmp(name, "hashcompat")) {
 		*key = CURLOPT_SPECIAL_HASHCOMPAT;
 		*ot = OT_ENUM;
@@ -341,16 +411,19 @@ static int acf_curlopt_write(struct ast_channel *chan, const char *cmd, char *na
 	enum optiontype ot;
 
 	if (chan) {
+		ast_channel_lock(chan);
 		if (!(store = ast_channel_datastore_find(chan, &curl_info, NULL))) {
 			/* Create a new datastore */
 			if (!(store = ast_datastore_alloc(&curl_info, NULL))) {
 				ast_log(LOG_ERROR, "Unable to allocate new datastore.  Cannot set any CURL options\n");
+				ast_channel_unlock(chan);
 				return -1;
 			}
 
 			if (!(list = ast_calloc(1, sizeof(*list)))) {
 				ast_log(LOG_ERROR, "Unable to allocate list head.  Cannot set any CURL options\n");
 				ast_datastore_free(store);
+				ast_channel_unlock(chan);
 				return -1;
 			}
 
@@ -360,6 +433,7 @@ static int acf_curlopt_write(struct ast_channel *chan, const char *cmd, char *na
 		} else {
 			list = store->data;
 		}
+		ast_channel_unlock(chan);
 	} else {
 		/* Populate the global structure */
 		list = &global_curl_info;
@@ -472,9 +546,17 @@ static int acf_curlopt_helper(struct ast_channel *chan, const char *cmd, char *d
 		return -1;
 	}
 
-	if (chan && (store = ast_channel_datastore_find(chan, &curl_info, NULL))) {
-		list[0] = store->data;
-		list[1] = &global_curl_info;
+	if (chan) {
+		/* If we have a channel, we want to read the options set there before
+		   falling back to the global settings */
+		ast_channel_lock(chan);
+		store = ast_channel_datastore_find(chan, &curl_info, NULL);
+		ast_channel_unlock(chan);
+
+		if (store) {
+			list[0] = store->data;
+			list[1] = &global_curl_info;
+		}
 	}
 
 	for (i = 0; i < 2; i++) {
@@ -896,31 +978,6 @@ static struct ast_custom_function acf_curl = {
 
 static struct ast_custom_function acf_curlopt = {
 	.name = "CURLOPT",
-	.synopsis = "Set options for use with the CURL() function",
-	.syntax = "CURLOPT(<option>)",
-	.desc =
-"  cookie         - Send cookie with request [none]\n"
-"  conntimeout    - Number of seconds to wait for connection\n"
-"  dnstimeout     - Number of seconds to wait for DNS response\n"
-"  followlocation - Follow HTTP 3xx redirects (boolean)\n"
-"  ftptext        - For FTP, force a text transfer (boolean)\n"
-"  ftptimeout     - For FTP, the server response timeout\n"
-"  header         - Retrieve header information (boolean)\n"
-"  httpheader     - Add new custom http header (string)\n"
-"  httptimeout    - Number of seconds to wait for HTTP response\n"
-"  maxredirs      - Maximum number of redirects to follow\n"
-"  proxy          - Hostname or IP to use as a proxy\n"
-"  proxytype      - http, socks4, or socks5\n"
-"  proxyport      - port number of the proxy\n"
-"  proxyuserpwd   - A <user>:<pass> to use for authentication\n"
-"  referer        - Referer URL to use for the request\n"
-"  useragent      - UserAgent string to use\n"
-"  userpwd        - A <user>:<pass> to use for authentication\n"
-"  ssl_verifypeer - Whether to verify the peer certificate (boolean)\n"
-"  hashcompat     - Result data will be compatible for use with HASH()\n"
-"                 - if value is \"legacy\", will translate '+' to ' '\n"
-"  failurecodes   - A comma separated list of HTTP response codes to be treated as errors\n"
-"",
 	.read = acf_curlopt_read,
 	.read2 = acf_curlopt_read2,
 	.write = acf_curlopt_write,

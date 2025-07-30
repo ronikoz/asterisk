@@ -36,14 +36,12 @@
  * \page T38fax_udptl T.38 support :: UDPTL
  *
  * Asterisk supports T.38 fax passthrough, origination and termination. It does
- * not support gateway operation. The only channel driver that supports T.38 at
- * this time is chan_sip.
+ * not support gateway operation.
  *
  * UDPTL is handled very much like RTP. It can be reinvited to go directly between
  * the endpoints, without involving Asterisk in the media stream.
  *
  * \b References:
- * - chan_sip.c
  * - udptl.c
  * - app_fax.c
  */
@@ -83,29 +81,56 @@
 	<configInfo name="udptl" language="en_US">
 		<configFile name="udptl.conf">
 			<configObject name="global">
+				<since>
+					<version>12.0.0</version>
+				</since>
 				<synopsis>Global options for configuring UDPTL</synopsis>
 				<configOption name="udptlstart">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>The start of the UDPTL port range</synopsis>
 				</configOption>
 				<configOption name="udptlend">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>The end of the UDPTL port range</synopsis>
 				</configOption>
 				<configOption name="udptlchecksums">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>Whether to enable or disable UDP checksums on UDPTL traffic</synopsis>
 				</configOption>
 				<configOption name="udptlfecentries">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>The number of error correction entries in a UDPTL packet</synopsis>
 				</configOption>
 				<configOption name="udptlfecspan">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>The span over which parity is calculated for FEC in a UDPTL packet</synopsis>
 				</configOption>
 				<configOption name="use_even_ports">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>Whether to only use even-numbered UDPTL ports</synopsis>
 				</configOption>
 				<configOption name="t38faxudpec">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>Removed</synopsis>
 				</configOption>
 				<configOption name="t38faxmaxdatagram">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>Removed</synopsis>
 				</configOption>
 			</configObject>
@@ -888,7 +913,7 @@ static void calculate_far_max_ifp(struct ast_udptl *udptl)
 	 * datagram buffer. this is complicated by the fact that some
 	 * far endpoints send us bogus (small) max datagram values,
 	 * which would result in either buffer overrun or no error
-	 * correction. we try to accomodate those, but if the supplied
+	 * correction. we try to accommodate those, but if the supplied
 	 * value is too small to do so, we'll emit warning messages and
 	 * the user will have to use configuration options to override
 	 * the max datagram value supplied by the far endpoint.
@@ -1317,7 +1342,7 @@ static void *udptl_snapshot_alloc(void)
 static int removed_options_handler(const struct aco_option *opt, struct ast_variable *var, void *obj)
 {
 	if (!strcasecmp(var->name, "t38faxudpec")) {
-		ast_log(LOG_WARNING, "t38faxudpec in udptl.conf is no longer supported; use the t38pt_udptl configuration option in sip.conf instead.\n");
+		ast_log(LOG_WARNING, "t38faxudpec in udptl.conf is no longer supported.\n");
 	} else if (!strcasecmp(var->name, "t38faxmaxdatagram")) {
 		ast_log(LOG_WARNING, "t38faxmaxdatagram in udptl.conf is no longer supported; value is now supplied by T.38 applications.\n");
 	}

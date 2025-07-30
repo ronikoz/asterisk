@@ -70,6 +70,8 @@ enum user_profile_flags {
 	USER_OPT_ECHO_EVENTS = (1 << 18), /*!< Send events only to the admin(s) */
 	USER_OPT_TEXT_MESSAGING = (1 << 19), /*!< Send text messages to the user */
 	USER_OPT_ANSWER_CHANNEL = (1 << 20), /*!< Sets if the channel should be answered if currently unanswered */
+	USER_OPT_HEAR_OWN_JOIN_SOUND  = (1 << 21), /*!< Set if the caller should hear the join sound */
+	USER_OPT_ENDMARKEDANY = (1 << 22), /*!< Set if the user should be kicked after any marked user exits */
 };
 
 enum bridge_profile_flags {
@@ -88,7 +90,7 @@ enum bridge_profile_flags {
 	BRIDGE_OPT_REMB_BEHAVIOR_AVERAGE_ALL = (1 << 12), /*!< The average of all REMB reports in the entire bridge is sent to each sender */
 	BRIDGE_OPT_REMB_BEHAVIOR_LOWEST_ALL = (1 << 13), /*!< The lowest estimated maximum bitrate from all receivers is sent to each sender */
 	BRIDGE_OPT_REMB_BEHAVIOR_HIGHEST_ALL = (1 << 14), /*!< The highest estimated maximum bitrate from all receivers is sent to each sender */
-	BRIDGE_OPT_REMB_BEHAVIOR_FORCE = (1 << 15), /*!< Force the REMB estimated bitrate to that specifiec in remb_estimated_bitrate */
+	BRIDGE_OPT_REMB_BEHAVIOR_FORCE = (1 << 15), /*!< Force the REMB estimated bitrate to that specified in remb_estimated_bitrate */
 };
 
 enum conf_menu_action_id {

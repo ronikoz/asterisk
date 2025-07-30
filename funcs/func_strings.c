@@ -4,7 +4,7 @@
  * Copyright (C) 2005-2006, Digium, Inc.
  * Portions Copyright (C) 2005, Tilghman Lesher.  All rights reserved.
  * Portions Copyright (C) 2005, Anthony Minessale II
- * Portions Copyright (C) 2021, Naveen Albert
+ * Portions Copyright (C) 2021, 2022, Naveen Albert
  *
  * See http://www.asterisk.org for more information about
  * the Asterisk project. Please do not directly contact
@@ -49,6 +49,9 @@ AST_THREADSTORAGE(tmp_buf);
 
 /*** DOCUMENTATION
 	<function name="FIELDQTY" language="en_US">
+		<since>
+			<version>1.2.0</version>
+		</since>
 		<synopsis>
 			Count the fields with an arbitrary delimiter
 		</synopsis>
@@ -62,10 +65,16 @@ AST_THREADSTORAGE(tmp_buf);
 			carriage return, and tab characters, respectively.  Also, octal and hexadecimal specifications are recognized
 			by the patterns <literal>\0nnn</literal> and <literal>\xHH</literal>, respectively.  For example, if you wanted
 			to encode a comma as the delimiter, you could use either <literal>\054</literal> or <literal>\x2C</literal>.</para>
-			<para>Example: If ${example} contains <literal>ex-amp-le</literal>, then ${FIELDQTY(example,-)} returns 3.</para>
+			<example title="Prints 3">
+			exten => s,1,Set(example=ex-amp-le)
+				same => n,NoOp(${FIELDQTY(example,-)})
+			</example>
 		</description>
 	</function>
 	<function name="FIELDNUM" language="en_US">
+		<since>
+			<version>10.0.0</version>
+		</since>
 		<synopsis>
 			Return the 1-based offset of a field in a list
 		</synopsis>
@@ -83,10 +92,16 @@ AST_THREADSTORAGE(tmp_buf);
 			carriage return, and tab characters, respectively.  Also, octal and hexadecimal specifications are recognized
 			by the patterns <literal>\0nnn</literal> and <literal>\xHH</literal>, respectively.  For example, if you wanted
 			to encode a comma as the delimiter, you could use either <literal>\054</literal> or <literal>\x2C</literal>.</para>
-		        <para>Example: If ${example} contains <literal>ex-amp-le</literal>, then ${FIELDNUM(example,-,amp)} returns 2.</para>
+			<example title="Prints 2">
+			exten => s,1,Set(example=ex-amp-le)
+				same => n,NoOp(${FIELDNUM(example,-,amp)})
+			</example>
 		</description>
 	</function>
 	<function name="LISTFILTER" language="en_US">
+		<since>
+			<version>1.6.2.0</version>
+		</since>
 		<synopsis>Remove an item from a list, by name.</synopsis>
 		<syntax>
 			<parameter name="varname" required="true" />
@@ -100,6 +115,9 @@ AST_THREADSTORAGE(tmp_buf);
 		</description>
 	</function>
 	<function name="FILTER" language="en_US">
+		<since>
+			<version>1.2.40</version>
+		</since>
 		<synopsis>
 			Filter the string to include only the allowed characters
 		</synopsis>
@@ -119,6 +137,9 @@ AST_THREADSTORAGE(tmp_buf);
 		</description>
 	</function>
 	<function name="REPLACE" language="en_US">
+		<since>
+			<version>1.8.0</version>
+		</since>
 		<synopsis>
 			Replace a set of characters in a given string with another character.
 		</synopsis>
@@ -137,6 +158,9 @@ AST_THREADSTORAGE(tmp_buf);
 		</description>
 	</function>
 	<function name="STRREPLACE" language="en_US">
+		<since>
+			<version>10.0.0</version>
+		</since>
 		<synopsis>
 			Replace instances of a substring within a string with another string.
 		</synopsis>
@@ -155,6 +179,10 @@ AST_THREADSTORAGE(tmp_buf);
 		</description>
 	</function>
 	<function name="STRBETWEEN" language="en_US">
+		<since>
+			<version>16.21.0</version>
+			<version>18.7.0</version>
+		</since>
 		<synopsis>
 			Inserts a substring between each character in a string.
 		</synopsis>
@@ -172,7 +200,73 @@ AST_THREADSTORAGE(tmp_buf);
 			</example>
 		</description>
 	</function>
+	<function name="TRIM" language="en_US">
+		<since>
+			<version>16.30.0</version>
+			<version>18.16.0</version>
+			<version>19.8.0</version>
+			<version>20.1.0</version>
+		</since>
+		<synopsis>
+			Trim leading and trailing whitespace in a string
+		</synopsis>
+		<syntax>
+			<parameter name="string" required="true" />
+		</syntax>
+		<description>
+			<para>Replaces all leading and trailing whitespace in the provided string.</para>
+		</description>
+		<see-also>
+			<ref type="function">LTRIM</ref>
+			<ref type="function">RTRIM</ref>
+		</see-also>
+	</function>
+	<function name="LTRIM" language="en_US">
+		<since>
+			<version>16.30.0</version>
+			<version>18.16.0</version>
+			<version>19.8.0</version>
+			<version>20.1.0</version>
+		</since>
+		<synopsis>
+			Trim leading whitespace in a string
+		</synopsis>
+		<syntax>
+			<parameter name="string" required="true" />
+		</syntax>
+		<description>
+			<para>Replaces all leading whitespace in the provided string.</para>
+		</description>
+		<see-also>
+			<ref type="function">TRIM</ref>
+			<ref type="function">RTRIM</ref>
+		</see-also>
+	</function>
+	<function name="RTRIM" language="en_US">
+		<since>
+			<version>16.30.0</version>
+			<version>18.16.0</version>
+			<version>19.8.0</version>
+			<version>20.1.0</version>
+		</since>
+		<synopsis>
+			Trim trailing whitespace in a string
+		</synopsis>
+		<syntax>
+			<parameter name="string" required="true" />
+		</syntax>
+		<description>
+			<para>Replaces all trailing whitespace in the provided string.</para>
+		</description>
+		<see-also>
+			<ref type="function">TRIM</ref>
+			<ref type="function">LTRIM</ref>
+		</see-also>
+	</function>
 	<function name="PASSTHRU" language="en_US">
+		<since>
+			<version>1.8.0</version>
+		</since>
 		<synopsis>
 			Pass the given argument back as a value.
 		</synopsis>
@@ -185,11 +279,16 @@ AST_THREADSTORAGE(tmp_buf);
 			string, instead.</para>
 			<note><para>The functions which take a variable name need to be passed var and not
 			${var}.  Similarly, use PASSTHRU() and not ${PASSTHRU()}.</para></note>
-			<para>Example: ${CHANNEL} contains SIP/321-1</para>
-			<para>         ${CUT(PASSTHRU(${CUT(CHANNEL,-,1)}),/,2)}) will return 321</para>
+			<example title="Prints 321">
+			exten => s,1,NoOp(${CHANNEL}) ; contains SIP/321-1
+				same => n,NoOp(${CUT(PASSTHRU(${CUT(CHANNEL,-,1)}),/,2)})
+			</example>
 		</description>
 	</function>
 	<function name="REGEX" language="en_US">
+		<since>
+			<version>1.2.0</version>
+		</since>
 		<synopsis>
 			Check string against a regular expression.
 		</synopsis>
@@ -206,6 +305,9 @@ AST_THREADSTORAGE(tmp_buf);
 		</description>
 	</function>
 	<application name="ClearHash" language="en_US">
+		<since>
+			<version>1.6.0</version>
+		</since>
 		<synopsis>
 			Clear the keys from a specified hashname.
 		</synopsis>
@@ -217,6 +319,9 @@ AST_THREADSTORAGE(tmp_buf);
 		</description>
 	</application>
 	<function name="HASH" language="en_US">
+		<since>
+			<version>1.6.0</version>
+		</since>
 		<synopsis>
 			Implementation of a dialplan associative array
 		</synopsis>
@@ -231,6 +336,9 @@ AST_THREADSTORAGE(tmp_buf);
 		</description>
 	</function>
 	<function name="HASHKEYS" language="en_US">
+		<since>
+			<version>1.6.0</version>
+		</since>
 		<synopsis>
 			Retrieve the keys of the HASH() function.
 		</synopsis>
@@ -245,6 +353,9 @@ AST_THREADSTORAGE(tmp_buf);
 		</description>
 	</function>
 	<function name="KEYPADHASH" language="en_US">
+		<since>
+			<version>1.4.0</version>
+		</since>
 		<synopsis>
 			Hash the letters in string into equivalent keypad numbers.
 		</synopsis>
@@ -252,10 +363,15 @@ AST_THREADSTORAGE(tmp_buf);
 			<parameter name="string" required="true" />
 		</syntax>
 		<description>
-			<para>Example: ${KEYPADHASH(Les)} returns "537"</para>
+			<example title="Returns 537">
+			exten => s,1,Return(${KEYPADHASH(Les)})
+			</example>
 		</description>
 	</function>
 	<function name="ARRAY" language="en_US">
+		<since>
+			<version>1.4.0</version>
+		</since>
 		<synopsis>
 			Allows setting multiple variables at once.
 		</synopsis>
@@ -268,10 +384,15 @@ AST_THREADSTORAGE(tmp_buf);
 			<para>The comma-delimited list passed as a value to which the function is set will
 			be interpreted as a set of values to which the comma-delimited list of
 			variable names in the argument should be set.</para>
-			<para>Example: Set(ARRAY(var1,var2)=1,2) will set var1 to 1 and var2 to 2</para>
+			<example title="Set var1 to 1 and var2 to 2">
+			same => n,Set(ARRAY(var1,var2)=1,2)
+			</example>
 		</description>
 	</function>
 	<function name="STRPTIME" language="en_US">
+		<since>
+			<version>1.4.0</version>
+		</since>
 		<synopsis>
 			Returns the epoch of the arbitrary date/time string structured as described by the format.
 		</synopsis>
@@ -284,10 +405,15 @@ AST_THREADSTORAGE(tmp_buf);
 			<para>This is useful for converting a date into <literal>EPOCH</literal> time,
 			possibly to pass to an application like SayUnixTime or to calculate the difference
 			between the two date strings</para>
-			<para>Example: ${STRPTIME(2006-03-01 07:30:35,America/Chicago,%Y-%m-%d %H:%M:%S)} returns 1141219835</para>
+			<example title="Prints 1141219835">
+			same => n,NoOp(${STRPTIME(2006-03-01 07:30:35,America/Chicago,%Y-%m-%d %H:%M:%S)})
+			</example>
 		</description>
 	</function>
 	<function name="STRFTIME" language="en_US">
+		<since>
+			<version>1.2.0</version>
+		</since>
 		<synopsis>
 			Returns the current date/time in the specified format.
 		</synopsis>
@@ -310,6 +436,9 @@ AST_THREADSTORAGE(tmp_buf);
 		</see-also>
 	</function>
 	<function name="EVAL" language="en_US">
+		<since>
+			<version>1.2.0</version>
+		</since>
 		<synopsis>
 			Evaluate stored variables
 		</synopsis>
@@ -331,6 +460,9 @@ AST_THREADSTORAGE(tmp_buf);
 		</description>
 	</function>
 	<function name="TOUPPER" language="en_US">
+		<since>
+			<version>1.6.0</version>
+		</since>
 		<synopsis>
 			Convert string to all uppercase letters.
 		</synopsis>
@@ -338,10 +470,15 @@ AST_THREADSTORAGE(tmp_buf);
 			<parameter name="string" required="true" />
 		</syntax>
 		<description>
-			<para>Example: ${TOUPPER(Example)} returns "EXAMPLE"</para>
+			<example title="Prints EXAMPLE">
+			exten => s,1,NoOp(${TOUPPER(Example)})
+			</example>
 		</description>
 	</function>
 	<function name="TOLOWER" language="en_US">
+		<since>
+			<version>1.6.0</version>
+		</since>
 		<synopsis>
 			Convert string to all lowercase letters.
 		</synopsis>
@@ -349,10 +486,15 @@ AST_THREADSTORAGE(tmp_buf);
 			<parameter name="string" required="true" />
 		</syntax>
 		<description>
-			<para>Example: ${TOLOWER(Example)} returns "example"</para>
+			<example title="Prints example">
+			exten => s,1,NoOp(${TOLOWER(Example)})
+			</example>
 		</description>
 	</function>
 	<function name="LEN" language="en_US">
+		<since>
+			<version>1.2.0</version>
+		</since>
 		<synopsis>
 			Return the length of the string given.
 		</synopsis>
@@ -360,10 +502,15 @@ AST_THREADSTORAGE(tmp_buf);
 			<parameter name="string" required="true" />
 		</syntax>
 		<description>
-			<para>Example: ${LEN(example)} returns 7</para>
+			<example title="Prints 7">
+			exten => s,1,NoOp(${LEN(example)})
+			</example>
 		</description>
 	</function>
 	<function name="QUOTE" language="en_US">
+		<since>
+			<version>1.4.0</version>
+		</since>
 		<synopsis>
 			Quotes a given string, escaping embedded quotes as necessary
 		</synopsis>
@@ -375,6 +522,9 @@ AST_THREADSTORAGE(tmp_buf);
 		</description>
 	</function>
 	<function name="CSV_QUOTE" language="en_US">
+		<since>
+			<version>1.8.0</version>
+		</since>
 		<synopsis>
 			Quotes a given string for use in a CSV file, escaping embedded quotes as necessary
 		</synopsis>
@@ -386,6 +536,9 @@ AST_THREADSTORAGE(tmp_buf);
 		</description>
 	</function>
 	<function name="SHIFT" language="en_US">
+		<since>
+			<version>1.8.0</version>
+		</since>
 		<synopsis>
 			Removes and returns the first item off of a variable containing delimited text
 		</synopsis>
@@ -394,11 +547,12 @@ AST_THREADSTORAGE(tmp_buf);
 			<parameter name="delimiter" required="false" default="," />
 		</syntax>
 		<description>
-			<para>Example:</para>
-			<para>exten => s,1,Set(array=one,two,three)</para>
-			<para>exten => s,n,While($["${SET(var=${SHIFT(array)})}" != ""])</para>
-			<para>exten => s,n,NoOp(var is ${var})</para>
-			<para>exten => s,n,EndWhile</para>
+			<example title="SHIFT example">
+			exten => s,1,Set(array=one,two,three)
+			exten => s,n,While($["${SET(var=${SHIFT(array)})}" != ""])
+			exten => s,n,NoOp(var is ${var})
+			exten => s,n,EndWhile
+			</example>
 			<para>This would iterate over each value in array, left to right, and
 				would result in NoOp(var is one), NoOp(var is two), and
 				NoOp(var is three) being executed.
@@ -406,6 +560,9 @@ AST_THREADSTORAGE(tmp_buf);
 		</description>
 	</function>
 	<function name="POP" language="en_US">
+		<since>
+			<version>1.8.0</version>
+		</since>
 		<synopsis>
 			Removes and returns the last item off of a variable containing delimited text
 		</synopsis>
@@ -414,11 +571,12 @@ AST_THREADSTORAGE(tmp_buf);
 			<parameter name="delimiter" required="false" default="," />
 		</syntax>
 		<description>
-			<para>Example:</para>
-			<para>exten => s,1,Set(array=one,two,three)</para>
-			<para>exten => s,n,While($["${SET(var=${POP(array)})}" != ""])</para>
-			<para>exten => s,n,NoOp(var is ${var})</para>
-			<para>exten => s,n,EndWhile</para>
+			<example title="POP example">
+			exten => s,1,Set(array=one,two,three)
+			exten => s,n,While($["${SET(var=${POP(array)})}" != ""])
+			exten => s,n,NoOp(var is ${var})
+			exten => s,n,EndWhile
+			</example>
 			<para>This would iterate over each value in array, right to left, and
 				would result in NoOp(var is three), NoOp(var is two), and
 				NoOp(var is one) being executed.
@@ -426,6 +584,9 @@ AST_THREADSTORAGE(tmp_buf);
 		</description>
 	</function>
 	<function name="PUSH" language="en_US">
+		<since>
+			<version>1.8.0</version>
+		</since>
 		<synopsis>
 			Appends one or more values to the end of a variable containing delimited text
 		</synopsis>
@@ -434,13 +595,19 @@ AST_THREADSTORAGE(tmp_buf);
 			<parameter name="delimiter" required="false" default="," />
 		</syntax>
 		<description>
-			<para>Example: Set(PUSH(array)=one,two,three) would append one,
+			<example title="PUSH example">
+			exten => s,1,Set(PUSH(array)=one,two,three)
+			</example>
+			<para>This would append one,
 				two, and three to the end of the values stored in the variable
 				"array".
 			</para>
 		</description>
 	</function>
 	<function name="UNSHIFT" language="en_US">
+		<since>
+			<version>1.8.0</version>
+		</since>
 		<synopsis>
 			Inserts one or more values to the beginning of a variable containing delimited text
 		</synopsis>
@@ -449,7 +616,10 @@ AST_THREADSTORAGE(tmp_buf);
 			<parameter name="delimiter" required="false" default="," />
 		</syntax>
 		<description>
-			<para>Example: Set(UNSHIFT(array)=one,two,three) would insert one,
+			<example title="UNSHIFT example">
+			exten => s,1,Set(UNSHIFT(array)=one,two,three)
+			</example>
+			<para>This would insert one,
 				two, and three before the values stored in the variable
 				"array".
 			</para>
@@ -1012,6 +1182,84 @@ static struct ast_custom_function strbetween_function = {
 	.read2 = strbetween,
 };
 
+#define ltrim(s) while (isspace(*s)) s++;
+#define rtrim(s) { \
+	if (s) { \
+		char *back = s + strlen(s); \
+		while (back != s && isspace(*--back)); \
+		if (*s) { \
+			*(back + 1) = '\0'; \
+		} \
+	} \
+}
+
+static int function_trim(struct ast_channel *chan, const char *cmd, char *data, char *buf, size_t len)
+{
+	char *c;
+
+	if (ast_strlen_zero(data)) {
+		return -1;
+	}
+
+	c = ast_strdupa(data);
+	ltrim(c);
+	rtrim(c);
+
+	ast_copy_string(buf, c, len);
+
+	return 0;
+}
+
+static int function_ltrim(struct ast_channel *chan, const char *cmd, char *data, char *buf, size_t len)
+{
+	char *c;
+
+	if (ast_strlen_zero(data)) {
+		return -1;
+	}
+
+	c = data;
+	ltrim(c);
+
+	ast_copy_string(buf, c, len);
+
+	return 0;
+}
+
+static int function_rtrim(struct ast_channel *chan, const char *cmd, char *data, char *buf, size_t len)
+{
+	char *c;
+
+	if (ast_strlen_zero(data)) {
+		return -1;
+	}
+
+	c = ast_strdupa(data);
+	rtrim(c);
+
+	ast_copy_string(buf, c, len);
+
+	return 0;
+}
+
+#undef ltrim
+#undef rtrim
+
+static struct ast_custom_function trim_function = {
+	.name = "TRIM",
+	.read = function_trim,
+};
+
+static struct ast_custom_function ltrim_function = {
+	.name = "LTRIM",
+	.read = function_ltrim,
+};
+
+static struct ast_custom_function rtrim_function = {
+	.name = "RTRIM",
+	.read = function_rtrim,
+};
+
 static int regex(struct ast_channel *chan, const char *cmd, char *parse, char *buf,
 		 size_t len)
 {
@@ -1306,6 +1554,16 @@ static int hash_read(struct ast_channel *chan, const char *cmd, char *data, char
 		for (i = 0; i < arg2.argc; i++) {
 			snprintf(varname, sizeof(varname), HASH_FORMAT, arg.hashname, arg2.col[i]);
 			varvalue = pbx_builtin_getvar_helper(chan, varname);
+			/*
+			 * If the value is NULL, there was probably a malformation in the
+			 * column name (unbalanced quote, etc.)  This makes everything
+			 * suspect so we should return nothing at all.
+			 */
+			if (!varvalue) {
+				ast_log(LOG_WARNING, "No value found for '%s'\n", varname);
+				*buf = '\0';
+				return -1;
+			}
 			strncat(buf, varvalue, len - strlen(buf) - 1);
 			strncat(buf, ",", len - strlen(buf) - 1);
 		}
@@ -2093,6 +2351,59 @@ AST_TEST_DEFINE(test_STRBETWEEN)
 
 	return res;
 }
+
+AST_TEST_DEFINE(test_TRIM)
+{
+	int i, res = AST_TEST_PASS;
+	struct ast_channel *chan; /* dummy channel */
+	struct ast_str *str; /* fancy string for holding comparing value */
+
+	const char *test_strings[][5] = {
+		{"TRIM", "  abcd ", "abcd"},
+		{"LTRIM", " abcd ", "abcd "},
+		{"RTRIM", " abcd ", " abcd"},
+		{"TRIM", "abcd", "abcd"},
+		{"TRIM", " a b c d ", "a b c d"},
+	};
+
+	switch (cmd) {
+	case TEST_INIT:
+		info->name = "func_TRIM";
+		info->category = "/funcs/func_strings/";
+		info->summary = "Test TRIM functions";
+		info->description = "Verify TRIM behavior";
+		return AST_TEST_NOT_RUN;
+	case TEST_EXECUTE:
+		break;
+	}
+
+	if (!(chan = ast_dummy_channel_alloc())) {
+		ast_test_status_update(test, "Unable to allocate dummy channel\n");
+		return AST_TEST_FAIL;
+	}
+
+	if (!(str = ast_str_create(64))) {
+		ast_test_status_update(test, "Unable to allocate dynamic string buffer\n");
+		ast_channel_release(chan);
+		return AST_TEST_FAIL;
+	}
+
+	for (i = 0; i < ARRAY_LEN(test_strings); i++) {
+		char tmp[512], tmp2[512] = "";
+
+		snprintf(tmp, sizeof(tmp), "${%s(%s)}", test_strings[i][0], test_strings[i][1]);
+		ast_str_substitute_variables(&str, 0, chan, tmp);
+		if (strcmp(test_strings[i][2], ast_str_buffer(str))) {
+			ast_test_status_update(test, "Format string '%s' substituted to '%s'.  Expected '%s'.\n", test_strings[i][0], tmp2, test_strings[i][2]);
+			res = AST_TEST_FAIL;
+		}
+	}
+
+	ast_free(str);
+	ast_channel_release(chan);
+
+	return res;
+}
 #endif
 
 static int unload_module(void)
@@ -2104,6 +2415,7 @@ static int unload_module(void)
 	AST_TEST_UNREGISTER(test_FILTER);
 	AST_TEST_UNREGISTER(test_STRREPLACE);
 	AST_TEST_UNREGISTER(test_STRBETWEEN);
+	AST_TEST_UNREGISTER(test_TRIM);
 	res |= ast_custom_function_unregister(&fieldqty_function);
 	res |= ast_custom_function_unregister(&fieldnum_function);
 	res |= ast_custom_function_unregister(&filter_function);
@@ -2130,6 +2442,9 @@ static int unload_module(void)
 	res |= ast_custom_function_unregister(&push_function);
 	res |= ast_custom_function_unregister(&unshift_function);
 	res |= ast_custom_function_unregister(&passthru_function);
+	res |= ast_custom_function_unregister(&trim_function);
+	res |= ast_custom_function_unregister(&ltrim_function);
+	res |= ast_custom_function_unregister(&rtrim_function);
 
 	return res;
 }
@@ -2143,6 +2458,7 @@ static int load_module(void)
 	AST_TEST_REGISTER(test_FILTER);
 	AST_TEST_REGISTER(test_STRREPLACE);
 	AST_TEST_REGISTER(test_STRBETWEEN);
+	AST_TEST_REGISTER(test_TRIM);
 	res |= ast_custom_function_register(&fieldqty_function);
 	res |= ast_custom_function_register(&fieldnum_function);
 	res |= ast_custom_function_register(&filter_function);
@@ -2169,6 +2485,9 @@ static int load_module(void)
 	res |= ast_custom_function_register(&push_function);
 	res |= ast_custom_function_register(&unshift_function);
 	res |= ast_custom_function_register(&passthru_function);
+	res |= ast_custom_function_register(&trim_function);
+	res |= ast_custom_function_register(&ltrim_function);
+	res |= ast_custom_function_register(&rtrim_function);
 
 	return res;
 }

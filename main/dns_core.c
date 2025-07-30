@@ -598,7 +598,9 @@ static void sort_result(int rr_type, struct ast_dns_result *result)
 
 void ast_dns_resolver_completed(struct ast_dns_query *query)
 {
-	sort_result(ast_dns_query_get_rr_type(query), query->result);
+	if (query->result) {
+		sort_result(ast_dns_query_get_rr_type(query), query->result);
+	}
 
 	query->callback(query);
 }
@@ -672,7 +674,7 @@ int ast_dns_resolver_register(struct ast_dns_resolver *resolver)
 
 	AST_RWLIST_UNLOCK(&resolvers);
 
-	ast_verb(2, "Registered DNS resolver '%s' with priority '%d'\n", resolver->name, resolver->priority);
+	ast_verb(5, "Registered DNS resolver '%s' with priority '%d'\n", resolver->name, resolver->priority);
 
 	return 0;
 }
@@ -695,7 +697,7 @@ void ast_dns_resolver_unregister(struct ast_dns_resolver *resolver)
 	AST_RWLIST_TRAVERSE_SAFE_END;
 	AST_RWLIST_UNLOCK(&resolvers);
 
-	ast_verb(2, "Unregistered DNS resolver '%s'\n", resolver->name);
+	ast_verb(5, "Unregistered DNS resolver '%s'\n", resolver->name);
 }
 
 char *dns_find_record(const char *record, size_t record_size, const char *response, size_t response_size)

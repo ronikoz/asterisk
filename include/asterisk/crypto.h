@@ -30,19 +30,21 @@ extern "C" {
 #include "asterisk/optional_api.h"
 #include "asterisk/logger.h"
 
-#ifdef HAVE_CRYPTO
-#include "openssl/aes.h"
-typedef AES_KEY ast_aes_encrypt_key;
-typedef AES_KEY ast_aes_decrypt_key;
-#else /* !HAVE_CRYPTO */
-typedef char ast_aes_encrypt_key;
-typedef char ast_aes_decrypt_key;
-#endif /* HAVE_CRYPTO */
+/* We previously used the key length explicitly; replace with constant.
+ * For now, Asterisk is limited to 1024 bit (128 byte) RSA keys.
+ */
+#define AST_CRYPTO_RSA_KEY_BITS		1024
+#define AST_CRYPTO_AES_BLOCKSIZE	128
+
+struct aes_key {
+	unsigned char raw[AST_CRYPTO_AES_BLOCKSIZE / 8];
+};
+
+typedef struct aes_key ast_aes_encrypt_key;
+typedef struct aes_key ast_aes_decrypt_key;
 
 #define AST_KEY_PUBLIC	(1 << 0)
 #define AST_KEY_PRIVATE	(1 << 1)
-
-struct ast_key;
 
 /*!
  * \brief Retrieve a key
@@ -108,10 +110,10 @@ AST_OPTIONAL_API(int, ast_sign_bin, (struct ast_key *key, const char *msg, int m
 
 /*!
  * \brief Encrypt a message using a given private key
- * \param key a private key to use to encrypt
+ * \param dst a pointer to a buffer of at least srclen * 1.5 bytes in which the encrypted
  * \param src the message to encrypt
  * \param srclen the length of the message to encrypt
- * \param dst a pointer to a buffer of at least srclen * 1.5 bytes in which the encrypted
+ * \param key a private key to use to encrypt
  * answer will be stored
  *
  * \retval length of encrypted data on success.
@@ -122,10 +124,10 @@ AST_OPTIONAL_API(int, ast_encrypt_bin, (unsigned char *dst, const unsigned char 
 
 /*!
  * \brief Decrypt a message using a given private key
- * \param key a private key to use to decrypt
+ * \param dst a pointer to a buffer of at least srclen bytes in which the decrypted
  * \param src the message to decrypt
  * \param srclen the length of the message to decrypt
- * \param dst a pointer to a buffer of at least srclen bytes in which the decrypted
+ * \param key a private key to use to decrypt
  * answer will be stored
  *
  * \retval length of decrypted data on success.
@@ -162,23 +164,29 @@ AST_OPTIONAL_API(int, ast_aes_set_decrypt_key,
  * \brief AES encrypt data
  * \param in data to be encrypted
  * \param out pointer to a buffer to hold the encrypted output
- * \param ctx address of an aes encryption context filled in with ast_aes_set_encrypt_key
+ * \param key pointer to the ast_aes_encrypt_key to use for encryption
+ * \retval <= 0 failure
+ * \retval otherwise number of bytes in output buffer
  */
-AST_OPTIONAL_API(void, ast_aes_encrypt,
-	(const unsigned char *in, unsigned char *out, const ast_aes_encrypt_key *ctx),
-	{ ast_log(LOG_WARNING, "AES encryption disabled. Install OpenSSL.\n");return; });
+AST_OPTIONAL_API(int, ast_aes_encrypt,
+	(const unsigned char *in, unsigned char *out, const ast_aes_encrypt_key *key),
+	{ ast_log(LOG_WARNING, "AES encryption disabled. Install OpenSSL.\n");return -1; });
 
 /*!
  * \brief AES decrypt data
  * \param in encrypted data
  * \param out pointer to a buffer to hold the decrypted output
- * \param ctx address of an aes encryption context filled in with ast_aes_set_decrypt_key
+ * \param key pointer to the ast_aes_decrypt_key to use for decryption
+ * \retval <= 0 failure
+ * \retval otherwise number of bytes in output buffer
  */
-AST_OPTIONAL_API(void, ast_aes_decrypt,
-	(const unsigned char *in, unsigned char *out, const ast_aes_decrypt_key *ctx),
-	{ ast_log(LOG_WARNING, "AES encryption disabled. Install OpenSSL.\n");return; });
+AST_OPTIONAL_API(int, ast_aes_decrypt,
+	(const unsigned char *in, unsigned char *out, const ast_aes_decrypt_key *key),
+	{ ast_log(LOG_WARNING, "AES encryption disabled. Install OpenSSL.\n");return -1; });
 
 AST_OPTIONAL_API(int, ast_crypto_loaded, (void), { return 0; });
+
+AST_OPTIONAL_API(int, ast_crypto_reload, (void), { return 0; });
 
 #if defined(__cplusplus) || defined(c_plusplus)
 }

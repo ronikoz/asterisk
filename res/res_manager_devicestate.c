@@ -22,6 +22,9 @@
 
 /*** DOCUMENTATION
 	<manager name="DeviceStateList" language="en_US">
+		<since>
+			<version>13.0.0</version>
+		</since>
 		<synopsis>
 			List the current known device states.
 		</synopsis>
@@ -44,6 +47,9 @@
 			</list-elements>
 			<managerEvent name="DeviceStateListComplete" language="en_US">
 				<managerEventInstance class="EVENT_FLAG_COMMAND">
+					<since>
+						<version>13.0.0</version>
+					</since>
 					<synopsis>
 						Indicates the end of the list the current known extension states.
 					</synopsis>

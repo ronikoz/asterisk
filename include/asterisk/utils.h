@@ -210,7 +210,12 @@ struct ast_hostent {
 	char buf[1024];
 };
 
-/*! \brief Thread-safe gethostbyname function to use in Asterisk */
+/*!
+ * \brief Thread-safe gethostbyname function to use in Asterisk
+ *
+ * \deprecated Replaced by \c ast_sockaddr_resolve() and \c ast_sockaddr_resolve_first_af()
+ * \note To be removed in Asterisk 23.
+ */
 struct hostent *ast_gethostbyname(const char *host, struct ast_hostent *hp);
 
 /*! \brief Produces MD5 hash based on input string */
@@ -490,8 +495,11 @@ static force_inline void ast_slinear_saturated_multiply_float(short *input, floa
 		*input = 32767;
 	else if (res < -32768)
 		*input = -32768;
+	else if (res > 0)
+		*input = (short) (res + 0.5);
 	else
-		*input = (short) res;
+		*input = (short) (res - 0.5);
+
 }
 
 static force_inline void ast_slinear_saturated_divide(short *input, short *value)
@@ -506,8 +514,11 @@ static force_inline void ast_slinear_saturated_divide_float(short *input, float 
 		*input = 32767;
 	else if (res < -32768)
 		*input = -32768;
+	else if (res > 0)
+		*input = (short) (res + 0.5);
 	else
-		*input = (short) res;
+		*input = (short) (res - 0.5);
+
 }
 
 #ifdef localtime_r
@@ -1104,5 +1115,15 @@ int ast_thread_user_interface_set(int is_user_interface);
  * \retval False (zero) if thread is not a user interface.
  */
 int ast_thread_is_user_interface(void);
+
+/*!
+ * \brief Test for the presence of an executable command in $PATH
+ *
+ * \param cmd Name of command to locate.
+ *
+ * \retval True (non-zero) if command is in $PATH.
+ * \retval False (zero) command not found.
+ */
+int ast_check_command_in_path(const char *cmd);
 
 #endif /* _ASTERISK_UTILS_H */

@@ -44,6 +44,9 @@
 
 /*** DOCUMENTATION
 	<function name="PRESENCE_STATE" language="en_US">
+		<since>
+			<version>11.0.0</version>
+		</since>
 		<synopsis>
 			Get or Set a presence state.
 		</synopsis>
@@ -850,8 +853,8 @@ static int load_module(void)
 	for (; db_entry; db_entry = db_entry->next) {
 		const char *dev_name = strrchr(db_entry->key, '/') + 1;
 		enum ast_presence_state state;
-		char *message;
-		char *subtype;
+		char *message = NULL;
+		char *subtype = NULL;
 		if (dev_name <= (const char *) 1) {
 			continue;
 		}

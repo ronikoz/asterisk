@@ -40,6 +40,7 @@
 #include "asterisk/utils.h"
 
 #include "../defaults.h"
+#include "channelstorage.h"
 
 #include <sys/time.h>
 #include <sys/resource.h>
@@ -87,7 +88,7 @@ long option_minmemfree;
 #endif
 int ast_option_rtpusedynamic = 1;
 unsigned int ast_option_rtpptdynamic = 35;
-
+int ast_option_disable_remote_console_shell = 0;
 /*! @} */
 
 struct ast_eid ast_eid_default;
@@ -222,6 +223,7 @@ void load_asterisk_conf(void)
 	int option_debug_new = 0;
 	int option_trace_new = 0;
 	int option_verbose_new = 0;
+
 
 	/* init with buildtime config */
 #ifdef REF_DEBUG
@@ -472,10 +474,17 @@ void load_asterisk_conf(void)
 			live_dangerously = ast_true(v->value);
 		} else if (!strcasecmp(v->name, "hide_messaging_ami_events")) {
 			ast_set2_flag(&ast_options, ast_true(v->value), AST_OPT_FLAG_HIDE_MESSAGING_AMI_EVENTS);
+		} else if (!strcasecmp(v->name, "sounds_search_custom_dir")) {
+			ast_set2_flag(&ast_options, ast_true(v->value), AST_OPT_FLAG_SOUNDS_SEARCH_CUSTOM);
+		} else if (!strcasecmp(v->name, "channel_storage_backend")) {
+			internal_channel_set_current_storage_driver(v->value);
+		} else if (!strcasecmp(v->name, "disable_remote_console_shell")) {
+			ast_option_disable_remote_console_shell = ast_true(v->value);
 		}
 	}
 	if (!ast_opt_remote) {
 		pbx_live_dangerously(live_dangerously);
+		astman_live_dangerously(live_dangerously);
 	}
 
 	option_debug += option_debug_new;

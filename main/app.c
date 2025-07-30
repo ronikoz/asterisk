@@ -205,7 +205,7 @@ enum ast_getdata_result ast_app_getdata_terminator(struct ast_channel *c, const 
 		prompt = "";
 
 	filename = ast_strdupa(prompt);
-	while ((front = strsep(&filename, "&"))) {
+	while ((front = ast_strsep(&filename, '&', AST_STRSEP_STRIP | AST_STRSEP_TRIM))) {
 		if (!ast_strlen_zero(front)) {
 			res = ast_streamfile(c, front, ast_channel_language(c));
 			if (res)
@@ -264,76 +264,6 @@ int ast_app_getdata_full(struct ast_channel *c, const char *prompt, char *s, int
 
 	res = ast_readstring_full(c, s, maxlen, to, fto, "#", audiofd, ctrlfd);
 
-	return res;
-}
-
-int ast_app_exec_macro(struct ast_channel *autoservice_chan, struct ast_channel *macro_chan, const char *macro_args)
-{
-	struct ast_app *macro_app;
-	int res;
-
-	macro_app = pbx_findapp("Macro");
-	if (!macro_app) {
-		ast_log(LOG_WARNING,
-			"Cannot run 'Macro(%s)'.  The application is not available.\n", macro_args);
-		return -1;
-	}
-	if (autoservice_chan) {
-		ast_autoservice_start(autoservice_chan);
-	}
-
-	ast_debug(4, "%s Original location: %s,%s,%d\n", ast_channel_name(macro_chan),
-		ast_channel_context(macro_chan), ast_channel_exten(macro_chan),
-		ast_channel_priority(macro_chan));
-
-	res = pbx_exec(macro_chan, macro_app, macro_args);
-	ast_debug(4, "Macro exited with status %d\n", res);
-
-	/*
-	 * Assume anything negative from Macro is an error.
-	 * Anything else is success.
-	 */
-	if (res < 0) {
-		res = -1;
-	} else {
-		res = 0;
-	}
-
-	ast_debug(4, "%s Ending location: %s,%s,%d\n", ast_channel_name(macro_chan),
-		ast_channel_context(macro_chan), ast_channel_exten(macro_chan),
-		ast_channel_priority(macro_chan));
-
-	if (autoservice_chan) {
-		ast_autoservice_stop(autoservice_chan);
-	}
-
-	if (ast_check_hangup_locked(macro_chan)) {
-		ast_queue_hangup(macro_chan);
-	}
-
-	return res;
-}
-
-int ast_app_run_macro(struct ast_channel *autoservice_chan, struct ast_channel *macro_chan, const char *macro_name, const char *macro_args)
-{
-	int res;
-	char *args_str;
-	size_t args_len;
-
-	if (ast_strlen_zero(macro_args)) {
-		return ast_app_exec_macro(autoservice_chan, macro_chan, macro_name);
-	}
-
-	/* Create the Macro application argument string. */
-	args_len = strlen(macro_name) + strlen(macro_args) + 2;
-	args_str = ast_malloc(args_len);
-	if (!args_str) {
-		return -1;
-	}
-	snprintf(args_str, args_len, "%s,%s", macro_name, macro_args);
-
-	res = ast_app_exec_macro(autoservice_chan, macro_chan, args_str);
-	ast_free(args_str);
 	return res;
 }
 
@@ -1794,7 +1724,11 @@ static int global_maxsilence = 0;
  * \retval 't' Recording ended from the message exceeding the maximum duration, or via DTMF in prepend mode
  * \retval dtmfchar Recording ended via the return value's DTMF character for either cancel or accept.
  */
-static int __ast_play_and_record(struct ast_channel *chan, const char *playfile, const char *recordfile, int maxtime, const char *fmt, int *duration, int *sound_duration, int beep, int silencethreshold, int maxsilence, const char *path, int prepend, const char *acceptdtmf, const char *canceldtmf, int skip_confirmation_sound, enum ast_record_if_exists if_exists)
+static int __ast_play_and_record(struct ast_channel *chan, const char *playfile,
+	const char *recordfile, int maxtime, const char *fmt, int *duration,
+	int *sound_duration, int beep, int silencethreshold, int maxsilence,
+	const char *path, int prepend, const char *acceptdtmf, const char *canceldtmf,
+	int skip_confirmation_sound, enum ast_record_if_exists if_exists)
 {
 	int d = 0;
 	char *fmts;
@@ -1812,6 +1746,8 @@ static int __ast_play_and_record(struct ast_channel *chan, const char *playfile,
 	struct ast_silence_generator *silgen = NULL;
 	char prependfile[PATH_MAX];
 	int ioflags;	/* IO flags for writing output file */
+	SCOPE_ENTER(3, "%s: play: '%s'  record: '%s'  path: '%s'  prepend: %d\n",
+		ast_channel_name(chan), playfile, recordfile, path, prepend);
 
 	ioflags = O_CREAT|O_WRONLY;
 
@@ -1849,19 +1785,22 @@ static int __ast_play_and_record(struct ast_channel *chan, const char *playfile,
 
 	if (playfile || beep) {
 		if (!beep) {
+			ast_trace(-1, "Playing '%s' to '%s'\n", playfile, ast_channel_name(chan));
 			d = ast_play_and_wait(chan, playfile);
 		}
 		if (d > -1) {
+			ast_trace(-1, "Playing 'beep' to '%s'\n", ast_channel_name(chan));
 			d = ast_stream_and_wait(chan, "beep", "");
 		}
 		if (d < 0) {
-			return -1;
+			SCOPE_EXIT_RTN_VALUE(-1, "Failed to play. RC: %d\n", d);
 		}
 	}
 
 	if (prepend) {
 		ast_copy_string(prependfile, recordfile, sizeof(prependfile));
 		strncat(prependfile, "-prepend", sizeof(prependfile) - strlen(prependfile) - 1);
+		ast_trace(-1, "Prepending to '%s'\n", prependfile);
 	}
 
 	fmts = ast_strdupa(fmt);
@@ -1887,7 +1826,7 @@ static int __ast_play_and_record(struct ast_channel *chan, const char *playfile,
 	end = start = time(NULL);  /* pre-initialize end to be same as start in case we never get into loop */
 	for (x = 0; x < fmtcnt; x++) {
 		others[x] = ast_writefile(prepend ? prependfile : recordfile, sfmt[x], comment, ioflags, 0, AST_FILE_MODE);
-		ast_verb(3, "x=%d, open writing:  %s format: %s, %p\n", x, prepend ? prependfile : recordfile, sfmt[x], others[x]);
+		ast_trace(-1, "x=%d, open writing:  %s format: %s, %p\n", x, prepend ? prependfile : recordfile, sfmt[x], others[x]);
 
 		if (!others[x]) {
 			break;
@@ -2178,7 +2117,8 @@ static int __ast_play_and_record(struct ast_channel *chan, const char *playfile,
 			ast_closestream(others[x]);
 			ast_closestream(realfiles[x]);
 			ast_filerename(prependfile, recordfile, sfmt[x]);
-			ast_verb(4, "Recording Format: sfmts=%s, prependfile %s, recordfile %s\n", sfmt[x], prependfile, recordfile);
+			ast_trace(-1, "Recording Format: sfmts=%s, prependfile %s, recordfile %s\n", sfmt[x], prependfile, recordfile);
+			ast_trace(-1, "Deleting the prepend file %s.%s\n", recordfile, sfmt[x]);
 			ast_filedelete(prependfile, sfmt[x]);
 		}
 	} else {
@@ -2200,7 +2140,7 @@ static int __ast_play_and_record(struct ast_channel *chan, const char *playfile,
 	if (sildet) {
 		ast_dsp_free(sildet);
 	}
-	return res;
+	SCOPE_EXIT_RTN_VALUE(res, "Done.  RC: %d\n", res);
 }
 
 static const char default_acceptdtmf[] = "#";

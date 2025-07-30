@@ -35,11 +35,9 @@
  *  - svn co https://www.portaudio.com/repos/portaudio/branches/v19-devel
  *
  * \note Since this works with any audio system that libportaudio supports,
- * including ALSA and OSS, this may someday deprecate chan_alsa and chan_oss.
- * However, before that can be done, it needs to *at least* have all of the
- * features that these other channel drivers have.  The features implemented
- * in at least one of the other console channel drivers that are not yet
- * implemented here are:
+ * including ALSA and OSS, it has come to replace the deprecated chan_alsa and
+ * chan_oss. However, the following features *at least* need to be implemented
+ * here for this to be a full replacement:
  *
  * - Set Auto-answer from the dialplan
  * - transfer CLI command
@@ -154,6 +152,8 @@ static struct console_pvt {
 	struct ast_frame fr;
 	/*! Running = 1, Not running = 0 */
 	unsigned int streamstate:1;
+	/*! Abort stream processing? */
+	unsigned int abort:1;
 	/*! On-hook = 0, Off-hook = 1 */
 	unsigned int hookstate:1;
 	/*! Unmuted = 0, Muted = 1 */
@@ -277,18 +277,19 @@ static void *stream_monitor(void *data)
 	};
 
 	for (;;) {
-		pthread_testcancel();
 		console_pvt_lock(pvt);
 		res = Pa_ReadStream(pvt->stream, buf, sizeof(buf) / sizeof(int16_t));
 		console_pvt_unlock(pvt);
-		pthread_testcancel();
 
-		if (!pvt->owner) {
+		if (!pvt->owner || pvt->abort) {
 			return NULL;
 		}
 
-		if (res == paNoError)
+		if (res == paNoError) {
 			ast_queue_frame(pvt->owner, &f);
+		} else {
+			ast_log(LOG_WARNING, "Console ReadStream failed: %s\n", Pa_GetErrorText(res));
+		}
 	}
 
 	return NULL;
@@ -403,8 +404,9 @@ static int stop_stream(struct console_pvt *pvt)
 	if (!pvt->streamstate || pvt->thread == AST_PTHREADT_NULL)
 		return 0;
 
-	pthread_cancel(pvt->thread);
-	pthread_kill(pvt->thread, SIGURG);
+	pvt->abort = 1;
+	/* Wait for pvt->thread to exit cleanly, to avoid killing it while it's holding a lock. */
+	pthread_kill(pvt->thread, SIGURG); /* Wake it up if needed, but don't cancel it */
 	pthread_join(pvt->thread, NULL);
 
 	console_pvt_lock(pvt);

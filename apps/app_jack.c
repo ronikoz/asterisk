@@ -76,6 +76,9 @@
 "                name.  Use this option to specify a custom client name.\n"
 /*** DOCUMENTATION
 	<application name="JACK" language="en_US">
+		<since>
+			<version>1.6.0</version>
+		</since>
 		<synopsis>
 			Jack Audio Connection Kit
 		</synopsis>
@@ -607,7 +610,7 @@ static int queue_voice_frame(struct jack_data *jack_data, struct ast_frame *f)
  * \param[in]  jack_data This is the jack_data struct that contains the input
  *             ringbuffer that audio will be read from.
  * \param[out] out_frame If this argument is non-NULL, then assuming there is
- *             enough data avilable in the ringbuffer, the audio in this frame
+ *             enough data available in the ringbuffer, the audio in this frame
  *             will get replaced with audio from the input buffer.  If there is
  *             not enough data available to read at this time, then the frame
  *             data gets zeroed out.

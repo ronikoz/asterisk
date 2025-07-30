@@ -39,6 +39,9 @@
 
 /*** DOCUMENTATION
 	<manager name="Parkinglots" language="en_US">
+		<since>
+			<version>11.0.0</version>
+		</since>
 		<synopsis>
 			Get a list of parking lots
 		</synopsis>
@@ -50,6 +53,9 @@
 		</description>
 	</manager>
 	<manager name="ParkedCalls" language="en_US">
+		<since>
+			<version>0.7.2</version>
+		</since>
 		<synopsis>
 			List parked calls.
 		</synopsis>
@@ -64,6 +70,9 @@
 		</description>
 	</manager>
 	<manager name="Park" language="en_US">
+		<since>
+			<version>1.4.0</version>
+		</since>
 		<synopsis>
 			Park a channel.
 		</synopsis>
@@ -93,6 +102,11 @@
 			<parameter name="Parkinglot" required="false">
 				<para>The parking lot to use when parking the channel</para>
 			</parameter>
+			<parameter name="ParkingSpace" required="false">
+				<para>The parking space extension in the parking lot.
+					If the space is already in use then execution will continue at the next priority.
+				</para>
+			</parameter>
 		</syntax>
 		<description>
 			<para>Park an arbitrary channel with optional arguments for specifying the parking lot used, how long
@@ -102,6 +116,9 @@
 	</manager>
 	<managerEvent language="en_US" name="ParkedCall">
 		<managerEventInstance class="EVENT_FLAG_CALL">
+			<since>
+				<version>12.0.0</version>
+			</since>
 			<synopsis>Raised when a channel is parked.</synopsis>
 			<syntax>
 				<channel_snapshot prefix="Parkee"/>
@@ -125,6 +142,9 @@
 	</managerEvent>
 	<managerEvent language="en_US" name="ParkedCallTimeOut">
 		<managerEventInstance class="EVENT_FLAG_CALL">
+			<since>
+				<version>12.0.0</version>
+			</since>
 			<synopsis>Raised when a channel leaves a parking lot due to reaching the time limit of being parked.</synopsis>
 			<syntax>
 				<channel_snapshot prefix="Parkee"/>
@@ -135,6 +155,9 @@
 	</managerEvent>
 	<managerEvent language="en_US" name="ParkedCallGiveUp">
 		<managerEventInstance class="EVENT_FLAG_CALL">
+			<since>
+				<version>12.0.0</version>
+			</since>
 			<synopsis>Raised when a channel leaves a parking lot because it hung up without being answered.</synopsis>
 			<syntax>
 				<channel_snapshot prefix="Parkee"/>
@@ -145,6 +168,9 @@
 	</managerEvent>
 	<managerEvent language="en_US" name="UnParkedCall">
 		<managerEventInstance class="EVENT_FLAG_CALL">
+			<since>
+				<version>12.0.0</version>
+			</since>
 			<synopsis>Raised when a channel leaves a parking lot because it was retrieved from the parking lot and reconnected.</synopsis>
 			<syntax>
 				<channel_snapshot prefix="Parkee"/>
@@ -156,6 +182,9 @@
 	</managerEvent>
 	<managerEvent language="en_US" name="ParkedCallSwap">
 		<managerEventInstance class="EVENT_FLAG_CALL">
+			<since>
+				<version>13.5.0</version>
+			</since>
 			<synopsis>Raised when a channel takes the place of a previously parked channel</synopsis>
 			<syntax>
 				<channel_snapshot prefix="Parkee"/>
@@ -523,6 +552,7 @@ static int manager_park(struct mansession *s, const struct message *m)
 	const char *announce_channel = astman_get_header(m, "AnnounceChannel");
 	const char *timeout = astman_get_header(m, "Timeout");
 	const char *parkinglot = astman_get_header(m, "Parkinglot");
+	const char *parkingspace = astman_get_header(m, "ParkingSpace");
 	char buf[BUFSIZ];
 	int timeout_override = -1;
 
@@ -557,7 +587,11 @@ static int manager_park(struct mansession *s, const struct message *m)
 		ast_bridge_set_transfer_variables(chan, timeout_channel, 0);
 		ast_channel_unlock(chan);
 	}
-
+	
+	if (!ast_strlen_zero(parkingspace)) {
+		pbx_builtin_setvar_helper(chan, "PARKINGEXTEN", parkingspace);
+	}
+	
 	parker_chan = ast_channel_bridge_peer(chan);
 	if (!parker_chan || strcmp(ast_channel_name(parker_chan), timeout_channel)) {
 		if (!ast_strlen_zero(announce_channel)) {

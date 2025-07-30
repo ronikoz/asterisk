@@ -197,7 +197,6 @@ static int str_cmp(void *lhs, void *rhs, int flags)
 	return cmp ? 0 : CMP_MATCH;
 }
 
-//struct ao2_container *ast_str_container_alloc_options(enum ao2_container_opts opts, int buckets)
 struct ao2_container *ast_str_container_alloc_options(enum ao2_alloc_opts opts, int buckets)
 {
 	return ao2_container_alloc_hash(opts, 0, buckets, str_hash, str_sort, str_cmp);
@@ -243,6 +242,19 @@ int ast_strings_equal(const char *str1, const char *str2)
 	}
 
 	return str1 == str2 || !strcmp(str1, str2);
+}
+
+static int parse_double(const char *input, double *result)
+{
+	char *endptr;
+
+	errno = 0;
+	*result = strtod(input, &endptr);
+	if (*endptr || errno == ERANGE) {
+		return 0;
+	}
+
+	return 1;
 }
 
 int ast_strings_match(const char *left, const char *op, const char *right)
@@ -312,7 +324,8 @@ regex:
 	}
 
 equals:
-	scan_numeric = (sscanf(left, "%lf", &left_num) > 0 && sscanf(internal_right, "%lf", &right_num) > 0);
+	scan_numeric = parse_double(left, &left_num)
+		&& parse_double(internal_right, &right_num);
 
 	if (internal_op[0] == '=') {
 		if (ast_strlen_zero(left) && ast_strlen_zero(internal_right)) {
@@ -388,6 +401,25 @@ char *ast_read_line_from_buffer(char **buffer)
 	(*buffer)++;
 
 	return start;
+}
+
+char *ast_vector_string_join(struct ast_vector_string *vec, const char *delim)
+{
+	struct ast_str *buf = ast_str_create(256);
+	char *rtn;
+	int i;
+
+	if (!buf) {
+		return NULL;
+	}
+
+	for (i = 0; i < AST_VECTOR_SIZE(vec); i++) {
+		ast_str_append(&buf, 0, "%s%s", AST_VECTOR_GET(vec, i), delim);
+	}
+	ast_str_truncate(buf, -strlen(delim));
+	rtn = ast_strdup(ast_str_buffer(buf));
+	ast_free(buf);
+	return rtn;
 }
 
 int ast_vector_string_split(struct ast_vector_string *dest,

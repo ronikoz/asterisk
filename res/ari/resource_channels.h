@@ -209,7 +209,7 @@ void ast_ari_channels_originate_with_id(struct ast_variable *headers, struct ast
 struct ast_ari_channels_hangup_args {
 	/*! Channel's id */
 	const char *channel_id;
-	/*! The reason code for hanging up the channel for detail use. Mutually exclusive with 'reason'. See detail hangup codes at here. https://wiki.asterisk.org/wiki/display/AST/Hangup+Cause+Mappings */
+	/*! The reason code for hanging up the channel for detail use. Mutually exclusive with 'reason'. See detail hangup codes at here. https://docs.asterisk.org/Configuration/Miscellaneous/Hangup-Cause-Mappings/ */
 	const char *reason_code;
 	/*! Reason for hanging up the channel for simple use. Mutually exclusive with 'reason_code'. */
 	const char *reason;
@@ -834,13 +834,13 @@ struct ast_ari_channels_external_media_args {
 	const char *app;
 	/*! The "variables" key in the body object holds variable key/value pairs to set on the channel on creation. Other keys in the body object are interpreted as query parameters. Ex. { "endpoint": "SIP/Alice", "variables": { "CALLERID(name)": "Alice" } } */
 	struct ast_json *variables;
-	/*! Hostname/ip:port of external host */
+	/*! Hostname/ip:port or websocket_client connection ID of external host.  May be empty for a websocket server connection. */
 	const char *external_host;
-	/*! Payload encapsulation protocol */
+	/*! Payload encapsulation protocol.  Must be 'none' for the websocket transport. */
 	const char *encapsulation;
 	/*! Transport protocol */
 	const char *transport;
-	/*! Connection type (client/server) */
+	/*! Connection type (client/server). 'server' is only valid for the websocket transport. */
 	const char *connection_type;
 	/*! Format to encode audio in */
 	const char *format;
@@ -863,12 +863,38 @@ int ast_ari_channels_external_media_parse_body(
 /*!
  * \brief Start an External Media session.
  *
- * Create a channel to an External Media source/sink.
+ * Create a channel to an External Media source/sink.  The combination of transport and encapsulation will select one of chan_rtp(udp/rtp), chan_audiosocket(tcp/audiosocket) or chan_websocket(websocket/none) channel drivers.
  *
  * \param headers HTTP headers
  * \param args Swagger parameters
  * \param[out] response HTTP response
  */
 void ast_ari_channels_external_media(struct ast_variable *headers, struct ast_ari_channels_external_media_args *args, struct ast_ari_response *response);
+/*! Argument struct for ast_ari_channels_transfer_progress() */
+struct ast_ari_channels_transfer_progress_args {
+	/*! Channel's id */
+	const char *channel_id;
+	/*! The state of the progress */
+	const char *states;
+};
+/*!
+ * \brief Body parsing function for /channels/{channelId}/transfer_progress.
+ * \param body The JSON body from which to parse parameters.
+ * \param[out] args The args structure to parse into.
+ * \retval zero on success
+ * \retval non-zero on failure
+ */
+int ast_ari_channels_transfer_progress_parse_body(
+	struct ast_json *body,
+	struct ast_ari_channels_transfer_progress_args *args);
+
+/*!
+ * \brief Inform the channel about the progress of the attended/blind transfer.
+ *
+ * \param headers HTTP headers
+ * \param args Swagger parameters
+ * \param[out] response HTTP response
+ */
+void ast_ari_channels_transfer_progress(struct ast_variable *headers, struct ast_ari_channels_transfer_progress_args *args, struct ast_ari_response *response);
 
 #endif /* _ASTERISK_RESOURCE_CHANNELS_H */

@@ -38,6 +38,7 @@ static void __attribute__((constructor)) __mtx_init(void)
 
 #include "asterisk/utils.h"
 #include "asterisk/lock.h"
+#include "asterisk/manager.h"
 
 /* Allow direct use of pthread_mutex_* / pthread_cond_* */
 #undef pthread_mutex_init
@@ -53,7 +54,7 @@ static void __attribute__((constructor)) __mtx_init(void)
 #undef pthread_cond_wait
 #undef pthread_cond_timedwait
 
-#if defined(DEBUG_THREADS)
+#if defined(DEBUG_THREADS) || defined(DETECT_DEADLOCKS)
 #define log_mutex_error(canlog, ...) \
 	do { \
 		if (canlog) { \
@@ -147,8 +148,8 @@ int __ast_pthread_mutex_init(int tracking, const char *filename, int lineno, con
 	int res;
 	pthread_mutexattr_t  attr;
 
-#ifdef DEBUG_THREADS
-#if defined(AST_MUTEX_INIT_W_CONSTRUCTORS) && defined(CAN_COMPARE_MUTEX_TO_INIT_VALUE)
+#if defined(DEBUG_THREADS) && defined(AST_MUTEX_INIT_W_CONSTRUCTORS) && \
+	defined(CAN_COMPARE_MUTEX_TO_INIT_VALUE)
 	if ((t->mutex) != ((pthread_mutex_t) PTHREAD_MUTEX_INITIALIZER)) {
 		int canlog = tracking && strcmp(filename, "logger.c");
 
@@ -159,6 +160,7 @@ int __ast_pthread_mutex_init(int tracking, const char *filename, int lineno, con
 	}
 #endif /* AST_MUTEX_INIT_W_CONSTRUCTORS */
 
+#if defined(DEBUG_THREADS) || defined(DETECT_DEADLOCKS)
 	t->track = NULL;
 	t->flags.tracking = tracking;
 	t->flags.setup = 0;
@@ -255,9 +257,12 @@ int __ast_pthread_mutex_lock(const char *filename, int lineno, const char *func,
 {
 	int res;
 
+#if defined(DETECT_DEADLOCKS) || defined(DEBUG_THREADS)
+	int canlog = t->flags.tracking && strcmp(filename, "logger.c");
+#endif
+
 #ifdef DEBUG_THREADS
 	struct ast_lock_track *lt = ast_get_reentrancy(&t->track, &t->flags, 0);
-	int canlog = t->flags.tracking && strcmp(filename, "logger.c");
 	struct ast_bt *bt = NULL;
 
 	if (lt) {
@@ -280,7 +285,7 @@ int __ast_pthread_mutex_lock(const char *filename, int lineno, const char *func,
 	}
 #endif /* DEBUG_THREADS */
 
-#if defined(DETECT_DEADLOCKS) && defined(DEBUG_THREADS)
+#if defined(DETECT_DEADLOCKS)
 	{
 		time_t seconds = time(NULL);
 		time_t wait_time, reported_wait = 0;
@@ -297,6 +302,7 @@ int __ast_pthread_mutex_lock(const char *filename, int lineno, const char *func,
 				if (wait_time > reported_wait && (wait_time % 5) == 0) {
 					log_mutex_error(canlog, "%s line %d (%s): Deadlock? waited %d sec for mutex '%s'?\n",
 							   filename, lineno, func, (int) wait_time, mutex_name);
+#ifdef DEBUG_THREADS
 					if (lt) {
 						ast_reentrancy_lock(lt);
 #ifdef HAVE_BKTR
@@ -310,7 +316,33 @@ int __ast_pthread_mutex_lock(const char *filename, int lineno, const char *func,
 #endif
 						ast_reentrancy_unlock(lt);
 					}
+#endif
 					reported_wait = wait_time;
+					if ((int) wait_time < 10) { /* Only emit an event when a deadlock starts, not every 5 seconds */
+						/*** DOCUMENTATION
+							<managerEvent language="en_US" name="DeadlockStart">
+								<managerEventInstance class="EVENT_FLAG_SYSTEM">
+									<since>
+										<version>16.29.0</version>
+										<version>18.15.0</version>
+										<version>19.7.0</version>
+									</since>
+									<synopsis>Raised when a probable deadlock has started.
+									Delivery of this event is attempted but not guaranteed,
+                                                                        and could fail for example if the manager itself is deadlocked.
+                                                                        </synopsis>
+										<syntax>
+											<parameter name="Mutex">
+												<para>The mutex involved in the deadlock.</para>
+											</parameter>
+										</syntax>
+								</managerEventInstance>
+							</managerEvent>
+						***/
+						manager_event(EVENT_FLAG_SYSTEM, "DeadlockStart",
+							"Mutex: %s\r\n",
+							mutex_name);
+					}
 				}
 				usleep(200);
 			}
@@ -666,13 +698,14 @@ int __ast_cond_timedwait(const char *filename, int lineno, const char *func,
 	return res;
 }
 
-int __ast_rwlock_init(int tracking, const char *filename, int lineno, const char *func, const char *rwlock_name, ast_rwlock_t *t)
+int __ast_rwlock_init(int tracking, const char *filename, int lineno, \
+	const char *func, const char *rwlock_name, ast_rwlock_t *t)
 {
 	int res;
 	pthread_rwlockattr_t attr;
 
-#ifdef DEBUG_THREADS
-#if defined(AST_MUTEX_INIT_W_CONSTRUCTORS) && defined(CAN_COMPARE_MUTEX_TO_INIT_VALUE)
+#if defined(DEBUG_THREADS) && defined(AST_MUTEX_INIT_W_CONSTRUCTORS) && \
+	defined(CAN_COMPARE_MUTEX_TO_INIT_VALUE)
 	if (t->lock != ((pthread_rwlock_t) __AST_RWLOCK_INIT_VALUE)) {
 		int canlog = tracking && strcmp(filename, "logger.c");
 
@@ -683,6 +716,7 @@ int __ast_rwlock_init(int tracking, const char *filename, int lineno, const char
 	}
 #endif /* AST_MUTEX_INIT_W_CONSTRUCTORS */
 
+#if defined(DEBUG_THREADS) || defined(DETECT_DEADLOCKS)
 	t->track = NULL;
 	t->flags.tracking = tracking;
 	t->flags.setup = 0;
@@ -816,13 +850,17 @@ int __ast_rwlock_unlock(const char *filename, int line, const char *func, ast_rw
 	return res;
 }
 
-int __ast_rwlock_rdlock(const char *filename, int line, const char *func, ast_rwlock_t *t, const char *name)
+int __ast_rwlock_rdlock(const char *filename, int line, const char *func,
+	ast_rwlock_t *t, const char *name)
 {
 	int res;
 
+#if defined(DEBUG_THREADS) || defined(DETECT_DEADLOCKS)
+	int canlog = t->flags.tracking && strcmp(filename, "logger.c");
+#endif
+
 #ifdef DEBUG_THREADS
 	struct ast_lock_track *lt = ast_get_reentrancy(&t->track, &t->flags, 0);
-	int canlog = t->flags.tracking && strcmp(filename, "logger.c");
 	struct ast_bt *bt = NULL;
 
 	if (lt) {
@@ -845,7 +883,7 @@ int __ast_rwlock_rdlock(const char *filename, int line, const char *func, ast_rw
 	}
 #endif /* DEBUG_THREADS */
 
-#if defined(DETECT_DEADLOCKS) && defined(DEBUG_THREADS)
+#if defined(DETECT_DEADLOCKS)
 	{
 		time_t seconds = time(NULL);
 		time_t wait_time, reported_wait = 0;
@@ -856,6 +894,7 @@ int __ast_rwlock_rdlock(const char *filename, int line, const char *func, ast_rw
 				if (wait_time > reported_wait && (wait_time % 5) == 0) {
 					log_mutex_error(canlog, "%s line %d (%s): Deadlock? waited %d sec for readlock '%s'?\n",
 						filename, line, func, (int)wait_time, name);
+#ifdef DEBUG_THREADS
 					if (lt) {
 						ast_reentrancy_lock(lt);
 #ifdef HAVE_BKTR
@@ -869,15 +908,16 @@ int __ast_rwlock_rdlock(const char *filename, int line, const char *func, ast_rw
 #endif
 						ast_reentrancy_unlock(lt);
 					}
+#endif
 					reported_wait = wait_time;
 				}
 				usleep(200);
 			}
 		} while (res == EBUSY);
 	}
-#else /* !DETECT_DEADLOCKS || !DEBUG_THREADS */
+#else /* !DETECT_DEADLOCKS */
 	res = pthread_rwlock_rdlock(&t->lock);
-#endif /* !DETECT_DEADLOCKS || !DEBUG_THREADS */
+#endif /* !DETECT_DEADLOCKS */
 
 #ifdef DEBUG_THREADS
 	if (!res && lt) {
@@ -914,13 +954,17 @@ int __ast_rwlock_rdlock(const char *filename, int line, const char *func, ast_rw
 	return res;
 }
 
-int __ast_rwlock_wrlock(const char *filename, int line, const char *func, ast_rwlock_t *t, const char *name)
+int __ast_rwlock_wrlock(const char *filename, int line, const char *func, \
+	ast_rwlock_t *t, const char *name)
 {
 	int res;
 
+#if defined(DEBUG_THREADS) || defined(DETECT_DEADLOCKS)
+	int canlog = t->flags.tracking && strcmp(filename, "logger.c");
+#endif
+
 #ifdef DEBUG_THREADS
 	struct ast_lock_track *lt = ast_get_reentrancy(&t->track, &t->flags, 0);
-	int canlog = t->flags.tracking && strcmp(filename, "logger.c");
 	struct ast_bt *bt = NULL;
 
 	if (lt) {
@@ -943,7 +987,7 @@ int __ast_rwlock_wrlock(const char *filename, int line, const char *func, ast_rw
 	}
 #endif /* DEBUG_THREADS */
 
-#if defined(DETECT_DEADLOCKS) && defined(DEBUG_THREADS)
+#ifdef DETECT_DEADLOCKS
 	{
 		time_t seconds = time(NULL);
 		time_t wait_time, reported_wait = 0;
@@ -954,6 +998,7 @@ int __ast_rwlock_wrlock(const char *filename, int line, const char *func, ast_rw
 				if (wait_time > reported_wait && (wait_time % 5) == 0) {
 					log_mutex_error(canlog, "%s line %d (%s): Deadlock? waited %d sec for writelock '%s'?\n",
 						filename, line, func, (int)wait_time, name);
+#ifdef DEBUG_THREADS
 					if (lt) {
 						ast_reentrancy_lock(lt);
 #ifdef HAVE_BKTR
@@ -967,15 +1012,16 @@ int __ast_rwlock_wrlock(const char *filename, int line, const char *func, ast_rw
 #endif
 						ast_reentrancy_unlock(lt);
 					}
+#endif
 					reported_wait = wait_time;
 				}
 				usleep(200);
 			}
 		} while (res == EBUSY);
 	}
-#else /* !DETECT_DEADLOCKS || !DEBUG_THREADS */
+#else /* !DETECT_DEADLOCKS */
 	res = pthread_rwlock_wrlock(&t->lock);
-#endif /* !DETECT_DEADLOCKS || !DEBUG_THREADS */
+#endif /* !DETECT_DEADLOCKS */
 
 #ifdef DEBUG_THREADS
 	if (!res && lt) {

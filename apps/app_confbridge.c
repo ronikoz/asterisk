@@ -76,6 +76,9 @@
 
 /*** DOCUMENTATION
 	<application name="ConfBridge" language="en_US">
+		<since>
+			<version>12.0.0</version>
+		</since>
 		<synopsis>
 			Conference bridge application.
 		</synopsis>
@@ -128,9 +131,14 @@
 			<ref type="application">ConfKick</ref>
 			<ref type="function">CONFBRIDGE</ref>
 			<ref type="function">CONFBRIDGE_INFO</ref>
+			<ref type="function">CONFBRIDGE_CHANNELS</ref>
 		</see-also>
 	</application>
 	<application name="ConfKick" language="en_US">
+		<since>
+			<version>16.19.0</version>
+			<version>18.5.0</version>
+		</since>
 		<synopsis>
 			Kicks channel(s) from the requested ConfBridge.
 		</synopsis>
@@ -159,9 +167,13 @@
 			<ref type="application">ConfBridge</ref>
 			<ref type="function">CONFBRIDGE</ref>
 			<ref type="function">CONFBRIDGE_INFO</ref>
+			<ref type="function">CONFBRIDGE_CHANNELS</ref>
 		</see-also>
 	</application>
 	<function name="CONFBRIDGE" language="en_US">
+		<since>
+			<version>10.0.0</version>
+		</since>
 		<synopsis>
 			Set a custom dynamic bridge, user, or menu profile on a channel for the
 			ConfBridge application using the same options available in confbridge.conf.
@@ -191,26 +203,35 @@
 			<para>---- Example 1 ----</para>
 			<para>In this example the custom user profile set on the channel will
 			automatically be used by the ConfBridge application.</para>
-			<para>exten => 1,1,Answer()</para>
+			<example title="Example 1">
+			exten => 1,1,Answer()
+			</example>
 			<para>; In this example the effect of the following line is</para>
 			<para>; implied:</para>
-			<para>; same => n,Set(CONFBRIDGE(user,template)=default_user)</para>
-			<para>same => n,Set(CONFBRIDGE(user,announce_join_leave)=yes)</para>
-			<para>same => n,Set(CONFBRIDGE(user,startmuted)=yes)</para>
-			<para>same => n,ConfBridge(1) </para>
+			<example title="Example 1b">
+			same => n,Set(CONFBRIDGE(user,template)=default_user)
+			same => n,Set(CONFBRIDGE(user,announce_join_leave)=yes)
+			same => n,Set(CONFBRIDGE(user,startmuted)=yes)
+			same => n,ConfBridge(1)
+			</example>
 			<para>---- Example 2 ----</para>
 			<para>This example shows how to use a predefined user profile in
 			<filename>confbridge.conf</filename> as a template for a dynamic profile.
 			Here we make an admin/marked user out of the <literal>my_user</literal>
 			profile that you define in <filename>confbridge.conf</filename>.</para>
-			<para>exten => 1,1,Answer()</para>
-			<para>same => n,Set(CONFBRIDGE(user,template)=my_user)</para>
-			<para>same => n,Set(CONFBRIDGE(user,admin)=yes)</para>
-			<para>same => n,Set(CONFBRIDGE(user,marked)=yes)</para>
-			<para>same => n,ConfBridge(1)</para>
+			<example title="Example 2">
+			exten => 1,1,Answer()
+			same => n,Set(CONFBRIDGE(user,template)=my_user)
+			same => n,Set(CONFBRIDGE(user,admin)=yes)
+			same => n,Set(CONFBRIDGE(user,marked)=yes)
+			same => n,ConfBridge(1)
+			</example>
 		</description>
 	</function>
 	<function name="CONFBRIDGE_INFO" language="en_US">
+		<since>
+			<version>10.0.0</version>
+		</since>
 		<synopsis>
 			Get information about a ConfBridge conference.
 		</synopsis>
@@ -243,8 +264,55 @@
 			<para>This function returns a non-negative integer for valid conference
 			names and an empty string for invalid conference names.</para>
 		</description>
+		<see-also>
+			<ref type="function">CONFBRIDGE_CHANNELS</ref>
+		</see-also>
+	</function>
+	<function name="CONFBRIDGE_CHANNELS" language="en_US">
+		<since>
+			<version>16.27.0</version>
+			<version>18.13.0</version>
+			<version>19.5.0</version>
+		</since>
+		<synopsis>
+			Get a list of channels in a ConfBridge conference.
+		</synopsis>
+		<syntax>
+			<parameter name="type" required="true">
+				<para>What conference information is requested.</para>
+				<enumlist>
+					<enum name="admins">
+						<para>Get the number of admin users in the conference.</para>
+					</enum>
+					<enum name="marked">
+						<para>Get the number of marked users in the conference.</para>
+					</enum>
+					<enum name="parties">
+						<para>Get the number of total users in the conference.</para>
+					</enum>
+					<enum name="active">
+						<para>Get the number of active users in the conference.</para>
+					</enum>
+					<enum name="waiting">
+						<para>Get the number of waiting users in the conference.</para>
+					</enum>
+				</enumlist>
+			</parameter>
+			<parameter name="conf" required="true">
+				<para>The name of the conference being referenced.</para>
+			</parameter>
+		</syntax>
+		<description>
+			<para>This function returns a comma-separated list of channels in a ConfBridge conference, optionally filtered by a type of participant.</para>
+		</description>
+		<see-also>
+			<ref type="function">CONFBRIDGE_INFO</ref>
+		</see-also>
 	</function>
 	<manager name="ConfbridgeList" language="en_US">
+		<since>
+			<version>10.0.0</version>
+		</since>
 		<synopsis>
 			List participants in a conference.
 		</synopsis>
@@ -262,6 +330,10 @@
 	</manager>
 	<managerEvent language="en_US" name="ConfbridgeList">
 		<managerEventInstance class="EVENT_FLAG_REPORTING">
+			<since>
+				<version>13.20.0</version>
+				<version>15.3.0</version>
+			</since>
 			<synopsis>Raised as part of the ConfbridgeList action response list.</synopsis>
 			<syntax>
 				<parameter name="Conference">
@@ -324,6 +396,9 @@
 		</managerEventInstance>
 	</managerEvent>
 	<manager name="ConfbridgeListRooms" language="en_US">
+		<since>
+			<version>10.0.0</version>
+		</since>
 		<synopsis>
 			List active conferences.
 		</synopsis>
@@ -336,7 +411,46 @@
 				ConfbridgeListRoomsComplete.</para>
 		</description>
 	</manager>
+	<managerEvent language="en_US" name="ConfbridgeListRooms">
+		<managerEventInstance class="EVENT_FLAG_REPORTING">
+			<since>
+				<version>16.29.0</version>
+				<version>18.15.0</version>
+				<version>19.7.0</version>
+			</since>
+			<synopsis>Raised as part of the ConfbridgeListRooms action response list.</synopsis>
+			<syntax>
+				<parameter name="Conference">
+					<para>The name of the Confbridge conference.</para>
+				</parameter>
+				<parameter name="Parties">
+					<para>Number of users in the conference.</para>
+					<para>This includes both active and waiting users.</para>
+				</parameter>
+				<parameter name="Marked">
+					<para>Number of marked users in the conference.</para>
+				</parameter>
+				<parameter name="Locked">
+					<para>Is the conference locked?</para>
+					<enumlist>
+						<enum name="Yes"/>
+						<enum name="No"/>
+					</enumlist>
+				</parameter>
+				<parameter name="Muted">
+					<para>Is the conference muted?</para>
+					<enumlist>
+						<enum name="Yes"/>
+						<enum name="No"/>
+					</enumlist>
+				</parameter>
+			</syntax>
+		</managerEventInstance>
+	</managerEvent>
 	<manager name="ConfbridgeMute" language="en_US">
+		<since>
+			<version>10.0.0</version>
+		</since>
 		<synopsis>
 			Mute a Confbridge user.
 		</synopsis>
@@ -353,6 +467,9 @@
 		</description>
 	</manager>
 	<manager name="ConfbridgeUnmute" language="en_US">
+		<since>
+			<version>10.0.0</version>
+		</since>
 		<synopsis>
 			Unmute a Confbridge user.
 		</synopsis>
@@ -369,6 +486,9 @@
 		</description>
 	</manager>
 	<manager name="ConfbridgeKick" language="en_US">
+		<since>
+			<version>10.0.0</version>
+		</since>
 		<synopsis>
 			Kick a Confbridge user.
 		</synopsis>
@@ -384,6 +504,9 @@
 		</description>
 	</manager>
 	<manager name="ConfbridgeLock" language="en_US">
+		<since>
+			<version>10.0.0</version>
+		</since>
 		<synopsis>
 			Lock a Confbridge conference.
 		</synopsis>
@@ -395,6 +518,9 @@
 		</description>
 	</manager>
 	<manager name="ConfbridgeUnlock" language="en_US">
+		<since>
+			<version>10.0.0</version>
+		</since>
 		<synopsis>
 			Unlock a Confbridge conference.
 		</synopsis>
@@ -406,6 +532,9 @@
 		</description>
 	</manager>
 	<manager name="ConfbridgeStartRecord" language="en_US">
+		<since>
+			<version>10.0.0</version>
+		</since>
 		<synopsis>
 			Start recording a Confbridge conference.
 		</synopsis>
@@ -419,6 +548,9 @@
 		</description>
 	</manager>
 	<manager name="ConfbridgeStopRecord" language="en_US">
+		<since>
+			<version>10.0.0</version>
+		</since>
 		<synopsis>
 			Stop recording a Confbridge conference.
 		</synopsis>
@@ -430,6 +562,9 @@
 		</description>
 	</manager>
 	<manager name="ConfbridgeSetSingleVideoSrc" language="en_US">
+		<since>
+			<version>10.0.0</version>
+		</since>
 		<synopsis>
 			Set a conference user as the single video source distributed to all other participants.
 		</synopsis>
@@ -981,7 +1116,7 @@ static int sound_file_exists(const char *filename)
  * \param user Optional Caller
  * \param bridge_channel The bridged channel involved
  *
- * \note if caller is NULL, the announcment will be sent to all participants in the conference.
+ * \note if caller is NULL, the announcement will be sent to all participants in the conference.
  * \retval 0 on success.
  * \retval -1 if the user hung up.
  */
@@ -1681,7 +1816,7 @@ static struct confbridge_conference *join_conference_bridge(const char *conferen
 	struct post_join_action *action;
 	int max_members_reached = 0;
 
-	/* We explicitly lock the conference bridges container ourselves so that other callers can not create duplicate conferences at the same */
+	/* We explicitly lock the conference bridges container ourselves so that other callers can not create duplicate conferences at the same time */
 	ao2_lock(conference_bridges);
 
 	ast_debug(1, "Trying to find conference bridge '%s'\n", conference_name);
@@ -1747,7 +1882,6 @@ static struct confbridge_conference *join_conference_bridge(const char *conferen
 			ast_bridge_set_talker_src_video_mode(conference->bridge);
 		} else if (ast_test_flag(&conference->b_profile, BRIDGE_OPT_VIDEO_SRC_SFU)) {
 			ast_bridge_set_sfu_video_mode(conference->bridge);
-			ast_bridge_set_video_update_discard(conference->bridge, conference->b_profile.video_update_discard);
 			ast_bridge_set_remb_send_interval(conference->bridge, conference->b_profile.remb_send_interval);
 			if (ast_test_flag(&conference->b_profile, BRIDGE_OPT_REMB_BEHAVIOR_AVERAGE)) {
 				ast_brige_set_remb_behavior(conference->bridge, AST_BRIDGE_VIDEO_SFU_REMB_AVERAGE);
@@ -1766,6 +1900,9 @@ static struct confbridge_conference *join_conference_bridge(const char *conferen
 				ast_bridge_set_remb_estimated_bitrate(conference->bridge, conference->b_profile.remb_estimated_bitrate);
 			}
 		}
+
+		/* Always set the minimum interval between video updates, to avoid infinite video updates. */
+		ast_bridge_set_video_update_discard(conference->bridge, conference->b_profile.video_update_discard);
 
 		if (ast_test_flag(&conference->b_profile, BRIDGE_OPT_ENABLE_EVENTS)) {
 			ast_bridge_set_send_sdp_label(conference->bridge, 1);
@@ -2720,17 +2857,24 @@ static int confbridge_exec(struct ast_channel *chan, const char *data)
 		ast_autoservice_stop(chan);
 	}
 
-	/* Play the Join sound to both the conference and the user entering. */
 	if (!quiet) {
 		const char *join_sound = conf_get_sound(CONF_SOUND_JOIN, conference->b_profile.sounds);
 
-		if (strcmp(conference->b_profile.language, ast_channel_language(chan))) {
-			ast_stream_and_wait(chan, join_sound, "");
+		/* if hear_own_join_sound is enabled play the Join sound to everyone */
+		if (ast_test_flag(&user.u_profile, USER_OPT_HEAR_OWN_JOIN_SOUND) ) {
+			if (strcmp(conference->b_profile.language, ast_channel_language(chan))) {
+				ast_stream_and_wait(chan, join_sound, "");
+				ast_autoservice_start(chan);
+				play_sound_file(conference, join_sound);
+				ast_autoservice_stop(chan);
+			} else {
+				async_play_sound_file(conference, join_sound, chan);
+			}
+		/* if hear_own_join_sound is disabled only play the Join sound to just the conference */
+		} else {
 			ast_autoservice_start(chan);
 			play_sound_file(conference, join_sound);
 			ast_autoservice_stop(chan);
-		} else {
-			async_play_sound_file(conference, join_sound, chan);
 		}
 	}
 
@@ -2938,7 +3082,7 @@ static int action_playback(struct ast_bridge_channel *bridge_channel, const char
 	char *file_copy = ast_strdupa(playback_file);
 	char *file = NULL;
 
-	while ((file = strsep(&file_copy, "&"))) {
+	while ((file = ast_strsep(&file_copy, '&', AST_STRSEP_STRIP | AST_STRSEP_TRIM))) {
 		if (ast_stream_and_wait(bridge_channel->chan, file, "")) {
 			ast_log(LOG_WARNING, "Failed to playback file %s to channel\n", file);
 			return -1;
@@ -2962,7 +3106,7 @@ static int action_playback_and_continue(struct confbridge_conference *conference
 	char *file_copy = ast_strdupa(playback_file);
 	char *file = NULL;
 
-	while ((file = strsep(&file_copy, "&"))) {
+	while ((file = ast_strsep(&file_copy, '&', AST_STRSEP_STRIP | AST_STRSEP_TRIM))) {
 		if (ast_streamfile(bridge_channel->chan, file, ast_channel_language(bridge_channel->chan))) {
 			ast_log(LOG_WARNING, "Failed to playback file %s to channel\n", file);
 			return -1;
@@ -3817,6 +3961,90 @@ static struct ast_custom_function confbridge_info_function = {
 	.read = func_confbridge_info,
 };
 
+static int func_confbridge_channels(struct ast_channel *chan, const char *cmd, char *data, char *buf, size_t len)
+{
+	char *parse, *outbuf;
+	struct confbridge_conference *conference;
+	struct confbridge_user *user;
+	int bytes, count = 0;
+	size_t outlen;
+	AST_DECLARE_APP_ARGS(args,
+		AST_APP_ARG(type);
+		AST_APP_ARG(confno);
+	);
+
+	/* parse all the required arguments and make sure they exist. */
+	if (ast_strlen_zero(data)) {
+		return -1;
+	}
+	parse = ast_strdupa(data);
+	AST_STANDARD_APP_ARGS(args, parse);
+	if (ast_strlen_zero(args.confno) || ast_strlen_zero(args.type)) {
+		ast_log(LOG_WARNING, "Usage: %s(category,confno)", cmd);
+		return -1;
+	}
+	conference = ao2_find(conference_bridges, args.confno, OBJ_KEY);
+	if (!conference) {
+		ast_debug(1, "No such conference: %s\n", args.confno);
+		return -1;
+	}
+
+	outbuf = buf;
+	outlen = len;
+
+	ao2_lock(conference);
+	if (!strcasecmp(args.type, "parties")) {
+		AST_LIST_TRAVERSE(&conference->active_list, user, list) {
+			bytes = snprintf(outbuf, outlen, "%s%s", count++ ? "," : "", ast_channel_name(user->chan));
+			outbuf += bytes;
+			outlen -= bytes;
+		}
+		AST_LIST_TRAVERSE(&conference->waiting_list, user, list) {
+			bytes = snprintf(outbuf, outlen, "%s%s", count++ ? "," : "", ast_channel_name(user->chan));
+			outbuf += bytes;
+			outlen -= bytes;
+		}
+	} else if (!strcasecmp(args.type, "active")) {
+		AST_LIST_TRAVERSE(&conference->active_list, user, list) {
+			bytes = snprintf(outbuf, outlen, "%s%s", count++ ? "," : "", ast_channel_name(user->chan));
+			outbuf += bytes;
+			outlen -= bytes;
+		}
+	} else if (!strcasecmp(args.type, "waiting")) {
+		AST_LIST_TRAVERSE(&conference->waiting_list, user, list) {
+			bytes = snprintf(outbuf, outlen, "%s%s", count++ ? "," : "", ast_channel_name(user->chan));
+			outbuf += bytes;
+			outlen -= bytes;
+		}
+	} else if (!strcasecmp(args.type, "admins")) {
+		AST_LIST_TRAVERSE(&conference->active_list, user, list) {
+			if (ast_test_flag(&user->u_profile, USER_OPT_ADMIN)) {
+				bytes = snprintf(outbuf, outlen, "%s%s", count++ ? "," : "", ast_channel_name(user->chan));
+				outbuf += bytes;
+				outlen -= bytes;
+			}
+		}
+	} else if (!strcasecmp(args.type, "marked")) {
+		AST_LIST_TRAVERSE(&conference->active_list, user, list) {
+			if (ast_test_flag(&user->u_profile, USER_OPT_MARKEDUSER)) {
+				bytes = snprintf(outbuf, outlen, "%s%s", count++ ? "," : "", ast_channel_name(user->chan));
+				outbuf += bytes;
+				outlen -= bytes;
+			}
+		}
+	} else {
+		ast_log(LOG_ERROR, "Invalid keyword '%s' passed to %s.\n", args.type, cmd);
+	}
+	ao2_unlock(conference);
+	ao2_ref(conference, -1);
+	return 0;
+}
+
+static struct ast_custom_function confbridge_channels_function = {
+	.name = "CONFBRIDGE_CHANNELS",
+	.read = func_confbridge_channels,
+};
+
 static int action_confbridgelist_item(struct mansession *s, const char *id_text, struct confbridge_conference *conference, struct confbridge_user *user, int waiting)
 {
 	struct ast_channel_snapshot *snapshot;
@@ -3841,6 +4069,7 @@ static int action_confbridgelist_item(struct mansession *s, const char *id_text,
 		"MarkedUser: %s\r\n"
 		"WaitMarked: %s\r\n"
 		"EndMarked: %s\r\n"
+		"EndMarkedAny: %s\r\n"
 		"Waiting: %s\r\n"
 		"Muted: %s\r\n"
 		"Talking: %s\r\n"
@@ -3853,6 +4082,7 @@ static int action_confbridgelist_item(struct mansession *s, const char *id_text,
 		AST_YESNO(ast_test_flag(&user->u_profile, USER_OPT_MARKEDUSER)),
 		AST_YESNO(ast_test_flag(&user->u_profile, USER_OPT_WAITMARKED)),
 		AST_YESNO(ast_test_flag(&user->u_profile, USER_OPT_ENDMARKED)),
+		AST_YESNO(ast_test_flag(&user->u_profile, USER_OPT_ENDMARKEDANY)),
 		AST_YESNO(waiting),
 		AST_YESNO(user->muted),
 		AST_YESNO(user->talking),
@@ -4394,6 +4624,7 @@ static int unload_module(void)
 
 	ast_custom_function_unregister(&confbridge_function);
 	ast_custom_function_unregister(&confbridge_info_function);
+	ast_custom_function_unregister(&confbridge_channels_function);
 
 	ast_cli_unregister_multiple(cli_confbridge, ARRAY_LEN(cli_confbridge));
 
@@ -4465,6 +4696,7 @@ static int load_module(void)
 
 	res |= ast_custom_function_register_escalating(&confbridge_function, AST_CFE_WRITE);
 	res |= ast_custom_function_register(&confbridge_info_function);
+	res |= ast_custom_function_register(&confbridge_channels_function);
 
 	res |= ast_cli_register_multiple(cli_confbridge, ARRAY_LEN(cli_confbridge));
 

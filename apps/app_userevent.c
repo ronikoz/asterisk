@@ -36,6 +36,9 @@
 
 /*** DOCUMENTATION
 	<application name="UserEvent" language="en_US">
+		<since>
+			<version>1.0.0</version>
+		</since>
 		<synopsis>
 			Send an arbitrary user-defined event to parties interested in a channel (AMI users and relevant res_stasis applications).
 		</synopsis>

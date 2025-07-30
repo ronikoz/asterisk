@@ -150,6 +150,7 @@ struct ast_custom_function {
 					 * \since 12 */
 
 	AST_RWLIST_ENTRY(ast_custom_function) acflist;
+	AST_STRING_FIELD_EXTENDED(since); /*!< Since text for 'show functions' */
 };
 
 /*! \brief All switch functions have the same interface, so define a type for them */
@@ -267,6 +268,23 @@ struct ast_app *pbx_findapp(const char *app);
  * \retval -1 failure
  */
 int pbx_exec(struct ast_channel *c, struct ast_app *app, const char *data);
+
+/*!
+ * \brief Execute an application
+ *
+ * \param chan channel to execute on
+ * \param app_name name of app to execute
+ * \param app_args the data passed into the app
+ *
+ * This application executes an application by name on a given channel.
+ * It is a wrapper around pbx_exec that will perform variable substitution
+ * and then execute the application if it exists.
+ * If the application is not found, a warning is logged.
+ *
+ * \retval 0 success
+ * \retval -1 failure (including application not found)
+ */
+int ast_pbx_exec_application(struct ast_channel *chan, const char *app_name, const char *app_args);
 
 /*!
  * \brief Register a new context or find an existing one
@@ -1107,33 +1125,11 @@ int ast_rdlock_context(struct ast_context *con);
 int ast_unlock_context(struct ast_context *con);
 
 /*!
- * \brief locks the macrolock in the given context
- *
- * \param macrocontext name of the macro-context to lock
- *
- * Locks the given macro-context to ensure only one thread (call) can execute it at a time
- *
- * \retval 0 on success
- * \retval -1 on failure
- */
-int ast_context_lockmacro(const char *macrocontext);
-
-/*!
- * \brief Unlocks the macrolock in the given context
- *
- * \param macrocontext name of the macro-context to unlock
- *
- * Unlocks the given macro-context so that another thread (call) can execute it
- *
- * \retval 0 on success
- * \retval -1 on failure
- */
-int ast_context_unlockmacro(const char *macrocontext);
-
-/*!
  * \brief Set the channel to next execute the specified dialplan location.
  * \see ast_async_parseable_goto, ast_async_goto_if_exists
  *
+ * \note If the AST_SOFTHANGUP_ASYNCGOTO flag is set,
+ * it can prevent the dialplan location from being overwritten by ast_explicit_goto.
  * \note Do _NOT_ hold any channel locks when calling this function.
  */
 int ast_async_goto(struct ast_channel *chan, const char *context, const char *exten, int priority);
@@ -1415,7 +1411,7 @@ void pbx_substitute_variables_helper_full(struct ast_channel *c, struct varshead
 /*!
  * \brief Substitutes variables, similar to pbx_substitute_variables_helper_full, but allows passing the context, extension, and priority in.
  */
-void pbx_substitute_variables_helper_full_location(struct ast_channel *c, struct varshead *headp, const char *cp1, char *cp2, int cp2_size, size_t *used, char *context, char *exten, int pri);
+void pbx_substitute_variables_helper_full_location(struct ast_channel *c, struct varshead *headp, const char *cp1, char *cp2, int cp2_size, size_t *used, const char *context, const char *exten, int pri);
 /*! @} */
 
 /*! @name Substitution routines, using dynamic string buffers
@@ -1455,6 +1451,28 @@ void ast_str_substitute_variables_varshead(struct ast_str **buf, ssize_t maxlen,
  * \param used Number of bytes read from the template.  (May be NULL)
  */
 void ast_str_substitute_variables_full(struct ast_str **buf, ssize_t maxlen, struct ast_channel *c, struct varshead *headp, const char *templ, size_t *used);
+
+/*!
+ * \brief Perform variable/function/expression substitution on an ast_str
+ *
+ * \param buf      Result will be placed in this buffer.
+ * \param maxlen   -1 if the buffer should not grow, 0 if the buffer
+ *                 may grow to any size, and >0 if the buffer should
+ *                 grow only to that number of bytes.
+ * \param c        A channel from which to extract values, and to pass
+ *                 to any dialplan functions.
+ * \param headp    A channel variables list to also search for variables.
+ * \param templ    Variable template to expand.
+ * \param used     Number of bytes read from the template.  (May be NULL)
+ * \param use_both Normally, if a channel is specified, headp is ignored.
+ *                 If this parameter is set to 1 and both a channel and headp
+ *                 are specified, the channel will be searched for variables
+ *                 first and any not found will be searched for in headp.
+ */
+void ast_str_substitute_variables_full2(struct ast_str **buf, ssize_t maxlen,
+	struct ast_channel *c, struct varshead *headp, const char *templ,
+	size_t *used, int use_both);
+
 /*! @} */
 
 int ast_extension_patmatch(const char *pattern, const char *data);
@@ -1493,6 +1511,7 @@ int ast_async_parseable_goto(struct ast_channel *chan, const char *goto_string);
 
 /*!
  * \note This function will handle locking the channel as needed.
+ * \note If the AST_SOFTHANGUP_ASYNCGOTO flag is set on the channel, this function will fail and return -1.
  */
 int ast_explicit_goto(struct ast_channel *chan, const char *context, const char *exten, int priority);
 
@@ -1500,6 +1519,25 @@ int ast_explicit_goto(struct ast_channel *chan, const char *context, const char 
  * \note This function will handle locking the channel as needed.
  */
 int ast_async_goto_if_exists(struct ast_channel *chan, const char *context, const char *exten, int priority);
+
+/*!
+ * \brief Parses a dialplan location into context, extension, priority
+ *
+ * \param chan Channel to execute on
+ * \param context Pointer to initial value for context.
+ * \param exten Pointer to initial value for exten.
+ * \param pri Pointer to initial value for pri
+ * \param ipri Pointer to integer value of priority
+ * \param mode Pointer to mode (or NULL if mode is not used)
+ * \param rest Pointer to buffer to capture rest of parsing (or NULL if not used)
+ *
+ * strsep should be used to initially populate context, exten, and pri prior
+ * to calling this function. All arguments are modified in place.
+ *
+ * \retval 0 success
+ * \retval non-zero failure
+ */
+int pbx_parse_location(struct ast_channel *chan, char **context, char **exten, char **pri, int *ipri, int *mode, char *rest);
 
 struct ast_custom_function* ast_custom_function_find(const char *name);
 

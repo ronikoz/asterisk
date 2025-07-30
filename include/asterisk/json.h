@@ -269,6 +269,22 @@ struct ast_json *ast_json_boolean(int value);
 struct ast_json *ast_json_null(void);
 
 /*!
+ * \brief Check if \a value is JSON array.
+ * \since 12.0.0
+ * \retval True (non-zero) if \a value == \ref ast_json_array().
+ * \retval False (zero) otherwise..
+ */
+int ast_json_is_array(const struct ast_json *value);
+
+/*!
+ * \brief Check if \a value is JSON object.
+ * \since 12.0.0
+ * \retval True (non-zero) if \a value == \ref ast_json_object().
+ * \retval False (zero) otherwise..
+ */
+int ast_json_is_object(const struct ast_json *value);
+
+/*!
  * \brief Check if \a value is JSON true.
  * \since 12.0.0
  * \retval True (non-zero) if \a value == \ref ast_json_true().
@@ -593,6 +609,15 @@ struct ast_json *ast_json_object_get(struct ast_json *object, const char *key);
 #define ast_json_object_integer_get(object, key) ast_json_integer_get(ast_json_object_get(object, key))
 
 /*!
+ * \brief Get a double field from a JSON object.
+ * \param object JSON object.
+ * \param key Key of double field to look up.
+ * \return Value of a JSON double.
+ * \retval 0 if \a real is not a JSON real number.
+ */
+#define ast_json_object_real_get(object, key) ast_json_real_get(ast_json_object_get(object, key))
+
+/*!
  * \brief Set a field in a JSON object.
  * \since 12.0.0
  *
@@ -768,6 +793,8 @@ enum ast_json_encoding_format
 	AST_JSON_COMPACT,
 	/*! Formatted for human readability */
 	AST_JSON_PRETTY,
+	/*! Keys sorted alphabetically */
+	AST_JSON_SORTED,
 };
 
 /*!
@@ -794,6 +821,17 @@ enum ast_json_encoding_format
  * \retval NULL on error.
  */
 char *ast_json_dump_string_format(struct ast_json *root, enum ast_json_encoding_format format);
+
+/*!
+ * \brief Encode a JSON value to a string, with its keys sorted.
+ *
+ * Returned string must be freed by calling ast_json_free().
+ *
+ * \param root JSON value.
+ * \return String encoding of \a root.
+ * \retval NULL on error.
+ */
+#define ast_json_dump_string_sorted(root) ast_json_dump_string_format(root, AST_JSON_SORTED)
 
 #define ast_json_dump_str(root, dst) ast_json_dump_str_format(root, dst, AST_JSON_COMPACT)
 
@@ -1098,6 +1136,63 @@ enum ast_json_to_ast_vars_code {
  * \return Conversion enum ast_json_to_ast_vars_code status
  */
 enum ast_json_to_ast_vars_code ast_json_to_ast_variables(struct ast_json *json_variables, struct ast_variable **variables);
+
+enum ast_json_nvp_ast_vars_code {
+	/*! \brief Conversion successful */
+	AST_JSON_NVP_AST_VARS_CODE_SUCCESS,
+	/*!
+	 * \brief Conversion failed because invalid value type supplied.
+	 * \note Only string values allowed.
+	 */
+	AST_JSON_NVP_AST_VARS_CODE_INVALID_TYPE,
+	/*! \brief Conversion failed because of allocation failure. (Out Of Memory) */
+	AST_JSON_NVP_AST_VARS_CODE_OOM,
+	/*! \brief Input was NULL or empty */
+	AST_JSON_NVP_AST_VARS_CODE_NO_INPUT,
+};
+
+
+/*!
+ * \brief Convert a \c ast_json array of name/value pairs into an \c ast_variable list
+ *
+ * This is the inverse of \ref ast_variables_to_json_nvp_array().
+ *
+ * \param json_array The JSON array containing the name/value pairs
+ * \param[out] variables The ast_variable list containing the name/value pairs
+ *
+ * If the variables list already exists, new values are appended to it.
+ *
+ * \note The JSON array must be in the following format:
+ * \code
+ * [
+ *   {
+ *     "name": "foo",
+ *     "value": "bar"
+ *   },
+ *   {
+ *     "name": "foo2",
+ *     "value": "bar2"
+ *   }
+ * ]
+ * \endcode
+ *
+ * \warning If an error occurred during parsing the variables list will contain
+ * all variables that had been successfully parsed before the error.
+ *
+ * \return enum ast_json_to_ast_vars_code indicating status.
+ */
+enum ast_json_nvp_ast_vars_code ast_json_nvp_array_to_ast_variables(
+	struct ast_json *json_array, struct ast_variable **variables);
+
+/*!
+ * \brief Convert a \c ast_variable list into a \c ast_json array of name/value pairs
+ *
+ * This is the inverse of \ref ast_json_nvp_array_to_ast_variables().
+ *
+ * \param variables The ast_variable list to convert
+ * \return JSON array of name/value pairs.  Must be freed with \ref ast_json_unref().
+ */
+struct ast_json *ast_variables_to_json_nvp_array(struct ast_variable *variables);
 
 struct varshead;
 

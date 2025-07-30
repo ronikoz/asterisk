@@ -34,15 +34,21 @@
 #include "asterisk/json.h"
 #include "asterisk/pbx.h"
 #include "asterisk/bridge.h"
+#include "asterisk/stasis_bridges.h"
 #include "asterisk/translate.h"
 #include "asterisk/stasis.h"
 #include "asterisk/stasis_channels.h"
 #include "asterisk/dial.h"
 #include "asterisk/linkedlists.h"
+#include "asterisk/utf8.h"
+#include "asterisk/vector.h"
 
 /*** DOCUMENTATION
 	<managerEvent language="en_US" name="VarSet">
 		<managerEventInstance class="EVENT_FLAG_DIALPLAN">
+			<since>
+				<version>12.0.0</version>
+			</since>
 			<synopsis>Raised when a variable is set to a particular value.</synopsis>
 			<syntax>
 				<channel_snapshot/>
@@ -57,6 +63,9 @@
 	</managerEvent>
 	<managerEvent language="en_US" name="AgentLogin">
 		<managerEventInstance class="EVENT_FLAG_AGENT">
+			<since>
+				<version>12.0.0</version>
+			</since>
 			<synopsis>Raised when an Agent has logged in.</synopsis>
 			<syntax>
 				<channel_snapshot/>
@@ -72,9 +81,15 @@
 	</managerEvent>
 	<managerEvent language="en_US" name="AgentLogoff">
 		<managerEventInstance class="EVENT_FLAG_AGENT">
+			<since>
+				<version>12.0.0</version>
+			</since>
 			<synopsis>Raised when an Agent has logged off.</synopsis>
 			<syntax>
-				<xi:include xpointer="xpointer(/docs/managerEvent[@name='AgentLogin']/managerEventInstance/syntax/parameter)" />
+				<channel_snapshot/>
+				<parameter name="Agent">
+					<para>Agent ID of the agent.</para>
+				</parameter>
 				<parameter name="Logintime">
 					<para>The number of seconds the agent was logged in.</para>
 				</parameter>
@@ -86,6 +101,9 @@
 	</managerEvent>
 	<managerEvent language="en_US" name="ChannelTalkingStart">
 		<managerEventInstance class="EVENT_FLAG_CLASS">
+			<since>
+				<version>12.4.0</version>
+			</since>
 			<synopsis>Raised when talking is detected on a channel.</synopsis>
 			<syntax>
 				<channel_snapshot/>
@@ -98,6 +116,9 @@
 	</managerEvent>
 	<managerEvent language="en_US" name="ChannelTalkingStop">
 		<managerEventInstance class="EVENT_FLAG_CLASS">
+			<since>
+				<version>12.4.0</version>
+			</since>
 			<synopsis>Raised when talking is no longer detected on a channel.</synopsis>
 			<syntax>
 				<channel_snapshot/>
@@ -273,7 +294,7 @@ static struct ast_channel_snapshot_base *channel_snapshot_base_create(struct ast
 		return NULL;
 	}
 
-	if (ast_string_field_init(snapshot, 256)) {
+	if (ast_string_field_init(snapshot, 256) || ast_string_field_init_extended(snapshot, protocol_id)) {
 		ao2_ref(snapshot, -1);
 		return NULL;
 	}
@@ -284,9 +305,14 @@ static struct ast_channel_snapshot_base *channel_snapshot_base_create(struct ast
 	ast_string_field_set(snapshot, userfield, ast_channel_userfield(chan));
 	ast_string_field_set(snapshot, uniqueid, ast_channel_uniqueid(chan));
 	ast_string_field_set(snapshot, language, ast_channel_language(chan));
+	ast_string_field_set(snapshot, tenantid, ast_channel_tenantid(chan));
 
 	snapshot->creationtime = ast_channel_creationtime(chan);
 	snapshot->tech_properties = ast_channel_tech(chan)->properties;
+
+	if (ast_channel_tech(chan)->get_pvt_uniqueid) {
+		ast_string_field_set(snapshot, protocol_id, ast_channel_tech(chan)->get_pvt_uniqueid(chan));
+	}
 
 	return snapshot;
 }
@@ -937,8 +963,8 @@ void ast_channel_publish_final_snapshot(struct ast_channel *chan)
 		return;
 	}
 
-	ao2_unlink(channel_cache, update->old_snapshot);
-	ao2_unlink(channel_cache_by_name, update->old_snapshot);
+	ao2_find(channel_cache, ast_channel_uniqueid(chan), OBJ_SEARCH_KEY | OBJ_UNLINK | OBJ_NODATA);
+	ao2_find(channel_cache_by_name, ast_channel_name(chan), OBJ_SEARCH_KEY | OBJ_UNLINK | OBJ_NODATA);
 
 	ast_channel_snapshot_set(chan, NULL);
 
@@ -1091,17 +1117,15 @@ void ast_channel_publish_snapshot(struct ast_channel *chan)
 	 * snapshot is not in the cache.
 	 */
 	ao2_wrlock(channel_cache);
-	if (update->old_snapshot) {
-		ao2_unlink_flags(channel_cache, update->old_snapshot, OBJ_NOLOCK);
-	}
+	ao2_find(channel_cache, ast_channel_uniqueid(chan), OBJ_SEARCH_KEY | OBJ_UNLINK | OBJ_NODATA | OBJ_NOLOCK);
+
 	ao2_link_flags(channel_cache, update->new_snapshot, OBJ_NOLOCK);
 	ao2_unlock(channel_cache);
 
 	/* The same applies here. */
 	ao2_wrlock(channel_cache_by_name);
-	if (update->old_snapshot) {
-		ao2_unlink_flags(channel_cache_by_name, update->old_snapshot, OBJ_NOLOCK);
-	}
+	ao2_find(channel_cache_by_name, ast_channel_name(chan), OBJ_SEARCH_KEY | OBJ_UNLINK | OBJ_NODATA | OBJ_NOLOCK);
+
 	ao2_link_flags(channel_cache_by_name, update->new_snapshot, OBJ_NOLOCK);
 	ao2_unlock(channel_cache_by_name);
 
@@ -1150,13 +1174,43 @@ void ast_channel_publish_blob(struct ast_channel *chan, struct stasis_message_ty
 void ast_channel_publish_varset(struct ast_channel *chan, const char *name, const char *value)
 {
 	struct ast_json *blob;
+	enum ast_utf8_replace_result result;
+	char *new_value = NULL;
+	size_t new_value_size = 0;
 
 	ast_assert(name != NULL);
 	ast_assert(value != NULL);
 
+	/*
+	 * Call with new-value == NULL to just check for invalid UTF-8
+	 * sequences and get size of buffer needed.
+	 */
+	result = ast_utf8_replace_invalid_chars(new_value, &new_value_size,
+			value, strlen(value));
+
+	if (result == AST_UTF8_REPLACE_VALID) {
+		/*
+		 * If there were no invalid sequences, we can use
+		 * the value directly.
+		 */
+		new_value = (char *)value;
+	} else {
+		/*
+		 * If there were invalid sequences, we need to replace
+		 * them with the UTF-8 U+FFFD replacement character.
+		 */
+		new_value = ast_alloca(new_value_size);
+
+		result = ast_utf8_replace_invalid_chars(new_value, &new_value_size,
+			value, strlen(value));
+
+		ast_log(LOG_WARNING, "%s: The contents of variable '%s' had invalid UTF-8 sequences which were replaced",
+			chan ? ast_channel_name(chan) : "GLOBAL", name);
+	}
+
 	blob = ast_json_pack("{s: s, s: s}",
 			     "variable", name,
-			     "value", value);
+			     "value", new_value);
 	if (!blob) {
 		ast_log(LOG_ERROR, "Error creating message\n");
 		return;
@@ -1266,14 +1320,15 @@ struct ast_json *ast_channel_snapshot_to_json(
 	}
 
 	json_chan = ast_json_pack(
-		/* Broken up into groups of three for readability */
-		"{ s: s, s: s, s: s,"
+		/* Broken up into groups for readability */
+		"{ s: s, s: s, s: s, s: s,"
 		"  s: o, s: o, s: s,"
 		"  s: o, s: o, s: s }",
 		/* First line */
 		"id", snapshot->base->uniqueid,
 		"name", snapshot->base->name,
 		"state", ast_state2str(snapshot->state),
+		"protocol_id", snapshot->base->protocol_id,
 		/* Second line */
 		"caller", ast_json_name_number(
 			snapshot->caller->name, snapshot->caller->number),
@@ -1287,9 +1342,17 @@ struct ast_json *ast_channel_snapshot_to_json(
 		"creationtime", ast_json_timeval(snapshot->base->creationtime, NULL),
 		"language", snapshot->base->language);
 
+	if (!ast_strlen_zero(snapshot->caller->rdnis)) {
+		ast_json_object_set(json_chan, "caller_rdnis", ast_json_string_create(snapshot->caller->rdnis));
+	}
+
 	if (snapshot->ari_vars && !AST_LIST_EMPTY(snapshot->ari_vars)) {
 		ast_json_object_set(json_chan, "channelvars", ast_json_channel_vars(snapshot->ari_vars));
 	}
+
+        if (!ast_strlen_zero(snapshot->base->tenantid)) {
+                ast_json_object_set(json_chan, "tenantid", ast_json_string_create(snapshot->base->tenantid));
+        }
 
 	return json_chan;
 }
@@ -1554,6 +1617,13 @@ static struct ast_json *hold_to_json(struct stasis_message *message,
 		"channel", json_channel);
 }
 
+
+static struct ast_json *tone_detect_to_json(struct stasis_message *message,
+	const struct stasis_message_sanitizer *sanitize)
+{
+	return channel_blob_to_json(message, "ChannelToneDetected", sanitize);
+}
+
 static struct ast_json *unhold_to_json(struct stasis_message *message,
 	const struct stasis_message_sanitizer *sanitize)
 {
@@ -1571,6 +1641,175 @@ static struct ast_json *unhold_to_json(struct stasis_message *message,
 		"type", "ChannelUnhold",
 		"timestamp", ast_json_timeval(*tv, NULL),
 		"channel", json_channel);
+}
+
+static const char *state2str(enum ast_control_transfer state) {
+	switch (state) {
+	case AST_TRANSFER_FAILED:
+		return "channel_declined";
+	case AST_TRANSFER_SUCCESS:
+		return "channel_answered";
+	case AST_TRANSFER_PROGRESS:
+		return "channel_progress";
+	case AST_TRANSFER_UNAVAILABLE:
+		return "channel_declined";
+	default:
+		return "invalid";
+	}
+}
+
+static struct ast_json *ari_transfer_to_json(struct stasis_message *msg,
+	const struct stasis_message_sanitizer *sanitize)
+{
+	struct ast_json *json_channel, *res;
+	struct ast_json *refer_json, *referred_json, *dest_json;
+	const struct timeval *tv = stasis_message_timestamp(msg);
+	struct ast_ari_transfer_message *transfer_msg = stasis_message_data(msg);
+
+	dest_json = ast_json_pack("{s: s, s: s}",
+		"protocol_id", transfer_msg->protocol_id,
+		"destination", transfer_msg->destination);
+	if (!dest_json) {
+		return NULL;
+	}
+
+	if (AST_VECTOR_SIZE(transfer_msg->refer_params) > 0) {
+		struct ast_json *params = ast_json_array_create();
+		if (!params) {
+			return NULL;
+		}
+		for (int i = 0; i < AST_VECTOR_SIZE(transfer_msg->refer_params); ++i) {
+			struct ast_refer_param param = AST_VECTOR_GET(transfer_msg->refer_params, i);
+			ast_json_array_append(params, ast_json_pack("{s: s, s: s}",
+								    "parameter_name", param.param_name,
+								    "parameter_value", param.param_value));
+		}
+		ast_json_object_set(dest_json, "additional_protocol_params", params);
+	}
+
+	refer_json = ast_json_pack("{s: o}",
+		"requested_destination", dest_json);
+	if (!refer_json) {
+		return NULL;
+	}
+	if (transfer_msg->dest) {
+		struct ast_json *dest_chan_json;
+
+		dest_chan_json = ast_channel_snapshot_to_json(transfer_msg->dest, sanitize);
+		ast_json_object_set(refer_json, "destination_channel", dest_chan_json);
+	}
+	if (transfer_msg->dest_peer) {
+		struct ast_json *peer_chan_json;
+
+		peer_chan_json = ast_channel_snapshot_to_json(transfer_msg->dest_peer, sanitize);
+		ast_json_object_set(refer_json, "connected_channel", peer_chan_json);
+	}
+	if (transfer_msg->dest_bridge) {
+		struct ast_json *dest_bridge_json;
+
+		dest_bridge_json = ast_bridge_snapshot_to_json(transfer_msg->dest_bridge, sanitize);
+		ast_json_object_set(refer_json, "bridge", dest_bridge_json);
+	}
+
+	json_channel = ast_channel_snapshot_to_json(transfer_msg->source, sanitize);
+	if (!json_channel) {
+		return NULL;
+	}
+
+	referred_json = ast_json_pack("{s: o}",
+		"source_channel", json_channel);
+	if (!referred_json) {
+		return NULL;
+	}
+	if (transfer_msg->source_peer) {
+		struct ast_json *peer_chan_json;
+
+		peer_chan_json = ast_channel_snapshot_to_json(transfer_msg->source_peer, sanitize);
+		ast_json_object_set(referred_json, "connected_channel", peer_chan_json);
+	}
+	if (transfer_msg->source_bridge) {
+		struct ast_json *source_bridge_json;
+
+		source_bridge_json = ast_bridge_snapshot_to_json(transfer_msg->source_bridge, sanitize);
+		ast_json_object_set(referred_json, "bridge", source_bridge_json);
+	}
+
+	res = ast_json_pack("{s: s, s: o, s: o, s: o}",
+		"type", "ChannelTransfer",
+		"timestamp", ast_json_timeval(*tv, NULL),
+		"refer_to", refer_json,
+		"referred_by", referred_json);
+	if (!res) {
+		return NULL;
+	}
+
+	if (transfer_msg->state != AST_TRANSFER_INVALID) {
+		ast_json_object_set(res, "state", ast_json_string_create(state2str(transfer_msg->state)));
+	}
+	return res;
+}
+
+static void ari_transfer_dtor(void *obj)
+{
+	struct ast_ari_transfer_message *msg = obj;
+
+	ao2_cleanup(msg->source);
+	ao2_cleanup(msg->source_bridge);
+	ao2_cleanup(msg->source_peer);
+	ao2_cleanup(msg->dest);
+	ao2_cleanup(msg->dest_bridge);
+	ao2_cleanup(msg->dest_peer);
+	ao2_cleanup(msg->refer_params);
+	ast_free(msg->referred_by);
+	ast_free(msg->protocol_id);
+}
+
+struct ast_ari_transfer_message *ast_ari_transfer_message_create(struct ast_channel *originating_chan, const char *referred_by,
+								 const char *exten, const char *protocol_id, struct ast_channel *dest,
+								 struct ast_refer_params *params, enum ast_control_transfer state)
+{
+	struct ast_ari_transfer_message *msg;
+	msg = ao2_alloc(sizeof(*msg), ari_transfer_dtor);
+	if (!msg) {
+		return NULL;
+	}
+
+	msg->refer_params = params;
+	ao2_ref(msg->refer_params, +1);
+
+	msg->state = state;
+
+	ast_channel_lock(originating_chan);
+	msg->source = ao2_bump(ast_channel_snapshot(originating_chan));
+	ast_channel_unlock(originating_chan);
+	if (!msg->source) {
+		ao2_cleanup(msg);
+		return NULL;
+	}
+
+	if (dest) {
+		ast_channel_lock(dest);
+		msg->dest = ao2_bump(ast_channel_snapshot(dest));
+		ast_channel_unlock(dest);
+		if (!msg->dest) {
+			ao2_cleanup(msg);
+			return NULL;
+		}
+	}
+
+	msg->referred_by = ast_strdup(referred_by);
+	if (!msg->referred_by) {
+		ao2_cleanup(msg);
+		return NULL;
+	}
+	ast_copy_string(msg->destination, exten, sizeof(msg->destination));
+	msg->protocol_id = ast_strdup(protocol_id);
+	if (!msg->protocol_id) {
+		ao2_cleanup(msg);
+		return NULL;
+	}
+
+	return msg;
 }
 
 /*!
@@ -1606,8 +1845,6 @@ STASIS_MESSAGE_TYPE_DEFN(ast_channel_fax_type);
 STASIS_MESSAGE_TYPE_DEFN(ast_channel_hangup_handler_type);
 STASIS_MESSAGE_TYPE_DEFN(ast_channel_moh_start_type);
 STASIS_MESSAGE_TYPE_DEFN(ast_channel_moh_stop_type);
-STASIS_MESSAGE_TYPE_DEFN(ast_channel_monitor_start_type);
-STASIS_MESSAGE_TYPE_DEFN(ast_channel_monitor_stop_type);
 STASIS_MESSAGE_TYPE_DEFN(ast_channel_mixmonitor_start_type);
 STASIS_MESSAGE_TYPE_DEFN(ast_channel_mixmonitor_stop_type);
 STASIS_MESSAGE_TYPE_DEFN(ast_channel_mixmonitor_mute_type);
@@ -1624,6 +1861,12 @@ STASIS_MESSAGE_TYPE_DEFN(ast_channel_talking_start,
 STASIS_MESSAGE_TYPE_DEFN(ast_channel_talking_stop,
 	.to_ami = talking_stop_to_ami,
 	.to_json = talking_stop_to_json,
+	);
+STASIS_MESSAGE_TYPE_DEFN(ast_channel_tone_detect,
+	.to_json = tone_detect_to_json,
+	);
+STASIS_MESSAGE_TYPE_DEFN(ast_channel_transfer_request_type,
+	.to_json = ari_transfer_to_json,
 	);
 
 /*! @} */
@@ -1654,8 +1897,6 @@ static void stasis_channels_cleanup(void)
 	STASIS_MESSAGE_TYPE_CLEANUP(ast_channel_hangup_handler_type);
 	STASIS_MESSAGE_TYPE_CLEANUP(ast_channel_moh_start_type);
 	STASIS_MESSAGE_TYPE_CLEANUP(ast_channel_moh_stop_type);
-	STASIS_MESSAGE_TYPE_CLEANUP(ast_channel_monitor_start_type);
-	STASIS_MESSAGE_TYPE_CLEANUP(ast_channel_monitor_stop_type);
 	STASIS_MESSAGE_TYPE_CLEANUP(ast_channel_mixmonitor_start_type);
 	STASIS_MESSAGE_TYPE_CLEANUP(ast_channel_mixmonitor_stop_type);
 	STASIS_MESSAGE_TYPE_CLEANUP(ast_channel_mixmonitor_mute_type);
@@ -1663,6 +1904,8 @@ static void stasis_channels_cleanup(void)
 	STASIS_MESSAGE_TYPE_CLEANUP(ast_channel_agent_logoff_type);
 	STASIS_MESSAGE_TYPE_CLEANUP(ast_channel_talking_start);
 	STASIS_MESSAGE_TYPE_CLEANUP(ast_channel_talking_stop);
+	STASIS_MESSAGE_TYPE_CLEANUP(ast_channel_tone_detect);
+	STASIS_MESSAGE_TYPE_CLEANUP(ast_channel_transfer_request_type);
 }
 
 int ast_stasis_channels_init(void)
@@ -1709,13 +1952,13 @@ int ast_stasis_channels_init(void)
 	res |= STASIS_MESSAGE_TYPE_INIT(ast_channel_hangup_handler_type);
 	res |= STASIS_MESSAGE_TYPE_INIT(ast_channel_moh_start_type);
 	res |= STASIS_MESSAGE_TYPE_INIT(ast_channel_moh_stop_type);
-	res |= STASIS_MESSAGE_TYPE_INIT(ast_channel_monitor_start_type);
-	res |= STASIS_MESSAGE_TYPE_INIT(ast_channel_monitor_stop_type);
 	res |= STASIS_MESSAGE_TYPE_INIT(ast_channel_mixmonitor_start_type);
 	res |= STASIS_MESSAGE_TYPE_INIT(ast_channel_mixmonitor_stop_type);
 	res |= STASIS_MESSAGE_TYPE_INIT(ast_channel_mixmonitor_mute_type);
 	res |= STASIS_MESSAGE_TYPE_INIT(ast_channel_talking_start);
 	res |= STASIS_MESSAGE_TYPE_INIT(ast_channel_talking_stop);
+	res |= STASIS_MESSAGE_TYPE_INIT(ast_channel_tone_detect);
+	res |= STASIS_MESSAGE_TYPE_INIT(ast_channel_transfer_request_type);
 
 	return res;
 }

@@ -68,6 +68,9 @@
 
 /*** DOCUMENTATION
 	<application name="FollowMe" language="en_US">
+		<since>
+			<version>1.6.1.0</version>
+		</since>
 		<synopsis>
 			Find-Me/Follow-Me application.
 		</synopsis>
@@ -836,8 +839,9 @@ static struct ast_channel *wait_for_winner(struct findme_user_listptr *findme_us
 								}
 							}
 						} else {
-							ast_verb(3, "Skip playback of caller name / norecording\n");
-							tmpuser->state = 2;
+							ast_debug(1, "Taking call with no prompt\n");
+							ast_frfree(f);
+							return tmpuser->ochan;
 						}
 						break;
 					case AST_CONTROL_BUSY:
@@ -964,11 +968,6 @@ static struct ast_channel *wait_for_winner(struct findme_user_listptr *findme_us
 						break;
 					}
 				}
-				if (!tpargs->enable_callee_prompt && tmpuser) {
-					ast_debug(1, "Taking call with no prompt\n");
-					ast_frfree(f);
-					return tmpuser->ochan;
-				}
 				if (tmpuser && tmpuser->state == 3 && f->frametype == AST_FRAME_DTMF) {
 					int cmp_len;
 
@@ -1072,6 +1071,7 @@ static struct ast_channel *findmeexec(struct fm_args *tpargs, struct ast_channel
 		ast_copy_string(num, nm->number, sizeof(num));
 		for (number = num; number; number = rest) {
 			struct ast_channel *outbound;
+			struct ast_format_cap *caps;
 
 			rest = strchr(number, '&');
 			if (rest) {
@@ -1101,8 +1101,15 @@ static struct ast_channel *findmeexec(struct fm_args *tpargs, struct ast_channel
 						? "/n" : "/m");
 			}
 
-			outbound = ast_request("Local", ast_channel_nativeformats(caller), NULL, caller,
-				tmpuser->dialarg, &dg);
+			/* Capture nativeformats reference in case it gets changed */
+			ast_channel_lock(caller);
+			caps = ao2_bump(ast_channel_nativeformats(caller));
+			ast_channel_unlock(caller);
+
+			outbound = ast_request("Local", caps, NULL, caller, tmpuser->dialarg, &dg);
+
+			ao2_cleanup(caps);
+
 			if (!outbound) {
 				ast_log(LOG_WARNING, "Unable to allocate a channel for Local/%s cause: %s\n",
 					tmpuser->dialarg, ast_cause2str(dg));
@@ -1527,8 +1534,7 @@ static int app_exec(struct ast_channel *chan, const char *data)
 
 		/* Update connected line to caller if available. */
 		if (targs->pending_out_connected_update) {
-			if (ast_channel_connected_line_sub(outbound, caller, &targs->connected_out, 0) &&
-				ast_channel_connected_line_macro(outbound, caller, &targs->connected_out, 1, 0)) {
+			if (ast_channel_connected_line_sub(outbound, caller, &targs->connected_out, 0)) {
 				ast_channel_update_connected_line(caller, &targs->connected_out, NULL);
 			}
 		}
@@ -1553,8 +1559,7 @@ static int app_exec(struct ast_channel *chan, const char *data)
 
 		/* Update connected line to winner if changed. */
 		if (targs->pending_in_connected_update) {
-			if (ast_channel_connected_line_sub(caller, outbound, &targs->connected_in, 0) &&
-				ast_channel_connected_line_macro(caller, outbound, &targs->connected_in, 0, 0)) {
+			if (ast_channel_connected_line_sub(caller, outbound, &targs->connected_in, 0)) {
 				ast_channel_update_connected_line(outbound, &targs->connected_in, NULL);
 			}
 		}

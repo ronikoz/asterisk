@@ -41,6 +41,9 @@
 
 /*** DOCUMENTATION
 	<function name="REALTIME" language="en_US">
+		<since>
+			<version>1.4.0</version>
+		</since>
 		<synopsis>
 			RealTime Read/Write Functions.
 		</synopsis>
@@ -77,6 +80,9 @@
 		</see-also>
 	</function>
 	<function name="REALTIME_STORE" language="en_US">
+		<since>
+			<version>1.6.0</version>
+		</since>
 		<synopsis>
 			RealTime Store Function.
 		</synopsis>
@@ -100,6 +106,9 @@
 		</see-also>
 	</function>
 	<function name="REALTIME_DESTROY" language="en_US">
+		<since>
+			<version>1.6.0</version>
+		</since>
 		<synopsis>
 			RealTime Destroy Function.
 		</synopsis>
@@ -128,6 +137,9 @@
 		</see-also>
 	</function>
 	<function name="REALTIME_FIELD" language="en_US">
+		<since>
+			<version>1.6.2.0</version>
+		</since>
 		<synopsis>
 			RealTime query function.
 		</synopsis>
@@ -151,6 +163,9 @@
 		</see-also>
 	</function>
 	<function name="REALTIME_HASH" language="en_US">
+		<since>
+			<version>1.6.2.0</version>
+		</since>
 		<synopsis>
 			RealTime query function.
 		</synopsis>

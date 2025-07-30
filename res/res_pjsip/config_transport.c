@@ -577,6 +577,22 @@ static void copy_state_to_transport(struct ast_sip_transport *transport)
 	memcpy(&transport->external_address, &transport->state->external_signaling_address, sizeof(transport->external_signaling_address));
 }
 
+#ifdef HAVE_PJSIP_TLS_TRANSPORT_RESTART
+static int file_stat_cmp(const struct stat *old_stat, const struct stat *new_stat)
+{
+	return old_stat->st_size != new_stat->st_size
+		|| old_stat->st_mtime != new_stat->st_mtime
+#if defined(HAVE_STRUCT_STAT_ST_MTIM)
+		|| old_stat->st_mtim.tv_nsec != new_stat->st_mtim.tv_nsec
+#elif defined(HAVE_STRUCT_STAT_ST_MTIMENSEC)
+		|| old_stat->st_mtimensec != new_stat->st_mtimensec
+#elif defined(HAVE_STRUCT_STAT_ST_MTIMESPEC)
+		|| old_stat->st_mtimespec.tv_nsec != new_stat->st_mtimespec.tv_nsec
+#endif
+        ;
+}
+#endif
+
 static int has_state_changed(struct ast_sip_transport_state *a, struct ast_sip_transport_state *b)
 {
 	if (a->type != b->type) {
@@ -618,6 +634,12 @@ static int has_state_changed(struct ast_sip_transport_state *a, struct ast_sip_t
 		return -1;
 	}
 
+#ifdef HAVE_PJSIP_TLS_TRANSPORT_RESTART
+	if (file_stat_cmp(&a->cert_file_stat, &b->cert_file_stat) || file_stat_cmp(&a->privkey_file_stat, &b->privkey_file_stat)) {
+		return -1;
+	}
+#endif
+
 	return 0;
 }
 
@@ -657,6 +679,12 @@ static int transport_apply(const struct ast_sorcery *sorcery, void *obj)
 	if (!temp_state) {
 		ast_log(LOG_ERROR, "Transport '%s' failed to allocate memory\n", transport_id);
 		return -1;
+	}
+
+	if (transport->async_operations != 1) {
+		ast_log(LOG_WARNING, "The async_operations setting on transport '%s' has been set to '%d'. The setting can no longer be set and is always 1.\n",
+			transport_id, transport->async_operations);
+		transport->async_operations = 1;
 	}
 
 	perm_state = find_internal_state_by_transport(transport);
@@ -736,11 +764,31 @@ static int transport_apply(const struct ast_sorcery *sorcery, void *obj)
 		res = PJ_SUCCESS;
 	} else if (!transport->allow_reload && perm_state) {
 		/* We inherit the transport from perm state, untouched */
-		ast_log(LOG_WARNING, "Transport '%s' is not fully reloadable, not reloading: protocol, bind, TLS, TCP, ToS, or CoS options.\n", transport_id);
+#ifdef HAVE_PJSIP_TLS_TRANSPORT_RESTART
+		ast_log(LOG_NOTICE, "Transport '%s' is not fully reloadable, not reloading: protocol, bind, TLS (everything but certificate and private key if filename is unchanged), TCP, ToS, or CoS options.\n", transport_id);
+		/* If this is a TLS transport and the certificate or private key has changed, then restart the transport so it uses the new one */
+		if (transport->type == AST_TRANSPORT_TLS) {
+			if (strcmp(perm_state->transport->cert_file, temp_state->transport->cert_file) ||
+				strcmp(perm_state->transport->privkey_file, temp_state->transport->privkey_file)) {
+				ast_log(LOG_ERROR, "Unable to restart TLS transport '%s' as certificate or private key filename has changed\n",
+					transport_id);
+			} else if (file_stat_cmp(&perm_state->state->cert_file_stat, &temp_state->state->cert_file_stat) ||
+				file_stat_cmp(&perm_state->state->privkey_file_stat, &temp_state->state->privkey_file_stat)) {
+				if (pjsip_tls_transport_restart(perm_state->state->factory, &perm_state->state->host, NULL) != PJ_SUCCESS) {
+					ast_log(LOG_ERROR, "Failed to restart TLS transport '%s'\n", transport_id);
+				} else {
+					sprintf(perm_state->state->factory->info, "%s", transport_id);
+				}
+			}
+		}
+#else
+		ast_log(LOG_NOTICE, "Transport '%s' is not fully reloadable, not reloading: protocol, bind, TLS, TCP, ToS, or CoS options.\n", transport_id);
+#endif
 		temp_state->state->transport = perm_state->state->transport;
 		perm_state->state->transport = NULL;
 		temp_state->state->factory = perm_state->state->factory;
 		perm_state->state->factory = NULL;
+
 		res = PJ_SUCCESS;
 	} else if (transport->type == AST_TRANSPORT_UDP) {
 
@@ -780,17 +828,55 @@ static int transport_apply(const struct ast_sorcery *sorcery, void *obj)
 	} else if (transport->type == AST_TRANSPORT_TCP) {
 		pjsip_tcp_transport_cfg cfg;
 		static int option = 1;
+		int sockopt_count = 0;
 
 		pjsip_tcp_transport_cfg_default(&cfg, temp_state->state->host.addr.sa_family);
 		cfg.bind_addr = temp_state->state->host;
 		cfg.async_cnt = transport->async_operations;
 		set_qos(transport, &cfg.qos_params);
+
 		/* sockopt_params.options is copied to each newly connected socket */
-		cfg.sockopt_params.options[0].level = pj_SOL_TCP();
-		cfg.sockopt_params.options[0].optname = pj_TCP_NODELAY();
-		cfg.sockopt_params.options[0].optval = &option;
-		cfg.sockopt_params.options[0].optlen = sizeof(option);
-		cfg.sockopt_params.cnt = 1;
+		cfg.sockopt_params.options[sockopt_count].level = pj_SOL_TCP();
+		cfg.sockopt_params.options[sockopt_count].optname = pj_TCP_NODELAY();
+		cfg.sockopt_params.options[sockopt_count].optval = &option;
+		cfg.sockopt_params.options[sockopt_count].optlen = sizeof(option);
+		sockopt_count++;
+
+		if (transport->tcp_keepalive_enable) {
+#if defined(PJ_MAX_SOCKOPT_PARAMS) && PJ_MAX_SOCKOPT_PARAMS >= 5
+			ast_log(LOG_DEBUG, "TCP Keepalive enabled for transport '%s'. Idle Time: %d, Interval: %d, Count: %d\n",
+				ast_sorcery_object_get_id(obj), transport->tcp_keepalive_idle_time, transport->tcp_keepalive_interval_time, transport->tcp_keepalive_probe_count);
+
+			cfg.sockopt_params.options[sockopt_count].level = pj_SOL_SOCKET();
+			cfg.sockopt_params.options[sockopt_count].optname = SO_KEEPALIVE;
+			cfg.sockopt_params.options[sockopt_count].optval = &option;
+			cfg.sockopt_params.options[sockopt_count].optlen = sizeof(option);
+			sockopt_count++;
+
+			cfg.sockopt_params.options[sockopt_count].level = pj_SOL_TCP();
+			cfg.sockopt_params.options[sockopt_count].optname = TCP_KEEPIDLE;
+			cfg.sockopt_params.options[sockopt_count].optval = &transport->tcp_keepalive_idle_time;
+			cfg.sockopt_params.options[sockopt_count].optlen = sizeof(transport->tcp_keepalive_idle_time);
+			sockopt_count++;
+
+			cfg.sockopt_params.options[sockopt_count].level = pj_SOL_TCP();
+			cfg.sockopt_params.options[sockopt_count].optname = TCP_KEEPINTVL;
+			cfg.sockopt_params.options[sockopt_count].optval = &transport->tcp_keepalive_interval_time;
+			cfg.sockopt_params.options[sockopt_count].optlen = sizeof(transport->tcp_keepalive_interval_time);
+			sockopt_count++;
+
+			cfg.sockopt_params.options[sockopt_count].level = pj_SOL_TCP();
+			cfg.sockopt_params.options[sockopt_count].optname = TCP_KEEPCNT;
+			cfg.sockopt_params.options[sockopt_count].optval = &transport->tcp_keepalive_probe_count;
+			cfg.sockopt_params.options[sockopt_count].optlen = sizeof(transport->tcp_keepalive_probe_count);
+			sockopt_count++;
+#else
+			ast_log(LOG_WARNING, "TCP keepalive settings for '%s' not set due to PJSIP built without support for setting all options. Consider using bundled PJSIP.\n",
+				ast_sorcery_object_get_id(obj));
+#endif
+		}
+
+		cfg.sockopt_params.cnt = sockopt_count;
 
 		for (i = 0; i < BIND_TRIES && res != PJ_SUCCESS; i++) {
 			if (perm_state && perm_state->state && perm_state->state->factory
@@ -805,6 +891,7 @@ static int transport_apply(const struct ast_sorcery *sorcery, void *obj)
 	} else if (transport->type == AST_TRANSPORT_TLS) {
 #if defined(PJ_HAS_SSL_SOCK) && PJ_HAS_SSL_SOCK != 0
 		static int option = 1;
+		int sockopt_count = 0;
 
 		if (transport->async_operations > 1 && ast_compare_versions(pj_get_version(), "2.5.0") < 0) {
 			ast_log(LOG_ERROR, "Transport: %s: When protocol=tls and pjproject version < 2.5.0, async_operations can't be > 1\n",
@@ -816,11 +903,47 @@ static int transport_apply(const struct ast_sorcery *sorcery, void *obj)
 		set_qos(transport, &temp_state->state->tls.qos_params);
 
 		/* sockopt_params.options is copied to each newly connected socket */
-		temp_state->state->tls.sockopt_params.options[0].level = pj_SOL_TCP();
-		temp_state->state->tls.sockopt_params.options[0].optname = pj_TCP_NODELAY();
-		temp_state->state->tls.sockopt_params.options[0].optval = &option;
-		temp_state->state->tls.sockopt_params.options[0].optlen = sizeof(option);
-		temp_state->state->tls.sockopt_params.cnt = 1;
+		temp_state->state->tls.sockopt_params.options[sockopt_count].level = pj_SOL_TCP();
+		temp_state->state->tls.sockopt_params.options[sockopt_count].optname = pj_TCP_NODELAY();
+		temp_state->state->tls.sockopt_params.options[sockopt_count].optval = &option;
+		temp_state->state->tls.sockopt_params.options[sockopt_count].optlen = sizeof(option);
+		sockopt_count++;
+
+		if (transport->tcp_keepalive_enable) {
+#if defined(PJ_MAX_SOCKOPT_PARAMS) && PJ_MAX_SOCKOPT_PARAMS >= 5
+			ast_log(LOG_DEBUG, "TCP Keepalive enabled for transport '%s'. Idle Time: %d, Interval: %d, Count: %d\n",
+				ast_sorcery_object_get_id(obj), transport->tcp_keepalive_idle_time, transport->tcp_keepalive_interval_time, transport->tcp_keepalive_probe_count);
+
+			temp_state->state->tls.sockopt_params.options[sockopt_count].level = pj_SOL_SOCKET();
+			temp_state->state->tls.sockopt_params.options[sockopt_count].optname = SO_KEEPALIVE;
+			temp_state->state->tls.sockopt_params.options[sockopt_count].optval = &option;
+			temp_state->state->tls.sockopt_params.options[sockopt_count].optlen = sizeof(option);
+			sockopt_count++;
+
+			temp_state->state->tls.sockopt_params.options[sockopt_count].level = pj_SOL_TCP();
+			temp_state->state->tls.sockopt_params.options[sockopt_count].optname = TCP_KEEPIDLE;
+			temp_state->state->tls.sockopt_params.options[sockopt_count].optval = &transport->tcp_keepalive_idle_time;
+			temp_state->state->tls.sockopt_params.options[sockopt_count].optlen = sizeof(transport->tcp_keepalive_idle_time);
+			sockopt_count++;
+
+			temp_state->state->tls.sockopt_params.options[sockopt_count].level = pj_SOL_TCP();
+			temp_state->state->tls.sockopt_params.options[sockopt_count].optname = TCP_KEEPINTVL;
+			temp_state->state->tls.sockopt_params.options[sockopt_count].optval = &transport->tcp_keepalive_interval_time;
+			temp_state->state->tls.sockopt_params.options[sockopt_count].optlen = sizeof(transport->tcp_keepalive_interval_time);
+			sockopt_count++;
+
+			temp_state->state->tls.sockopt_params.options[sockopt_count].level = pj_SOL_TCP();
+			temp_state->state->tls.sockopt_params.options[sockopt_count].optname = TCP_KEEPCNT;
+			temp_state->state->tls.sockopt_params.options[sockopt_count].optval = &transport->tcp_keepalive_probe_count;
+			temp_state->state->tls.sockopt_params.options[sockopt_count].optlen = sizeof(transport->tcp_keepalive_probe_count);
+			sockopt_count++;
+#else
+			ast_log(LOG_WARNING, "TCP keepalive settings for '%s' not set due to PJSIP built without support for setting all options. Consider using bundled PJSIP.\n",
+				ast_sorcery_object_get_id(obj));
+#endif
+		}
+
+		temp_state->state->tls.sockopt_params.cnt = sockopt_count;
 
 		for (i = 0; i < BIND_TRIES && res != PJ_SUCCESS; i++) {
 			if (perm_state && perm_state->state && perm_state->state->factory
@@ -832,6 +955,20 @@ static int transport_apply(const struct ast_sorcery *sorcery, void *obj)
 			res = pjsip_tls_transport_start2(ast_sip_get_pjsip_endpoint(), &temp_state->state->tls,
 				&temp_state->state->host, NULL, transport->async_operations,
 				&temp_state->state->factory);
+		}
+
+		if (res == PJ_SUCCESS) {
+			/*
+			 * PJSIP uses 100 bytes to store information, and during a restart will repopulate
+			 * the field so ensure there is sufficient space - even though we'll revert it after.
+			 */
+			temp_state->state->factory->info = pj_pool_alloc(
+				temp_state->state->factory->pool, (MAX(MAX_OBJECT_FIELD, 100) + 1));
+			/*
+			 * Store transport id on the factory instance so it can be used
+			 * later to look up the transport state.
+			 */
+			sprintf(temp_state->state->factory->info, "%s", transport_id);
 		}
 #else
 		ast_log(LOG_ERROR, "Transport: %s: PJSIP has not been compiled with TLS transport support, ensure OpenSSL development packages are installed\n",
@@ -902,18 +1039,34 @@ static int transport_tls_file_handler(const struct aco_option *opt, struct ast_v
 		ast_string_field_set(transport, ca_list_file, var->value);
 	} else if (!strcasecmp(var->name, "ca_list_path")) {
 #ifdef HAVE_PJ_SSL_CERT_LOAD_FROM_FILES2
-		state->tls.ca_list_path = pj_str((char*)var->value);
+		state->tls.ca_list_path = pj_str((char *)var->value);
 		ast_string_field_set(transport, ca_list_path, var->value);
 #else
 		ast_log(LOG_WARNING, "Asterisk has been built against a version of pjproject that does not "
 				"support the 'ca_list_path' option. Please upgrade to version 2.4 or later.\n");
 #endif
 	} else if (!strcasecmp(var->name, "cert_file")) {
-		state->tls.cert_file = pj_str((char*)var->value);
+		state->tls.cert_file = pj_str((char *)var->value);
 		ast_string_field_set(transport, cert_file, var->value);
+#ifdef HAVE_PJSIP_TLS_TRANSPORT_RESTART
+		if (stat(var->value, &state->cert_file_stat)) {
+			ast_log(LOG_ERROR, "Failed to stat certificate file '%s' for transport '%s' due to '%s'\n",
+				var->value, ast_sorcery_object_get_id(obj), strerror(errno));
+			return -1;
+		}
+		ast_sorcery_object_set_has_dynamic_contents(transport);
+#endif
 	} else if (!strcasecmp(var->name, "priv_key_file")) {
-		state->tls.privkey_file = pj_str((char*)var->value);
+		state->tls.privkey_file = pj_str((char *)var->value);
 		ast_string_field_set(transport, privkey_file, var->value);
+#ifdef HAVE_PJSIP_TLS_TRANSPORT_RESTART
+		if (stat(var->value, &state->privkey_file_stat)) {
+			ast_log(LOG_ERROR, "Failed to stat private key file '%s' for transport '%s' due to '%s'\n",
+				var->value, ast_sorcery_object_get_id(obj), strerror(errno));
+			return -1;
+		}
+		ast_sorcery_object_set_has_dynamic_contents(transport);
+#endif
 	}
 
 	return 0;
@@ -1057,11 +1210,13 @@ static int transport_tls_bool_handler(const struct aco_option *opt, struct ast_v
 	}
 
 	if (!strcasecmp(var->name, "verify_server")) {
-		state->tls.verify_server = ast_true(var->value) ? PJ_TRUE : PJ_FALSE;
+		state->verify_server = ast_true(var->value);
 	} else if (!strcasecmp(var->name, "verify_client")) {
 		state->tls.verify_client = ast_true(var->value) ? PJ_TRUE : PJ_FALSE;
 	} else if (!strcasecmp(var->name, "require_client_cert")) {
 		state->tls.require_client_cert = ast_true(var->value) ? PJ_TRUE : PJ_FALSE;
+	} else if (!strcasecmp(var->name, "allow_wildcard_certs")) {
+		state->allow_wildcard_certs = ast_true(var->value);
 	} else {
 		return -1;
 	}
@@ -1078,7 +1233,7 @@ static int verify_server_to_str(const void *obj, const intptr_t *args, char **bu
 		return -1;
 	}
 
-	*buf = ast_strdup(AST_YESNO(state->tls.verify_server));
+	*buf = ast_strdup(AST_YESNO(state->verify_server));
 
 	return 0;
 }
@@ -1111,6 +1266,20 @@ static int require_client_cert_to_str(const void *obj, const intptr_t *args, cha
 	return 0;
 }
 
+static int allow_wildcard_certs_to_str(const void *obj, const intptr_t *args, char **buf)
+{
+	struct ast_sip_transport_state *state = find_state_by_transport(obj);
+
+	if (!state) {
+		return -1;
+	}
+
+	*buf = ast_strdup(AST_YESNO(state->allow_wildcard_certs));
+	ao2_ref(state, -1);
+
+	return 0;
+}
+
 /*! \brief Custom handler for TLS method setting */
 static int transport_tls_method_handler(const struct aco_option *opt, struct ast_variable *var, void *obj)
 {
@@ -1127,11 +1296,17 @@ static int transport_tls_method_handler(const struct aco_option *opt, struct ast
 		state->tls.method = PJSIP_SSL_UNSPECIFIED_METHOD;
 	} else if (!strcasecmp(var->value, "tlsv1")) {
 		state->tls.method = PJSIP_TLSV1_METHOD;
-#ifdef HAVE_PJSIP_TLS_TRANSPORT_PROTO
+#ifdef HAVE_PJSIP_TLS_1_1
 	} else if (!strcasecmp(var->value, "tlsv1_1")) {
 		state->tls.method = PJSIP_TLSV1_1_METHOD;
+#endif
+#ifdef HAVE_PJSIP_TLS_1_2
 	} else if (!strcasecmp(var->value, "tlsv1_2")) {
 		state->tls.method = PJSIP_TLSV1_2_METHOD;
+#endif
+#ifdef HAVE_PJSIP_TLS_1_3
+	} else if (!strcasecmp(var->value, "tlsv1_3")) {
+		state->tls.method = PJSIP_TLSV1_3_METHOD;
 #endif
 	} else if (!strcasecmp(var->value, "sslv2")) {
 		state->tls.method = PJSIP_SSLV2_METHOD;
@@ -1149,9 +1324,14 @@ static int transport_tls_method_handler(const struct aco_option *opt, struct ast
 static const char *tls_method_map[] = {
 	[PJSIP_SSL_UNSPECIFIED_METHOD] = "unspecified",
 	[PJSIP_TLSV1_METHOD] = "tlsv1",
-#ifdef HAVE_PJSIP_TLS_TRANSPORT_PROTO
+#ifdef HAVE_PJSIP_TLS_1_1
 	[PJSIP_TLSV1_1_METHOD] = "tlsv1_1",
+#endif
+#ifdef HAVE_PJSIP_TLS_1_2
 	[PJSIP_TLSV1_2_METHOD] = "tlsv1_2",
+#endif
+#ifdef HAVE_PJSIP_TLS_1_3
+	[PJSIP_TLSV1_3_METHOD] = "tlsv1_3",
 #endif
 	[PJSIP_SSLV2_METHOD] = "sslv2",
 	[PJSIP_SSLV3_METHOD] = "sslv3",
@@ -1260,7 +1440,7 @@ static int transport_tls_cipher_handler(const struct aco_option *opt, struct ast
 			continue;
 		}
 		if (ARRAY_LEN(state->ciphers) <= state->tls.ciphers_num) {
-			ast_log(LOG_ERROR, "Too many ciphers specified\n");
+			ast_log(LOG_ERROR, "Too many ciphers specified (maximum allowed is %d)\n", SIP_TLS_MAX_CIPHERS);
 			res = -1;
 			break;
 		}
@@ -1653,7 +1833,12 @@ int ast_sip_initialize_sorcery_transport(void)
 	ast_sorcery_object_field_register_custom(sorcery, "transport", "verify_server", "", transport_tls_bool_handler, verify_server_to_str, NULL, 0, 0);
 	ast_sorcery_object_field_register_custom(sorcery, "transport", "verify_client", "", transport_tls_bool_handler, verify_client_to_str, NULL, 0, 0);
 	ast_sorcery_object_field_register_custom(sorcery, "transport", "require_client_cert", "", transport_tls_bool_handler, require_client_cert_to_str, NULL, 0, 0);
+	ast_sorcery_object_field_register_custom(sorcery, "transport", "allow_wildcard_certs", "", transport_tls_bool_handler, allow_wildcard_certs_to_str, NULL, 0, 0);
 	ast_sorcery_object_field_register_custom(sorcery, "transport", "method", "", transport_tls_method_handler, tls_method_to_str, NULL, 0, 0);
+	ast_sorcery_object_field_register(sorcery, "transport", "tcp_keepalive_enable", "no", OPT_BOOL_T, 1, FLDSET(struct ast_sip_transport, tcp_keepalive_enable));
+	ast_sorcery_object_field_register(sorcery, "transport", "tcp_keepalive_idle_time", "30", OPT_INT_T, 0, FLDSET(struct ast_sip_transport, tcp_keepalive_idle_time));
+	ast_sorcery_object_field_register(sorcery, "transport", "tcp_keepalive_interval_time", "1", OPT_INT_T, 0, FLDSET(struct ast_sip_transport, tcp_keepalive_interval_time));
+	ast_sorcery_object_field_register(sorcery, "transport", "tcp_keepalive_probe_count", "5", OPT_INT_T, 0, FLDSET(struct ast_sip_transport, tcp_keepalive_probe_count));
 #if defined(PJ_HAS_SSL_SOCK) && PJ_HAS_SSL_SOCK != 0
 	ast_sorcery_object_field_register_custom(sorcery, "transport", "cipher", "", transport_tls_cipher_handler, transport_tls_cipher_to_str, NULL, 0, 0);
 #endif

@@ -44,6 +44,9 @@
 
 /*** DOCUMENTATION
 	<function name="MESSAGE" language="en_US">
+		<since>
+			<version>10.0.0</version>
+		</since>
 		<synopsis>
 			Create a message or read fields from a message.
 		</synopsis>
@@ -104,6 +107,9 @@
 		</see-also>
 	</function>
 	<function name="MESSAGE_DATA" language="en_US">
+		<since>
+			<version>10.0.0</version>
+		</since>
 		<synopsis>
 			Read or write custom data attached to a message.
 		</synopsis>
@@ -127,6 +133,9 @@
 		</see-also>
 	</function>
 	<application name="MessageSend" language="en_US">
+		<since>
+			<version>10.0.0</version>
+		</since>
 		<synopsis>
 			Send a text message.
 		</synopsis>
@@ -178,13 +187,16 @@
 						Successfully passed on to the protocol handler, but delivery has not necessarily been guaranteed.
 					</value>
 					<value name="FAILURE">
-						The protocol handler reported that it was unabled to deliver the message for some reason.
+						The protocol handler reported that it was unable to deliver the message for some reason.
 					</value>
 				</variable>
 			</variablelist>
 		</description>
 	</application>
 	<manager name="MessageSend" language="en_US">
+		<since>
+			<version>11.0.0</version>
+		</since>
 		<synopsis>
 			Send an out of call message to an endpoint.
 		</synopsis>
@@ -1435,7 +1447,7 @@ struct ast_msg_data {
 	/*! The length of this structure plus the actual length of the allocated buffer */
 	size_t length;
 	enum ast_msg_data_source_type source;
-	/*! These are indices into the buffer where teh attribute starts */
+	/*! These are indices into the buffer where the attribute starts */
 	int attribute_value_offsets[__AST_MSG_DATA_ATTR_LAST];
 	/*! The buffer containing the NULL separated attributes */
 	char buf[0];
@@ -1614,7 +1626,7 @@ int ast_msg_tech_register(const struct ast_msg_tech *tech)
 		ast_rwlock_unlock(&msg_techs_lock);
 		return -1;
 	}
-	ast_verb(3, "Message technology '%s' registered.\n", tech->name);
+	ast_verb(5, "Message technology '%s' registered.\n", tech->name);
 
 	ast_rwlock_unlock(&msg_techs_lock);
 
@@ -1649,7 +1661,7 @@ int ast_msg_tech_unregister(const struct ast_msg_tech *tech)
 		return -1;
 	}
 
-	ast_verb(2, "Message technology '%s' unregistered.\n", tech->name);
+	ast_verb(5, "Message technology '%s' unregistered.\n", tech->name);
 
 	return 0;
 }
@@ -1674,7 +1686,7 @@ int ast_msg_handler_register(const struct ast_msg_handler *handler)
 		ast_rwlock_unlock(&msg_handlers_lock);
 		return -1;
 	}
-	ast_verb(2, "Message handler '%s' registered.\n", handler->name);
+	ast_verb(5, "Message handler '%s' registered.\n", handler->name);
 
 	ast_rwlock_unlock(&msg_handlers_lock);
 
@@ -1710,7 +1722,7 @@ int ast_msg_handler_unregister(const struct ast_msg_handler *handler)
 		return -1;
 	}
 
-	ast_verb(3, "Message handler '%s' unregistered.\n", handler->name);
+	ast_verb(5, "Message handler '%s' unregistered.\n", handler->name);
 	return 0;
 }
 

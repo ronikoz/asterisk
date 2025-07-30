@@ -37,6 +37,9 @@
 
 /*** DOCUMENTATION
 	<function name="DIALPLAN_EXISTS" language="en_US">
+		<since>
+			<version>1.6.0</version>
+		</since>
 		<synopsis>
 			Checks the existence of a dialplan target.
 		</synopsis>
@@ -50,6 +53,9 @@
 		</description>
 	</function>
 	<function name="VALID_EXTEN" language="en_US">
+		<since>
+			<version>11.0.0</version>
+		</since>
 		<synopsis>
 			Determine whether an extension exists or not.
 		</synopsis>

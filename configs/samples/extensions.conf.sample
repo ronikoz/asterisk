@@ -61,8 +61,9 @@ writeprotect=no
 ; this value to "yes" !!
 ; Please, if you try this out, and are forced to return to the
 ; old pattern matcher, please report your reasons in a bug report
-; on https://issues.asterisk.org. We have made good progress in providing
-; something compatible with the old matcher; help us finish the job!
+; on https://github.com/asterisk/asterisk/issues. We have made good
+; progress in providing something compatible with the old matcher; help us
+; finish the job!
 ;
 ; This value can be switched at runtime using the cli command "dialplan set extenpatternmatchnew true"
 ; or "dialplan set extenpatternmatchnew false", so you can experiment to your hearts content.
@@ -123,8 +124,6 @@ clearglobalvars=no
 CONSOLE=Console/dsp				; Console interface for demo
 ;CONSOLE=DAHDI/1
 ;CONSOLE=Phone/phone0
-IAXINFO=guest					; IAXtel username/password
-;IAXINFO=myuser:mypass
 TRUNK=DAHDI/G2					; Trunk interface
 ;
 ; Note the 'G2' in the TRUNK variable above. It specifies which group (defined
@@ -223,7 +222,7 @@ TRUNKMSD=1					; MSD digits to strip (usually 1 or 0)
 ;
 ; so that dialtone remains even after dialing a 9.  Please note that ignorepat
 ; only works with channels which receive dialtone from the PBX, such as DAHDI,
-; Phone, and VPB.  Other channels, such as IAX2, PJSIP, SIP and MGCP, which generate
+; Phone, and VPB.  Other channels, such as IAX2, PJSIP, and SIP, which generate
 ; generate their own dialtone and converse with the PBX only after a number is
 ; complete, are generally unaffected by ignorepat (unless DISA or another method
 ; is used to generate a dialtone after answering the channel).
@@ -290,8 +289,7 @@ include => dundi-e164-switch
 ; ARG1 is the extension to Dial
 ;
 ; Extension "s" is not a wildcard extension that matches "anything".
-; In macros, it is the start extension. In most other cases,
-; you have to goto "s" to execute that extension.
+; In most other cases, you have to goto "s" to execute that extension.
 ;
 ; Note: In old versions of Asterisk the PBX in some cases defaulted to
 ; extension "s" when a given extension was wrong (like in AMI originate).
@@ -365,12 +363,12 @@ include => trunkld
 
 [local]
 ;
-; Master context for local, toll-free, and iaxtel calls only
+; Master context for local and toll-free calls only
 ;
 ignorepat => 9
 include => default
 include => trunklocal
-include => iaxtel700
+include => iax2-trunk
 include => trunktollfree
 include => iaxprovider
 
@@ -426,14 +424,14 @@ exten => _X!,1,Verbose(2,Performing ISN lookup for ${EXTEN})
 	same => n,GotoIf($["${FILTER(0-9,${SUFFIX})}" != "${SUFFIX}"]?fn-CONGESTION,1)
                                                                         ; filter out bad characters per the README-SERIOUSLY.best-practices.txt document
 	same => n,Set(TIMEOUT(absolute)=10800)
-	same => n,Set(isnresult=${ENUMLOOKUP(${EXTEN},sip,,1,freenum.org)})     ; perform our lookup with freenum.org
+	same => n,Set(isnresult=${ENUMLOOKUP(${EXTEN},pjsip,,1,freenum.org)})     ; perform our lookup with freenum.org
 	same => n,GotoIf($["${isnresult}" != ""]?from)
 	same => n,Set(DIALSTATUS=CONGESTION)
 	same => n,Goto(fn-CONGESTION,1)
 	same => n(from),Set(__SIPFROMUSER=${CALLERID(num)})
 	same => n,GotoIf($["${GLOBAL(FREENUMDOMAIN)}" = ""]?dial)               ; check if we set the FREENUMDOMAIN global variable in [global]
 	same => n,Set(__SIPFROMDOMAIN=${GLOBAL(FREENUMDOMAIN)})                 ;    if we did set it, then we'll use it for our outbound dialing domain
-	same => n(dial),Dial(SIP/${isnresult},40)
+	same => n(dial),Dial(PJSIP/${isnresult},40)
 	same => n,Goto(fn-${DIALSTATUS},1)
 
 exten => fn-BUSY,1,Busy()
@@ -551,7 +549,7 @@ exten => s,1,ChanIsAvail(${ARG1},s)			; s is for ANY call
 	same => n,GotoIf($["${AVAILSTATUS}" = "1"]?autoanswer:fail)
 	same => n(autoanswer),Set(_ALERT_INFO="RA")			; This is for the PolyComs
 	same => n,SIPAddHeader(Call-Info: Answer-After=0)	; This is for the Grandstream, Snoms, and Others
-	same => n,NoOp()					; Add others here and Post on the Wiki!!!!
+	same => n,NoOp()					; Add others here and Post on the Docs!!!!
 	same => n,Dial(${ARG1})
 	same => n(fail),Hangup()
 
@@ -661,9 +659,7 @@ exten => _X.,1,Gosub(sub-page,s,1(SIP/${EXTEN}))
 
 [public]
 ;
-; ATTENTION: If your Asterisk is connected to the internet and you do
-; not have allowguest=no in sip.conf, everybody out there may use your
-; public context without authentication.  In that case you want to
+; ATTENTION: If your Asterisk is connected to the internet,
 ; double check which services you offer to the world.
 ;
 include => demo
@@ -675,26 +671,19 @@ include => demo
 ;
 include => demo
 
-;
-; An extension like the one below can be used for FWD, Nikotel, sipgate etc.
-; Note that you must have a [sipprovider] section in sip.conf
-;
-;exten => _41X.,1,Dial(SIP/${FILTER(0-9,${EXTEN:2})}@sipprovider,,r)
-
 ; Real extensions would go here. Generally you want real extensions to be
 ; 4 or 5 digits long (although there is no such requirement) and start with a
 ; single digit that is fairly large (like 6 or 7) so that you have plenty of
 ; room to overlap extensions and menu options without conflict.  You can alias
 ; them with names, too, and use global variables
 
-;exten => 6245,hint,SIP/Grandstream1&SIP/Xlite1(Joe Schmoe) ; Channel hints for presence
-;exten => 6245,1,Dial(SIP/Grandstream1,20,rt)	; permit transfer
+;exten => 6245,hint,PJSIP/Grandstream1&PJSIP/Xlite1(Joe Schmoe) ; Channel hints for presence
+;exten => 6245,1,Dial(PJSIP/Grandstream1,20,rt)	; permit transfer
 ;exten => 6245,n(dial),Dial(${HINT},20,rtT)	; Use hint as listed
 ;exten => 6245,n,VoiceMail(6245,u)		; Voicemail (unavailable)
 ;exten => 6245,s+1,Hangup			; s+1, same as n
 ;exten => 6245,dial+101,VoiceMail(6245,b)	; Voicemail (busy)
 ;exten => 6361,1,Dial(IAX2/JaneDoe,,rm)		; ring without time limit
-;exten => 6389,1,Dial(MGCP/aaln/1@192.168.0.14)
 ;exten => 6390,1,Dial(JINGLE/caller/callee) ; Dial via jingle using labels
 ;exten => 6391,1,Dial(JINGLE/asterisk@digium.com/mogorman@astjab.org) ;Dial via jingle using asterisk as the transport and calling mogorman.
 ;exten => 6394,1,Dial(Local/6275/n)		; this will dial ${MARK}
@@ -709,7 +698,7 @@ include => demo
 ;exten => wil,1,Goto(6236,1)
 
 ;If you want to subscribe to the status of a parking space, this is
-;how you do it. Subscribe to extension 6600 in sip, and you will see
+;how you do it. Subscribe to extension 6600, and you will see
 ;the status of the first parking lot with this extensions' help
 ;exten => 6600,hint,park:701@parkedcalls
 ;exten => 6600,1,noop
@@ -759,7 +748,7 @@ include => demo
 ;
 ;exten => t,1,Goto(s,goodbye)
 ;
-; this is the context our internal SIP hardphones use (see sip.conf)
+; this is the context our internal SIP hardphones use
 ;
 ;[acme-internal]
 ;exten => s,1,Answer()
@@ -800,28 +789,6 @@ include => demo
 ; ...
 ; include => time
 ;
-; Note: if you're geographically spread out, you can have SIP extensions
-; specify their own local timezone in sip.conf as:
-;
-; [boi]
-; type=friend
-; context=acme-internal
-; callerid="Boise Ofc. <2083451111>"
-; ...
-; ; use system-wide default timezone of MST7MDT
-;
-; [lws]
-; type=friend
-; context=acme-internal
-; callerid="Lewiston Ofc. <2087431111>"
-; ...
-; setvar=timezone=PST8PDT
-;
-; "timezone" isn't a 'reserved' name in any way, and other places where
-; the timezone is significant (e.g. calls to "SayUnixTime()", etc) will
-; require modification as well.  Note that voicemail.conf already has
-; a mechanism for timezones.
-;
 
 [time]
 exten => _X.,30000(time),NoOp(Time: ${EXTEN} ${timezone})
@@ -832,7 +799,6 @@ exten => _X.,30000(time),NoOp(Time: ${EXTEN} ${timezone})
 	same => n,Set(FUTURETIME=$[${EPOCH} + 12])
 	same => n,SayUnixTime(${FUTURETIME},Zulu,HNS)
 	same => n,SayPhonetic(z)
-; use the timezone associated with the extension (sip only), or system-wide
 ; default if one hasn't been set.
 	same => n,SayUnixTime(${FUTURETIME},${timezone},HNS)
 	same => n,Playback(spy-local)
@@ -862,3 +828,53 @@ exten => _X.,40000(ani),NoOp(ANI: ${EXTEN})
 ; "core show functions" will list all dialplan functions
 ; "core show function <COMMAND>" will show you more information about
 ; one function. Remember that function names are UPPER CASE.
+
+; Examples using PJSIPNotify application.
+;[generate-notify]
+;
+; Send a NOTIFY with the following headers inside the SIP dialog for the current channel:
+;
+;	Event: Test
+;	X-Data: Fun
+;
+;exten => 6880,1,noOp()
+;    same => n,Answer()
+;    same => n,PJSIPNotify(,&Event=Test&X-Data=Fun)
+;    same => n,Wait(1)
+;    same => n,Hangup()
+;
+; Send a NOTIFY with the following headers to bob's custom uri. This requries a
+; default outbound endpoint to be configured in pjsip.conf.
+;
+;	Event: Test
+;	X-Data: Over
+;
+;exten => 6881,1,noOp()
+;    same => n,Answer()
+;    same => n,PJSIPNotify(<sip:bob@127.0.0.1:5260>,&Event=Test&X-Data=Over)
+;    same => n,Wait(1)
+;    same => n,Hangup()
+;
+; Send a NOTIFY with the the custom headers defined in pjsip_notify.conf under
+; 'custom-notify-1' inside the SIP dialog for the current channel.
+;
+;exten => 6882,1,noOp()
+;    same => n,Answer()
+;    same => n,PJSIPNotify(,custom-notify-1)
+;    same => n,Wait(1)
+;    same => n,Hangup()
+; Send a NOTIFY with the following headers and body to bob's custom uri. This
+; requries a default outbound endpoint to be configured in pjsip.conf.
+;
+;	Event: Custom
+;
+;	Content-Type: application/voicemail
+;	Content-Length:    14
+;
+;	check-messages
+;
+;exten => 6882,1,noOp()
+;    same => n,Answer()
+;    same => n,PJSIPNotify(,&Event=Custom&Content-type=application/voicemail&Content=check-messages&Content=)
+;    same => n,Wait(1)
+;    same => n,Hangup()

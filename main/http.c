@@ -203,6 +203,19 @@ const char *ast_get_http_method(enum ast_http_method method)
 	return NULL;
 }
 
+enum ast_http_method ast_get_http_method_from_string(const char *method)
+{
+	int x;
+
+	for (x = 0; x < ARRAY_LEN(ast_http_methods_text); x++) {
+		if (ast_strings_equal(method, ast_http_methods_text[x].text)) {
+			return ast_http_methods_text[x].method;
+		}
+	}
+
+	return AST_HTTP_UNKNOWN;
+}
+
 const char *ast_http_ftype2mtype(const char *ftype)
 {
 	int x;
@@ -396,13 +409,13 @@ static int httpstatus_callback(struct ast_tcptls_session_instance *ser,
 
 	ast_str_append(&out, 0, "<tr><td><i>Server</i></td><td><b>%s</b></td></tr>\r\n", http_server_name);
 	ast_str_append(&out, 0, "<tr><td><i>Prefix</i></td><td><b>%s</b></td></tr>\r\n", prefix);
-	ast_str_append(&out, 0, "<tr><td><i>Bind Address</i></td><td><b>%s</b></td></tr>\r\n",
-		       ast_sockaddr_stringify_addr(&global_http_server->args.old_address));
-	ast_str_append(&out, 0, "<tr><td><i>Bind Port</i></td><td><b>%s</b></td></tr>\r\n",
-		       ast_sockaddr_stringify_port(&global_http_server->args.old_address));
+	if (global_http_server) {
+		ast_str_append(&out, 0, "<tr><td><i>Bind Address</i></td><td><b>%s</b></td></tr>\r\n",
+			       ast_sockaddr_stringify(&global_http_server->args.old_address));
+	}
 	if (http_tls_cfg.enabled) {
-		ast_str_append(&out, 0, "<tr><td><i>SSL Bind Port</i></td><td><b>%s</b></td></tr>\r\n",
-			       ast_sockaddr_stringify_port(&https_desc.old_address));
+		ast_str_append(&out, 0, "<tr><td><i>TLS Bind Address</i></td><td><b>%s</b></td></tr>\r\n",
+			       ast_sockaddr_stringify(&https_desc.old_address));
 	}
 	ast_str_append(&out, 0, "<tr><td colspan=\"2\"><hr></td></tr>\r\n");
 	for (v = get_vars; v; v = v->next) {
@@ -1353,30 +1366,18 @@ struct ast_json *ast_http_get_json(
  * get post variables from client Request Entity-Body, if content type is
  * application/x-www-form-urlencoded
  */
-struct ast_variable *ast_http_get_post_vars(
-	struct ast_tcptls_session_instance *ser, struct ast_variable *headers)
+struct ast_variable *ast_http_parse_post_form(char *buf, int content_length,
+	const char *content_type)
 {
-	int content_length = 0;
 	struct ast_variable *v, *post_vars=NULL, *prev = NULL;
 	char *var, *val;
-	RAII_VAR(char *, buf, NULL, ast_free);
-	RAII_VAR(char *, type, get_content_type(headers), ast_free);
 
 	/* Use errno to distinguish errors from no params */
 	errno = 0;
 
-	if (ast_strlen_zero(type) ||
-	    strcasecmp(type, "application/x-www-form-urlencoded")) {
+	if (ast_strlen_zero(content_type) ||
+		strcasecmp(content_type, "application/x-www-form-urlencoded") != 0) {
 		/* Content type is not form data.  Don't read the body. */
-		return NULL;
-	}
-
-	buf = ast_http_get_contents(&content_length, ser, headers);
-	if (!buf || !content_length) {
-		/*
-		 * errno already set
-		 * or it is not an error to have zero content
-		 */
 		return NULL;
 	}
 
@@ -1399,6 +1400,34 @@ struct ast_variable *ast_http_get_post_vars(
 	}
 
 	return post_vars;
+}
+
+struct ast_variable *ast_http_get_post_vars(
+	struct ast_tcptls_session_instance *ser, struct ast_variable *headers)
+{
+	int content_length = 0;
+	RAII_VAR(char *, buf, NULL, ast_free);
+	RAII_VAR(char *, type, get_content_type(headers), ast_free);
+
+	/* Use errno to distinguish errors from no params */
+	errno = 0;
+
+	if (ast_strlen_zero(type) ||
+	    strcasecmp(type, "application/x-www-form-urlencoded")) {
+		/* Content type is not form data.  Don't read the body. */
+		return NULL;
+	}
+
+	buf = ast_http_get_contents(&content_length, ser, headers);
+	if (!buf || !content_length) {
+		/*
+		 * errno already set
+		 * or it is not an error to have zero content
+		 */
+		return NULL;
+	}
+
+	return ast_http_parse_post_form(buf, content_length, type);
 }
 
 static int handle_uri(struct ast_tcptls_session_instance *ser, char *uri,
@@ -1634,6 +1663,50 @@ struct ast_http_auth *ast_http_get_auth(struct ast_variable *headers)
 	}
 
 	return NULL;
+}
+
+struct ast_variable *ast_http_create_basic_auth_header(const char *userid,
+	const char *password)
+{
+	int encoded_size = 0;
+	int userinfo_len = 0;
+	RAII_VAR(char *, userinfo, NULL, ast_free);
+	char *encoded_userinfo = NULL;
+	struct ast_variable *auth_header = NULL;
+
+	if (ast_strlen_zero(userid)) {
+		return NULL;
+	}
+
+	if (strchr(userid, ':')) {
+		userinfo = ast_strdup(userid);
+		userinfo_len = strlen(userinfo);
+	} else {
+		if (ast_strlen_zero(password)) {
+			return NULL;
+		}
+		userinfo_len = ast_asprintf(&userinfo, "%s:%s", userid, password);
+	}
+	if (!userinfo) {
+		return NULL;
+	}
+
+	/*
+	 * The header value is "Basic " + base64(userinfo).
+	 * Doubling the userinfo length then adding the length
+	 * of the "Basic " prefix is a conservative estimate of the
+	 * final encoded size.
+	 */
+	encoded_size = userinfo_len * 2 * sizeof(char) + 1 + BASIC_LEN;
+	encoded_userinfo = ast_alloca(encoded_size);
+	strcpy(encoded_userinfo, BASIC_PREFIX); /* Safe */
+	ast_base64encode(encoded_userinfo + BASIC_LEN, (unsigned char *)userinfo,
+		userinfo_len, encoded_size - BASIC_LEN);
+
+	auth_header = ast_variable_new("Authorization",
+		encoded_userinfo, "");
+
+	return auth_header;
 }
 
 int ast_http_response_status_line(const char *buf, const char *version, int code)

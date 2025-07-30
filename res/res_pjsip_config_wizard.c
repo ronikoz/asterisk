@@ -65,25 +65,24 @@
 			endpoint, aor, contact, auth and phoneprov objects necessary for a phone to
 			get phone provisioning information, register, and make and receive calls.
 			A hint is also created in the default context for extension 1000.</para>
-			<para> </para>
-
-			<para>[myphone]</para>
-			<para>type = wizard</para>
-			<para>sends_auth = no</para>
-			<para>accepts_auth = yes</para>
-			<para>sends_registrations = no</para>
-			<para>accepts_registrations = yes</para>
-			<para>has_phoneprov = yes</para>
-			<para>transport = ipv4</para>
-			<para>has_hint = yes</para>
-			<para>hint_exten = 1000</para>
-			<para>inbound_auth/username = testname</para>
-			<para>inbound_auth/password = test password</para>
-			<para>endpoint/allow = ulaw</para>
-			<para>endpoint/context = default</para>
-			<para>phoneprov/MAC = 001122aa4455</para>
-			<para>phoneprov/PROFILE = profile1</para>
-			<para> </para>
+			<example title="myphone">
+			[myphone]
+			type = wizard
+			sends_auth = no
+			accepts_auth = yes
+			sends_registrations = no
+			accepts_registrations = yes
+			has_phoneprov = yes
+			transport = ipv4
+			has_hint = yes
+			hint_exten = 1000
+			inbound_auth/username = testname
+			inbound_auth/password = test password
+			endpoint/allow = ulaw
+			endpoint/context = default
+			phoneprov/MAC = 001122aa4455
+			phoneprov/PROFILE = profile1
+			</example>
 
 			<para>The first 8 items are specific to the wizard.  The rest of the items
 			are passed verbatim to the underlying objects.</para>
@@ -92,28 +91,27 @@
 			<para>The following configuration snippet would create the
 			endpoint, aor, contact, auth, identify and registration objects necessary for a trunk
 			to another pbx or ITSP that requires registration.</para>
-			<para> </para>
-
-			<para>[mytrunk]</para>
-			<para>type = wizard</para>
-			<para>sends_auth = yes</para>
-			<para>accepts_auth = no</para>
-			<para>sends_registrations = yes</para>
-			<para>accepts_registrations = no</para>
-			<para>transport = ipv4</para>
-			<para>remote_hosts = sip1.myitsp.com:5060,sip2.myitsp.com:5060</para>
-			<para>outbound_auth/username = testname</para>
-			<para>outbound_auth/password = test password</para>
-			<para>endpoint/allow = ulaw</para>
-			<para>endpoint/context = default</para>
-			<para> </para>
+			<example title="mytrunk">
+			[mytrunk]
+			type = wizard
+			sends_auth = yes
+			accepts_auth = no
+			sends_registrations = yes
+			accepts_registrations = no
+			transport = ipv4
+			remote_hosts = sip1.myitsp.com:5060,sip2.myitsp.com:5060
+			outbound_auth/username = testname
+			outbound_auth/password = test password
+			endpoint/allow = ulaw
+			endpoint/context = default
+			</example>
 
 			<para>Of course, any of the items in either example could be placed into
 			templates and shared among wizard objects.</para>
 
 			<para> </para>
 			<para>For more information, visit:</para>
-			<para><literal>https://wiki.asterisk.org/wiki/display/AST/PJSIP+Configuration+Wizard</literal></para>
+			<para><literal>https://docs.asterisk.org/Configuration/Channel-Drivers/SIP/Configuring-res_pjsip/PJSIP-Configuration-Wizard/</literal></para>
 		</description>
 
 		<configFile name="pjsip_wizard.conf">
@@ -121,7 +119,7 @@
 				<synopsis>Provides config wizard.</synopsis>
 				<description>
 				<para>For more information, visit:</para>
-				<para><literal>https://wiki.asterisk.org/wiki/display/AST/PJSIP+Configuration+Wizard</literal></para>
+				<para><literal>https://docs.asterisk.org/Configuration/Channel-Drivers/SIP/Configuring-res_pjsip/PJSIP-Configuration-Wizard/</literal></para>
 				</description>
 				<configOption name="type">
 					<synopsis>Must be 'wizard'.</synopsis>
@@ -216,7 +214,7 @@
 					<para>Normal dialplan precedence rules apply so if there's already a hint for
 					this extension in <literal>hint_context</literal>, this one will be ignored.
 					For more information, visit: </para>
-					<para><literal>https://wiki.asterisk.org/wiki/display/AST/PJSIP+Configuration+Wizard</literal></para>
+					<para><literal>https://docs.asterisk.org/Configuration/Channel-Drivers/SIP/Configuring-res_pjsip/PJSIP-Configuration-Wizard/</literal></para>
 					</description>
 				</configOption>
 				<configOption name="hint_application">
@@ -227,17 +225,17 @@
 					<para>   <literal>exten =&gt; &lt;hint_exten&gt;,1,&lt;hint_application&gt;</literal></para>
 					<para> </para>
 					<para>You can specify any valid extensions.conf application expression.</para>
-					<para>Examples: </para>
-					<para>   <literal>Dial(${HINT})</literal></para>
-					<para>   <literal>Gosub(stdexten,${EXTEN},1(${HINT}))</literal></para>
-					<para> </para>
+					<example title="Valid expressions">
+					Dial(${HINT})
+					Gosub(stdexten,${EXTEN},1(${HINT}))
+					</example>
 					<para>Any extensions.conf style variables specified are passed directly to the
 					dialplan.</para>
 					<para> </para>
 					<para>Normal dialplan precedence rules apply so if there's already a priority 1
 					application for this specific extension in <literal>hint_context</literal>,
 					this one will be ignored. For more information, visit: </para>
-					<para><literal>https://wiki.asterisk.org/wiki/display/AST/PJSIP+Configuration+Wizard</literal></para>
+					<para><literal>https://docs.asterisk.org/Configuration/Channel-Drivers/SIP/Configuring-res_pjsip/PJSIP-Configuration-Wizard/</literal></para>
 					</description>
 				</configOption>
 				<configOption name="endpoint&#47;*">
@@ -1032,9 +1030,6 @@ static void instance_created_observer(const char *name, struct ast_sorcery *sorc
 static void instance_destroying_observer(const char *name, struct ast_sorcery *sorcery);
 static void object_type_loaded_observer(const char *name,
 	const struct ast_sorcery *sorcery, const char *object_type, int reloaded);
-static void wizard_mapped_observer(const char *name, struct ast_sorcery *sorcery,
-	const char *object_type, struct ast_sorcery_wizard *wizard,
-	const char *wizard_args, void *wizard_data);
 static void object_type_registered_observer(const char *name,
 	struct ast_sorcery *sorcery, const char *object_type);
 
@@ -1044,7 +1039,6 @@ const static struct ast_sorcery_global_observer global_observer = {
 };
 
 struct ast_sorcery_instance_observer observer = {
-	.wizard_mapped = wizard_mapped_observer,
 	.object_type_registered = object_type_registered_observer,
 	.object_type_loaded = object_type_loaded_observer,
 };
@@ -1148,20 +1142,22 @@ static void object_type_loaded_observer(const char *name,
 	otw->last_config = cfg;
 }
 
-/*! \brief When each wizard is mapped, save it off to the vector. */
-static void wizard_mapped_observer(const char *name, struct ast_sorcery *sorcery,
-	const char *object_type, struct ast_sorcery_wizard *wizard,
-	const char *wizard_args, void *wizard_data)
+/*! \brief When each object type is registered, map a memory wizard to it. */
+static void object_type_registered_observer(const char *name,
+	struct ast_sorcery *sorcery, const char *object_type)
 {
+	struct ast_sorcery_wizard *wizard;
+	void *wizard_data;
 	struct object_type_wizard *otw;
 
-	if (!is_one_of(object_type, object_types)) {
-		/* Not interested. */
-		return;
-	}
+	if (is_one_of(object_type, object_types)) {
+		if (ast_sorcery_object_type_apply_wizard(sorcery, object_type,
+			"memory", "pjsip_wizard", AST_SORCERY_WIZARD_APPLY_READONLY | AST_SORCERY_WIZARD_APPLY_ALLOW_DUPLICATE,
+			&wizard, &wizard_data) != AST_SORCERY_APPLY_SUCCESS) {
+			ast_log(LOG_ERROR, "Unable to apply sangoma wizard to object type '%s'\n", object_type);
+			return;
+		}
 
-	/* We're only interested in memory wizards with the pjsip_wizard tag. */
-	if (wizard_args && !strcmp(wizard_args, "pjsip_wizard")) {
 		otw = ast_malloc(sizeof(*otw) + strlen(object_type) + 1);
 		if (!otw) {
 			return;
@@ -1179,15 +1175,7 @@ static void wizard_mapped_observer(const char *name, struct ast_sorcery *sorcery
 			ast_debug(1, "Wizard mapped for object_type '%s'\n", object_type);
 		}
 		AST_VECTOR_RW_UNLOCK(&object_type_wizards);
-	}
-}
 
-/*! \brief When each object type is registered, map a memory wizard to it. */
-static void object_type_registered_observer(const char *name,
-	struct ast_sorcery *sorcery, const char *object_type)
-{
-	if (is_one_of(object_type, object_types)) {
-		ast_sorcery_apply_wizard_mapping(sorcery, object_type, "memory", "pjsip_wizard", 0);
 	}
 }
 
@@ -1314,11 +1302,45 @@ static struct ast_cli_entry config_wizard_cli[] = {
 	AST_CLI_DEFINE(handle_export_primitives, "Export config wizard primitives"),
 };
 
+static int reload_module(void)
+{
+	ast_sorcery_reload(ast_sip_get_sorcery());
+	return 0;
+}
+
 static int load_module(void)
 {
 	AST_VECTOR_RW_INIT(&object_type_wizards, 12);
 	ast_sorcery_global_observer_add(&global_observer);
 	ast_cli_register_multiple(config_wizard_cli, ARRAY_LEN(config_wizard_cli));
+
+	/* If the PJSIP sorcery instance exists it means that we have been explicitly
+	 * loaded and things are potentially already set up. Since we won't receive any
+	 * observer callbacks informing us of this we add ourselves to the instance
+	 * as an observer in case it goes away, and determine which object types have
+	 * been registered and synthesize the observer callbacks for them. Once done
+	 * we force a reload so we are aware of the state of things.
+	 */
+	if (ast_sip_get_sorcery()) {
+		int i;
+
+		ast_module_ref(ast_module_info->self);
+		ast_sorcery_instance_observer_add(ast_sip_get_sorcery(), &observer);
+
+		/* See which object types already exist */
+		for (i = 0; i < ARRAY_LEN(object_types); ++i) {
+			if (!object_types[i]) {
+				break;
+			} else if (!ast_sorcery_get_object_type(ast_sip_get_sorcery(), object_types[i])) {
+				continue;
+			}
+
+			object_type_registered_observer("res_pjsip", ast_sip_get_sorcery(),
+				object_types[i]);
+		}
+
+		ast_sorcery_reload(ast_sip_get_sorcery());
+	}
 
 	return AST_MODULE_LOAD_SUCCESS;
 }
@@ -1336,6 +1358,7 @@ static int unload_module(void)
 AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_GLOBAL_SYMBOLS | AST_MODFLAG_LOAD_ORDER, "PJSIP Config Wizard",
 	.support_level = AST_MODULE_SUPPORT_CORE,
 	.load = load_module,
+	.reload = reload_module,
 	.unload = unload_module,
 	.load_pri = AST_MODPRI_REALTIME_DRIVER,
 );

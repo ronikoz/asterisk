@@ -48,6 +48,9 @@
 				<synopsis>Unused, but reserved.</synopsis>
 			</configObject>
 			<configObject name="user_profile">
+				<since>
+					<version>12.0.0</version>
+				</since>
 				<synopsis>A named profile to apply to specific callers.</synopsis>
 				<description><para>Callers in a ConfBridge have a profile associated with them
 				that determine their options. A configuration section is determined to be a
@@ -55,6 +58,9 @@
 				of <literal>user</literal>.
 				</para></description>
 				<configOption name="type">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>Define this configuration category as a user profile.</synopsis>
 					<description><para>The type parameter determines how a context in the
 					configuration file is interpreted.</para>
@@ -66,9 +72,15 @@
 					</description>
 				</configOption>
 				<configOption name="admin">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>Sets if the user is an admin or not</synopsis>
 				</configOption>
 				<configOption name="send_events" default="no">
+					<since>
+						<version>15.5.0</version>
+					</since>
 					<synopsis>Sets if events are send to the user</synopsis>
 					<description><para>If events are enabled for this bridge and this option is
 					set, users will receive events like join, leave, talking, etc. via text
@@ -78,6 +90,9 @@
 					interface.</para></description>
 				</configOption>
 				<configOption name="echo_events" default="yes">
+					<since>
+						<version>15.5.0</version>
+					</since>
 					<synopsis>Sets if events are echoed back to the user that
 					triggered them</synopsis>
 					<description><para>If events are enabled for this user and this option
@@ -86,21 +101,47 @@
 					</para></description>
 				</configOption>
 				<configOption name="marked">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>Sets if this is a marked user or not</synopsis>
 				</configOption>
 				<configOption name="startmuted">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>Sets if all users should start out muted</synopsis>
 				</configOption>
 				<configOption name="music_on_hold_when_empty">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>Play MOH when user is alone or waiting on a marked user</synopsis>
 				</configOption>
 				<configOption name="quiet">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>Silence enter/leave prompts and user intros for this user</synopsis>
 				</configOption>
+				<configOption name="hear_own_join_sound">
+					<since>
+						<version>16.26.0</version>
+						<version>18.12.0</version>
+						<version>19.4.0</version>
+					</since>
+					<synopsis>Determines if the user also hears the join sound when they enter a conference</synopsis>
+				</configOption>
 				<configOption name="announce_user_count">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>Sets if the number of users should be announced to the user</synopsis>
 				</configOption>
 				<configOption name="announce_user_count_all">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>Announce user count to all the other users when this user joins</synopsis>
 					<description><para>Sets if the number of users should be announced to all the other users
 					in the conference when this user joins. This option can be either set to 'yes' or
@@ -109,37 +150,78 @@
 					</para></description>
 				</configOption>
 				<configOption name="announce_only_user">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>Announce to a user when they join an empty conference</synopsis>
 				</configOption>
 				<configOption name="wait_marked">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>Sets if the user must wait for a marked user to enter before joining a conference</synopsis>
 				</configOption>
 				<configOption name="end_marked">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>Kick the user from the conference when the last marked user leaves</synopsis>
 				</configOption>
+				<configOption name="end_marked_any">
+					<since>
+						<version>16.29.0</version>
+						<version>18.15.0</version>
+						<version>19.7.0</version>
+					</since>
+					<synopsis>Kick the user from the conference when any marked user leaves</synopsis>
+				</configOption>
 				<configOption name="talk_detection_events">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>Set whether or not notifications of when a user begins and ends talking should be sent out as events over AMI</synopsis>
 				</configOption>
 				<configOption name="dtmf_passthrough">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>Sets whether or not DTMF should pass through the conference</synopsis>
 				</configOption>
 				<configOption name="announce_join_leave">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>Prompt user for their name when joining a conference and play it to the conference when they enter</synopsis>
 				</configOption>
 				<configOption name="announce_join_leave_review">
+					<since>
+						<version>13.0.0</version>
+					</since>
 					<synopsis>Prompt user for their name when joining a conference and play it to the conference when they enter.
 					The user will be asked to review the recording of their name before entering the conference.</synopsis>
 				</configOption>
 				<configOption name="pin">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>Sets a PIN the user must enter before joining the conference</synopsis>
 				</configOption>
 				<configOption name="music_on_hold_class">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>The MOH class to use for this user</synopsis>
 				</configOption>
 				<configOption name="announcement">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>Sound file to play to the user when they join a conference</synopsis>
 				</configOption>
 				<configOption name="denoise">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>Apply a denoise filter to the audio before mixing</synopsis>
 					<description><para>Sets whether or not a denoise filter should be applied
 					to the audio before mixing or not.  Off by default. Requires
@@ -151,6 +233,9 @@
 					</para></description>
 				</configOption>
 				<configOption name="dsp_drop_silence">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>Drop what Asterisk detects as silence from audio sent to the bridge</synopsis>
 					<description><para>
 					This option drops what Asterisk detects as silence from
@@ -161,6 +246,9 @@
 					</para></description>
 				</configOption>
 				<configOption name="dsp_silence_threshold">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>The number of milliseconds of silence necessary to declare talking stopped.</synopsis>
 					<description>
 						<para>The time in milliseconds of sound falling below the
@@ -194,6 +282,10 @@
 					</description>
 				</configOption>
 				<configOption name="dsp_talking_threshold">
+					<since>
+						<version>11.10.0</version>
+						<version>12.3.0</version>
+					</since>
 					<synopsis>Average magnitude threshold to determine talking.</synopsis>
 					<description>
 						<para>The minimum average magnitude per sample in a frame
@@ -224,6 +316,9 @@
 					</description>
 				</configOption>
 				<configOption name="jitterbuffer">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>Place a jitter buffer on the user's audio stream before audio mixing is performed</synopsis>
 					<description><para>
 						Enabling this option places a jitterbuffer on the user's audio stream
@@ -235,12 +330,22 @@
 					</para></description>
 				</configOption>
 				<configOption name="template">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>When using the CONFBRIDGE dialplan function, use a user profile as a template for creating a new temporary profile</synopsis>
 				</configOption>
 				<configOption name="timeout">
+					<since>
+						<version>13.7.0</version>
+					</since>
 					<synopsis>Kick the user out of the conference after this many seconds. 0 means there is no timeout for the user.</synopsis>
 				</configOption>
 				<configOption name="text_messaging" default="yes">
+					<since>
+						<version>16.10.0</version>
+						<version>17.4.0</version>
+					</since>
 					<synopsis>Sets if text messages are sent to the user.</synopsis>
 					<description><para>If text messaging is enabled for this user then
 					text messages will be sent to it. These may be events or from other
@@ -248,10 +353,17 @@
 					messages are sent to the user.</para></description>
 				</configOption>
 				<configOption name="answer_channel" default="yes">
+					<since>
+						<version>16.19.0</version>
+						<version>18.5.0</version>
+					</since>
 					<synopsis>Sets if a user's channel should be answered if currently unanswered.</synopsis>
 				</configOption>
 			</configObject>
 			<configObject name="bridge_profile">
+				<since>
+					<version>12.0.0</version>
+				</since>
 				<synopsis>A named profile to apply to specific bridges.</synopsis>
 				<description><para>ConfBridge bridges have a profile associated with them
 				that determine their options. A configuration section is determined to be a
@@ -259,6 +371,9 @@
 				of <literal>bridge</literal>.
 				</para></description>
 				<configOption name="type">
+					<since>
+						<version>12.0.0</version>
+					</since>
 					<synopsis>Define this configuration category as a bridge profile</synopsis>
 					<description><para>The type parameter determines how a context in the
 					configuration file is interpreted.</para>
@@ -270,9 +385,17 @@
 					</description>
 				</configOption>
 				<configOption name="jitterbuffer">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>Place a jitter buffer on the conference's audio stream</synopsis>
 				</configOption>
 				<configOption name="internal_sample_rate">
+					<since>
+						<version>18.22.0</version>
+						<version>20.7.0</version>
+						<version>21.2.0</version>
+					</since>
 					<synopsis>Set the internal native sample rate for mixing the conference</synopsis>
 					<description><para>
 						Sets the internal native sample rate the
@@ -285,6 +408,11 @@
 					</para></description>
 				</configOption>
 				<configOption name="maximum_sample_rate">
+					<since>
+						<version>18.22.0</version>
+						<version>20.7.0</version>
+						<version>21.2.0</version>
+					</since>
 					<synopsis>Set the maximum native sample rate for mixing the conference</synopsis>
 					<description><para>
 						Sets the maximum native sample rate the
@@ -294,6 +422,9 @@
 					</para></description>
 				</configOption>
 				<configOption name="language" default="en">
+					<since>
+						<version>11.7.0</version>
+					</since>
 					<synopsis>The language used for announcements to the conference.</synopsis>
 					<description><para>
 						By default, announcements to a conference use English.  Which means
@@ -303,6 +434,9 @@
 					</para></description>
 				</configOption>
 				<configOption name="mixing_interval">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>Sets the internal mixing interval in milliseconds for the bridge</synopsis>
 					<description><para>
 						Sets the internal mixing interval in milliseconds for the bridge.  This
@@ -314,6 +448,9 @@
 					</para></description>
 				</configOption>
 				<configOption name="binaural_active">
+					<since>
+						<version>15.0.0</version>
+					</since>
 					<synopsis>If true binaural conferencing with stereo audio is active</synopsis>
 					<description><para>
 						Activates binaural mixing for a conference bridge.
@@ -321,6 +458,9 @@
 					</para></description>
 				</configOption>
 				<configOption name="record_conference">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>Record the conference starting with the first active user's entrance and ending with the last active user's exit</synopsis>
 					<description><para>
 						Records the conference call starting when the first user
@@ -332,6 +472,9 @@
 					</para></description>
 				</configOption>
 				<configOption name="record_file" default="confbridge-${name of conference bridge}-${start time}.wav">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>The filename of the conference recording</synopsis>
 					<description><para>
 						When <replaceable>record_conference</replaceable> is set to yes, the specific name of the
@@ -345,6 +488,9 @@
 					</para></description>
 				</configOption>
 				<configOption name="record_file_append" default="yes">
+					<since>
+						<version>12.0.0</version>
+					</since>
 					<synopsis>Append to record file when starting/stopping on same conference recording</synopsis>
 					<description><para>
 						When <replaceable>record_file_append</replaceable> is set to yes, stopping and starting recording on a
@@ -354,6 +500,9 @@
 					</para></description>
 				</configOption>
 				<configOption name="record_file_timestamp" default="yes">
+					<since>
+						<version>14.0.0</version>
+					</since>
 					<synopsis>Append the start time to the record_file name so that it is unique.</synopsis>
 					<description><para>
 						When <replaceable>record_file_timestamp</replaceable> is set to yes, the start time is appended to
@@ -362,6 +511,9 @@
 					</para></description>
 				</configOption>
 				<configOption name="record_options" default="">
+					<since>
+						<version>14.0.0</version>
+					</since>
 					<synopsis>Pass additional options to MixMonitor when recording</synopsis>
 					<description><para>
 						Pass additional options to MixMonitor when <replaceable>record_conference</replaceable> is set to yes.
@@ -369,6 +521,9 @@
 					</para></description>
 				</configOption>
 				<configOption name="record_command" default="">
+					<since>
+						<version>14.0.0</version>
+					</since>
 					<synopsis>Execute a command after recording ends</synopsis>
 					<description><para>
 						Executes the specified command when recording ends. Any strings matching <literal>^{X}</literal> will be
@@ -376,6 +531,9 @@
 					</para></description>
 				</configOption>
 				<configOption name="regcontext">
+					<since>
+						<version>13.10.0</version>
+					</since>
 					<synopsis>The name of the context into which to register the name of the conference bridge as NoOP() at priority 1</synopsis>
 					<description><para>
 						When set this will cause the name of the created conference to be registered
@@ -392,6 +550,9 @@
 					</para></description>
 				</configOption>
 				<configOption name="video_mode">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>Sets how confbridge handles video distribution to the conference participants</synopsis>
 					<description><para>
 						Sets how confbridge handles video distribution to the conference participants.
@@ -429,17 +590,24 @@
 					</description>
 				</configOption>
 				<configOption name="max_members">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>Limit the maximum number of participants for a single conference</synopsis>
 					<description><para>
 						This option limits the number of participants for a single
 						conference to a specific number.  By default conferences
 						have no participant limit. After the limit is reached, the
 						conference will be locked until someone leaves.  Note however
-						that an Admin user will always be alowed to join the conference
+						that an Admin user will always be allowed to join the conference
 						regardless if this limit is reached or not.
 					</para></description>
 				</configOption>
 				<configOption name="sound_">
+					<since>
+						<version>13.19.0</version>
+						<version>15.2.0</version>
+					</since>
 					<synopsis>Override the various conference bridge sound files</synopsis>
 					<description><para>
 						All sounds in the conference are customizable using the bridge profile options below.
@@ -485,6 +653,9 @@
 					</description>
 				</configOption>
 				<configOption name="video_update_discard" default="2000">
+					<since>
+						<version>15.0.0</version>
+					</since>
 					<synopsis>Sets the amount of time in milliseconds after sending a video update to discard subsequent video updates</synopsis>
 					<description><para>
 						Sets the amount of time in milliseconds after sending a video update request
@@ -495,6 +666,9 @@
 					</para></description>
 				</configOption>
 				<configOption name="remb_send_interval" default="0">
+					<since>
+						<version>15.4.0</version>
+					</since>
 					<synopsis>Sets the interval in milliseconds that a combined REMB frame will be sent to video sources</synopsis>
 					<description><para>
 						Sets the interval in milliseconds that a combined REMB frame will be sent
@@ -507,6 +681,9 @@
 					</para></description>
 				</configOption>
 				<configOption name="remb_behavior" default="average">
+					<since>
+						<version>15.4.0</version>
+					</since>
 					<synopsis>Sets how REMB reports are generated from multiple sources</synopsis>
 					<description><para>
 						Sets how REMB reports are combined from multiple sources to form one. A REMB report
@@ -545,6 +722,11 @@
 					<see-also><ref type="configOption">remb_estimated_bitrate</ref></see-also>
 				</configOption>
 				<configOption name="remb_estimated_bitrate">
+					<since>
+						<version>16.15.0</version>
+						<version>17.9.0</version>
+						<version>18.1.0</version>
+					</since>
 					<synopsis>Sets the estimated bitrate sent to each participant in REMB reports</synopsis>
 					<description><para>
 					    When <literal>remb_behavior</literal> is set to <literal>force</literal>,
@@ -554,6 +736,9 @@
 					<see-also><ref type="configOption">remb_behavior</ref></see-also>
 				</configOption>
 				<configOption name="enable_events" default="no">
+					<since>
+						<version>15.5.0</version>
+					</since>
 					<synopsis>Enables events for this bridge</synopsis>
 					<description><para>
 						If enabled, recipients who joined the bridge via a channel driver
@@ -565,10 +750,16 @@
 					</description>
 				</configOption>
 				<configOption name="template">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>When using the CONFBRIDGE dialplan function, use a bridge profile as a template for creating a new temporary profile</synopsis>
 				</configOption>
 			</configObject>
 			<configObject name="menu">
+				<since>
+					<version>12.0.0</version>
+				</since>
 				<synopsis>A conference user menu</synopsis>
 				<description>
 					<para>Conference users, as defined by a <replaceable>conf_user</replaceable>,
@@ -576,6 +767,9 @@
 					<literal>ConfBridge</literal> application.</para>
 				</description>
 				<configOption name="type">
+					<since>
+						<version>12.0.0</version>
+					</since>
 					<synopsis>Define this configuration category as a menu</synopsis>
 					<description><para>The type parameter determines how a context in the
 					configuration file is interpreted.</para>
@@ -587,6 +781,9 @@
 					</description>
 				</configOption>
 				<configOption name="template">
+					<since>
+						<version>13.0.0</version>
+					</since>
 					<synopsis>When using the CONFBRIDGE dialplan function, use a menu profile as a template for creating a new temporary profile</synopsis>
 				</configOption>
 				<configOption name="^[0-9A-D*#]+$">
@@ -612,7 +809,7 @@
 						<enum name="playback(filename&amp;filename2&amp;...)"><para>
 							<literal>playback</literal> will play back an audio file to a channel
 							and then immediately return to the conference.
-							This file can not be interupted by DTMF.
+							This file can not be interrupted by DTMF.
 							Multiple files can be chained together using the
 							<literal>&amp;</literal> character.</para></enum>
 						<enum name="playback_and_continue(filename&amp;filename2&amp;...)"><para>
@@ -1437,10 +1634,7 @@ static int add_menu_entry(struct conf_menu *menu, const char *dtmf, const char *
 
 	/* if adding any of the actions failed, bail */
 	if (res) {
-		struct conf_menu_action *menu_action;
-		while ((menu_action = AST_LIST_REMOVE_HEAD(&menu_entry->actions, action))) {
-			ast_free(menu_action);
-		}
+		conf_menu_entry_destroy(menu_entry);
 		ast_free(menu_entry);
 		return -1;
 	}
@@ -1449,6 +1643,7 @@ static int add_menu_entry(struct conf_menu *menu, const char *dtmf, const char *
 	AST_LIST_TRAVERSE_SAFE_BEGIN(&menu->entries, cur, entry) {
 		if (!strcasecmp(cur->dtmf, menu_entry->dtmf)) {
 			AST_LIST_REMOVE_CURRENT(entry);
+			conf_menu_entry_destroy(cur);
 			ast_free(cur);
 			break;
 		}
@@ -1574,11 +1769,17 @@ static char *handle_cli_confbridge_show_user_profile(struct ast_cli_entry *e, in
 	ast_cli(a->fd,"Quiet:                   %s\n",
 		u_profile.flags & USER_OPT_QUIET ?
 		"enabled" : "disabled");
+	ast_cli(a->fd,"Hear Join:               %s\n",
+		u_profile.flags & USER_OPT_HEAR_OWN_JOIN_SOUND ?
+		"enabled" : "disabled");
 	ast_cli(a->fd,"Wait Marked:             %s\n",
 		u_profile.flags & USER_OPT_WAITMARKED ?
 		"enabled" : "disabled");
-	ast_cli(a->fd,"END Marked:              %s\n",
+	ast_cli(a->fd,"END Marked (All):        %s\n",
 		u_profile.flags & USER_OPT_ENDMARKED ?
+		"enabled" : "disabled");
+	ast_cli(a->fd,"END Marked (Any):        %s\n",
+		u_profile.flags & USER_OPT_ENDMARKEDANY ?
 		"enabled" : "disabled");
 	ast_cli(a->fd,"Drop_silence:            %s\n",
 		u_profile.flags & USER_OPT_DROP_SILENCE ?
@@ -2210,6 +2411,30 @@ static int user_template_handler(const struct aco_option *opt, struct ast_variab
 	return conf_find_user_profile(NULL, var->value, u_profile) ? 0 : -1;
 }
 
+static int sample_rate_handler(const struct aco_option *opt, struct ast_variable *var, void *obj)
+{
+	struct bridge_profile *b_profile = obj;
+	unsigned int *slot;
+
+	if (!strcasecmp(var->name, "internal_sample_rate")) {
+		slot = &b_profile->internal_sample_rate;
+		if (!strcasecmp(var->value, "auto")) {
+			*slot = 0;
+			return 0;
+		}
+	} else if (!strcasecmp(var->name, "maximum_sample_rate")) {
+		slot = &b_profile->maximum_sample_rate;
+		if (!strcasecmp(var->value, "none")) {
+			*slot = 0;
+			return 0;
+		}
+	} else {
+		return -1;
+	}
+
+	return ast_parse_arg(var->value, PARSE_UINT32 | PARSE_IN_RANGE, slot, 8000, 192000);
+}
+
 static int bridge_template_handler(const struct aco_option *opt, struct ast_variable *var, void *obj)
 {
 	struct bridge_profile *b_profile = obj;
@@ -2396,12 +2621,14 @@ int conf_load_config(void)
 	aco_option_register(&cfg_info, "startmuted", ACO_EXACT, user_types, "no", OPT_BOOLFLAG_T, 1, FLDSET(struct user_profile, flags), USER_OPT_STARTMUTED);
 	aco_option_register(&cfg_info, "music_on_hold_when_empty", ACO_EXACT, user_types, "no", OPT_BOOLFLAG_T, 1, FLDSET(struct user_profile, flags), USER_OPT_MUSICONHOLD);
 	aco_option_register(&cfg_info, "quiet", ACO_EXACT, user_types, "no", OPT_BOOLFLAG_T, 1, FLDSET(struct user_profile, flags), USER_OPT_QUIET);
+	aco_option_register(&cfg_info, "hear_own_join_sound", ACO_EXACT, user_types, "yes", OPT_BOOLFLAG_T, 1, FLDSET(struct user_profile, flags), USER_OPT_HEAR_OWN_JOIN_SOUND);
 	aco_option_register_custom(&cfg_info, "announce_user_count_all", ACO_EXACT, user_types, "no", announce_user_count_all_handler, 0);
 	aco_option_register(&cfg_info, "announce_user_count", ACO_EXACT, user_types, "no", OPT_BOOLFLAG_T, 1, FLDSET(struct user_profile, flags), USER_OPT_ANNOUNCEUSERCOUNT);
 	/* Negative logic. Defaults to "yes" and evaluates with ast_false(). If !ast_false(), USER_OPT_NOONLYPERSON is cleared */
 	aco_option_register(&cfg_info, "announce_only_user", ACO_EXACT, user_types, "yes", OPT_BOOLFLAG_T, 0, FLDSET(struct user_profile, flags), USER_OPT_NOONLYPERSON);
 	aco_option_register(&cfg_info, "wait_marked", ACO_EXACT, user_types, "no", OPT_BOOLFLAG_T, 1, FLDSET(struct user_profile, flags), USER_OPT_WAITMARKED);
 	aco_option_register(&cfg_info, "end_marked", ACO_EXACT, user_types, "no", OPT_BOOLFLAG_T, 1, FLDSET(struct user_profile, flags), USER_OPT_ENDMARKED);
+	aco_option_register(&cfg_info, "end_marked_any", ACO_EXACT, user_types, "no", OPT_BOOLFLAG_T, 1, FLDSET(struct user_profile, flags), USER_OPT_ENDMARKEDANY);
 	aco_option_register(&cfg_info, "talk_detection_events", ACO_EXACT, user_types, "no", OPT_BOOLFLAG_T, 1, FLDSET(struct user_profile, flags), USER_OPT_TALKER_DETECT);
 	aco_option_register(&cfg_info, "dtmf_passthrough", ACO_EXACT, user_types, "no", OPT_BOOLFLAG_T, 1, FLDSET(struct user_profile, flags), USER_OPT_DTMF_PASS);
 	aco_option_register(&cfg_info, "announce_join_leave", ACO_EXACT, user_types, "no", OPT_BOOLFLAG_T, 1, FLDSET(struct user_profile, flags), USER_OPT_ANNOUNCE_JOIN_LEAVE);
@@ -2425,10 +2652,9 @@ int conf_load_config(void)
 	/* Bridge options */
 	aco_option_register(&cfg_info, "type", ACO_EXACT, bridge_types, NULL, OPT_NOOP_T, 0, 0);
 	aco_option_register(&cfg_info, "jitterbuffer", ACO_EXACT, bridge_types, "no", OPT_BOOLFLAG_T, 1, FLDSET(struct bridge_profile, flags), USER_OPT_JITTERBUFFER);
-	/* "auto" will fail to parse as a uint, but we use PARSE_DEFAULT to set the value to 0 in that case, which is the value that auto resolves to */
-	aco_option_register(&cfg_info, "internal_sample_rate", ACO_EXACT, bridge_types, "0", OPT_UINT_T, PARSE_DEFAULT, FLDSET(struct bridge_profile, internal_sample_rate), 0);
+	aco_option_register_custom(&cfg_info, "internal_sample_rate", ACO_EXACT, bridge_types, "auto", sample_rate_handler, 0);
 	aco_option_register(&cfg_info, "binaural_active", ACO_EXACT, bridge_types, "no", OPT_BOOLFLAG_T, 1, FLDSET(struct bridge_profile, flags), BRIDGE_OPT_BINAURAL_ACTIVE);
-	aco_option_register(&cfg_info, "maximum_sample_rate", ACO_EXACT, bridge_types, "0", OPT_UINT_T, PARSE_DEFAULT, FLDSET(struct bridge_profile, maximum_sample_rate), 0);
+	aco_option_register_custom(&cfg_info, "maximum_sample_rate", ACO_EXACT, bridge_types, "none", sample_rate_handler, 0);
 	aco_option_register_custom(&cfg_info, "mixing_interval", ACO_EXACT, bridge_types, "20", mix_interval_handler, 0);
 	aco_option_register(&cfg_info, "record_conference", ACO_EXACT, bridge_types, "no", OPT_BOOLFLAG_T, 1, FLDSET(struct bridge_profile, flags), BRIDGE_OPT_RECORD_CONFERENCE);
 	aco_option_register_custom(&cfg_info, "video_mode", ACO_EXACT, bridge_types, NULL, video_mode_handler, 0);

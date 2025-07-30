@@ -32,6 +32,7 @@ extern "C" {
 #define AST_CACHE_DIR_LEN 	512
 #define AST_FILENAME_MAX	80
 #define AST_CHANNEL_NAME    80  /*!< Max length of an ast_channel name */
+#define AST_CHANNEL_STORAGE_BACKEND_NAME_LEN  80  /*!< Max length of storage backend name */
 
 
 /*! \ingroup main_options */
@@ -74,6 +75,8 @@ enum ast_option_flags {
 	AST_OPT_FLAG_TRANSMIT_SILENCE = (1 << 17),
 	/*! Suppress some warnings */
 	AST_OPT_FLAG_DONT_WARN = (1 << 18),
+	/*! Search custom directory for sounds first */
+	AST_OPT_FLAG_SOUNDS_SEARCH_CUSTOM = (1 << 19),
 	/*! Reference Debugging */
 	AST_OPT_FLAG_REF_DEBUG = (1 << 20),
 	/*! Always fork, even if verbose or debug settings are non-zero */
@@ -114,8 +117,6 @@ enum ast_option_flags {
 #define ast_opt_no_color		ast_test_flag(&ast_options, AST_OPT_FLAG_NO_COLOR)
 #define ast_fully_booted		ast_test_flag(&ast_options, AST_OPT_FLAG_FULLY_BOOTED)
 #define ast_opt_transcode_via_slin	ast_test_flag(&ast_options, AST_OPT_FLAG_TRANSCODE_VIA_SLIN)
-/*! Invoke the stdexten using the legacy macro method. */
-#define ast_opt_stdexten_macro		ast_test_flag(&ast_options, AST_OPT_FLAG_STDEXTEN_MACRO)
 #define ast_opt_dump_core		ast_test_flag(&ast_options, AST_OPT_FLAG_DUMP_CORE)
 #define ast_opt_cache_record_files	ast_test_flag(&ast_options, AST_OPT_FLAG_CACHE_RECORD_FILES)
 #define ast_opt_cache_media_frames	ast_test_flag(&ast_options, AST_OPT_FLAG_CACHE_MEDIA_FRAMES)
@@ -135,6 +136,7 @@ enum ast_option_flags {
 #define ast_opt_ref_debug           ast_test_flag(&ast_options, AST_OPT_FLAG_REF_DEBUG)
 #define ast_opt_generic_plc_on_equal_codecs  ast_test_flag(&ast_options, AST_OPT_FLAG_GENERIC_PLC_ON_EQUAL_CODECS)
 #define ast_opt_hide_messaging_ami_events  ast_test_flag(&ast_options, AST_OPT_FLAG_HIDE_MESSAGING_AMI_EVENTS)
+#define ast_opt_sounds_search_custom ast_test_flag(&ast_options, AST_OPT_FLAG_SOUNDS_SEARCH_CUSTOM)
 
 /*! Maximum log level defined by PJPROJECT. */
 #define MAX_PJ_LOG_MAX_LEVEL		6
@@ -206,6 +208,8 @@ extern int ast_language_is_prefix;
 
 extern int ast_option_rtpusedynamic;
 extern unsigned int ast_option_rtpptdynamic;
+
+extern int ast_option_disable_remote_console_shell;
 
 #if defined(__cplusplus) || defined(c_plusplus)
 }

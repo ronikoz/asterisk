@@ -20,7 +20,7 @@
 
 ; Documentation
 ;
-; The official documentation is at http://wiki.asterisk.org
+; The official documentation is at https://docs.asterisk.org
 ; You can read the XML configuration help via Asterisk command line with
 ; "config show help res_pjsip", then you can drill down through the various
 ; sections and their options.
@@ -31,8 +31,8 @@
 ; At a minimum please read the file "README-SERIOUSLY.bestpractices.txt",
 ; located in the Asterisk source directory before starting Asterisk.
 ; Otherwise you risk allowing the security of the Asterisk system to be
-; compromised. Beyond that please visit and read the security information on
-; the wiki at: https://wiki.asterisk.org/wiki/x/EwFB
+; compromised. Beyond that please visit and read the security information in
+; the documentation at: https://docs.asterisk.org/Deployment/Important-Security-Considerations/
 ;
 ; A few basics to pay attention to:
 ;
@@ -47,7 +47,7 @@
 ;
 ; See the example ACL configuration in this file. Read the configuration help
 ; for the section and all of its options. Look over the samples in acl.conf
-; and documentation at https://wiki.asterisk.org/wiki/x/uA80AQ
+; and documentation at https://docs.asterisk.org/Configuration/Core-Configuration/Named-ACLs/
 ; If possible, restrict access to only networks and addresses you trust.
 ;
 ; Dialplan Contexts
@@ -171,11 +171,37 @@
 ;type=transport
 ;protocol=flow
 
+; Example IPv4 TCP transport with Keepalive options
+;
+;[transport-tcp]
+;type=transport
+;protocol=tcp
+;bind=0.0.0.0
+;tcp_keepalive_enable=yes        ; Enable TCP keepalive (yes/no)
+;tcp_keepalive_idle_time=30      ; Time in seconds the connection needs to remain idle before TCP starts sending keepalive probes
+;tcp_keepalive_interval_time=10  ; The time in seconds between individual keepalive probes
+;tcp_keepalive_probe_count=5     ; The maximum number of keepalive probes TCP should send before dropping the connection
+
+; Example IPv4 TLS transport with Keepalive options
+;
+;[transport-tls]
+;type=transport
+;protocol=tls
+;bind=0.0.0.0
+;cert_file=/path/to/mycert.crt
+;priv_key_file=/path/to/mykey.key
+;cipher=ADH-AES256-SHA,ADH-AES128-SHA
+;method=tlsv1
+;tcp_keepalive_enable=yes        ; Enable TCP keepalive (yes/no)
+;tcp_keepalive_idle_time=30      ; Time in seconds the connection needs to remain idle before TCP starts sending keepalive probes
+;tcp_keepalive_interval_time=10  ; The time in seconds between individual keepalive probes
+;tcp_keepalive_probe_count=5     ; The maximum number of keepalive probes TCP should send before dropping the connection
+
 ;===============OUTBOUND REGISTRATION WITH OUTBOUND AUTHENTICATION============
 ;
 ; This is a simple registration that works with some SIP trunking providers.
 ; You'll need to set up the auth example "mytrunk_auth" below to enable outbound
-; authentication. Note that we "outbound_auth=" use for outbound authentication
+; authentication. Note that we use "outbound_auth=" for outbound authentication
 ; instead of "auth=", which is for inbound authentication.
 ;
 ; If you are registering to a server from behind NAT, be sure you assign a transport
@@ -230,8 +256,8 @@
 ; At a basic level configure the endpoint with a transport that is set up
 ; with the appropriate NAT settings. There may be some additional settings you
 ; need here based on your NAT/Firewall scenario. Look to the CLI config help
-; "config show help res_pjsip endpoint" or on the wiki for other NAT related
-; options and configuration. We've included a few below.
+; "config show help res_pjsip endpoint" or on https://docs.asterisk.org/ for
+; other NAT related options and configuration. We've included a few below.
 ;
 ; AOR
 ;
@@ -349,6 +375,7 @@
 ; STIR/SHAKEN support.
 ;
 ;stir_shaken=no
+;stir_shaken_profile=my_profile
 
 ;[6001]
 ;type=auth
@@ -391,8 +418,8 @@
 ;force_rport=yes
 ;rewrite_contact=yes  ; necessary if endpoint does not know/register public ip:port
 ;ice_support=yes   ;This is specific to clients that support NAT traversal
-                   ;for media via ICE,STUN,TURN. See the wiki at:
-                   ;https://wiki.asterisk.org/wiki/x/D4FHAQ
+                   ;for media via ICE,STUN,TURN. See the docs at:
+                   ;https://docs.asterisk.org/Configuration/Miscellaneous/Interactive-Connectivity-Establishment-ICE-in-Asterisk/
                    ;for a deeper explanation of this topic.
 
 ;[6002]
@@ -404,6 +431,16 @@
 ;[6002]
 ;type=aor
 ;max_contacts=2
+
+;===============DEFAULT ENDPOINT FOR OUTBOUND REQUESTS TO URI===================
+;
+; This is an example default outbound endpoint.  The global setting:
+; default_outbound_endpoint needs to be set to such an endpoint in order to be
+; able to send an outbound request to a URI without a specified endpoint.
+;
+;[default_outbound_endpoint]
+;type=endpoint
+;context=none-invalid
 
 
 ;============EXAMPLE ACL CONFIGURATION==========================================
@@ -615,6 +652,8 @@
 ;aggregate_mwi=yes      ;  (default: "yes")
 ;allow= ; Media Codec s to allow (default: "")
 ;allow_overlap=yes ; Enable RFC3578 overlap dialing support. (default: "yes")
+;overlap_context=default ; Context to used for overlap dialing matches
+                         ; (default: same as context option)
 ;aors=  ; AoR s to be used with the endpoint (default: "")
 ;auth=  ; Authentication Object s associated with the endpoint (default: "")
 ;callerid=      ; CallerID information for the endpoint (default: "")
@@ -657,6 +696,7 @@
                         ; "auth_username": Identify by the Authorization username and realm
                         ; "ip": Identify by the source IP address
                         ; "header": Identify by a configured SIP header value.
+                        ; "request_uri": Identify by the configured SIP request URI.
                         ; In the username and auth_username cases, if an exact match
                         ; on both username and domain/realm fails, the match is
                         ; retried with just the username.
@@ -930,6 +970,9 @@
                            ; happens to the call if verification fails; it's up to
                            ; you to determine what to do with the results.
                            ; (default: no)
+;stir_shaken_profile =
+                           ; If a profile is specified (defined in stir_shaken.conf),
+                           ; this endpoint will follow the rules defined there.
 ;allow_unauthenticated_options =
                            ; By default, chan_pjsip will challenge an incoming
                            ; OPTIONS request for authentication credentials just
@@ -951,6 +994,43 @@
                            ; responses.
                            ; (default: no)
 
+;geoloc_incoming_call_profile =
+                ; This geolocation profile will be applied to all calls received
+                ; by the channel driver from the remote endpoint before they're
+                ; forwarded to the dialplan.
+;geoloc_outgoing_call_profile =
+                ; This geolocation profile will be applied to all calls received
+                ; by the channel driver from the dialplan before they're forwarded
+                ; the remote endpoint.
+;
+; send_aoc =
+                ; This options turns on and off support for sending AOC to endpoints.
+                ; AOC updates can be sent using the AOCMessage AMI action or come
+                ; from PRI channels.
+                ; (default: no)
+;
+; tenantid =
+                ; Sets the tenant ID for this endpoint. It can be read in dialplan
+                ; with the CHANNEL function, and it can be changed later via dialplan
+                ; using the same CHANNEL function if needed. Setting tenant ID here
+                ; will cause it to show up on channel creation and the initial
+                ; channel snapshot.
+;
+; suppress_moh_on_sendonly = no
+                ; Normally, when one party in a call sends Asterisk an SDP with
+                ; a "sendonly" or "inactive" attribute it means "hold" and
+                ; causes Asterisk to start playing MOH back to the other party.
+                ; This can be problematic if it happens at certain times, such
+                ; as in a 183 Progress message, because the MOH will replace
+                ; any early media you may be playing to the calling party. If
+                ; you set this option to "yes" on an endpoint and the endpoint
+                ; receives an SDP with "sendonly" or "inactive", Asterisk will
+                ; NOT play MOH back to the other party.
+                ; NOTE: This doesn't just apply to 183 responses.  MOH will
+                ; be suppressed when the attribute appears in any SDP received
+                ; including INVITEs, re-INVITES, and other responses.
+                ; (default: no)
+
 ;==========================AUTH SECTION OPTIONS=========================
 ;[auth]
 ;  SYNOPSIS: Authentication type
@@ -958,56 +1038,109 @@
 ;  Note: Using the same auth section for inbound and outbound
 ;  authentication is not recommended.  There is a difference in
 ;  meaning for an empty realm setting between inbound and outbound
-;  authentication uses.  Look to the CLI config help
-;  "config show help res_pjsip auth realm" or on the wiki for the
-;  difference.
+;  authentication uses.
 ;
-;auth_type=userpass  ; Authentication type.  May be
-                     ; "userpass" for plain text passwords or
-                     ; "md5" for pre-hashed credentials.
-                     ; (default: "userpass")
-;nonce_lifetime=32   ; Lifetime of a nonce associated with this
-                     ; authentication config (default: "32")
-;md5_cred=     ; As an alternative to specifying a plain text password,
-               ; you can hash the username, realm and password
-               ; together one time and place the hash value here.
-               ; The input to the hash function must be in the
-               ; following format:
-               ; <username>:<realm>:<password>
-               ; For incoming authentication (asterisk is the UAS),
-               ; the realm must match either the realm set in this object
-               ; or the default set in in the "global" object.
-               ;
-               ; For outgoing authentication (asterisk is the UAC),
-               ; the realm must match what the server will be sending
-               ; in their WWW-Authenticate header.  It can't be blank
-               ; unless you expect the server to be sending a blank
-               ; realm in the header.
-               ; You can generate the hash with the following shell
-               ; command:
-               ; $ echo -n "myname:myrealm:mypassword" | md5sum
-               ; Note the '-n'.  You don't want a newline to be part
-               ; of the hash.  (default: "")
-;password=     ; PlainText password used for authentication (default: "")
-;realm=        ; For incoming authentication (asterisk is the UAS),
-               ; this is the realm to be sent on WWW-Authenticate
-               ; headers.  If not specified, the global object's
-               ; "default_realm" will be used.
-               ;
-               ; For outgoing authentication (asterisk is the UAC), this
-               ; must either be the realm the server is expected to send,
-               ; or left blank or contain a single '*' to automatically
-               ; use the realm sent by the server. If you have multiple
-               ; auth objects for an endpoint, the realm is also used to
-               ; match the auth object to the realm the server sent.
-               ;
-               ; Using the same auth section for inbound and outbound
-               ; authentication is not recommended.  There is a difference in
-               ; meaning for an empty realm setting between inbound and outbound
-               ; authentication uses.
-               ; (default: "")
-;type=         ; Must be auth (default: "")
-;username=     ; Username to use for account (default: "")
+;  Note on Digest Algorithms: The currently supported digest algorithms are
+;  "MD5", "SHA-256" and "SHA-512-256" but availability may be limited by
+;  the versions of PJProject and OpenSSL installed.  Run the CLI command
+;  `pjproject show buildopts` to see the algorithms currently available and
+;  see the documentation linked below for more info.
+;
+;  Detailed discussion for this object, especially regarding hash algorithms
+;  and realms can be found at
+;  https://docs.asterisk.org/Configuration/Channel-Drivers/SIP/Configuring-res_pjsip/PJSIP-Authentication
+
+;type=       ; Must be auth (default: "")
+
+;auth_type=  ; Authentication mechanism.
+             ; Must be one of:
+             ; "digest"      : The standard HTTP/SIP digest
+             ;    authentication. "password" and/or one or more
+             ;    "password_digest" parameters must also be specified.
+             ; "google_oauth": Google OAuth authentication used by
+             ;    Google Voice.
+             ; "userpass"    : (deprecated).  Automatically converted
+             ;    to "digest".  Used to mean plain-text password but
+             ;    that is now determined automatically.
+             ; "md5"         : (deprecated)   Automatically converted
+             ;    to "digest".  Used to mean pre-hashed password but
+             ;    that is now determined automatically.
+             ; (default: "digest")
+
+;realm=      ; For incoming authentication (asterisk is the UAS),
+             ; this is the realm to be sent on WWW-Authenticate
+             ; headers.  If not specified, the global object's
+             ; "default_realm" will be used.
+             ;
+             ; For outgoing authentication (asterisk is the UAC), this
+             ; must either be the realm the server is expected to send,
+             ; or left blank or contain a single '*' to automatically
+             ; use the realm sent by the server. If you have multiple
+             ; auth objects for an endpoint, the realm is also used to
+             ; match the auth object to the realm the server sent.
+             ;
+             ; Using the same auth section for inbound and outbound
+             ; authentication is not recommended.  There is a difference in
+             ; meaning for an empty realm setting between inbound and outbound
+             ; authentication uses.
+             ;
+             ; If more than one auth object with the same realm or
+             ; more than one wildcard auth object is associated to
+             ; an endpoint, only the first one of each defined on
+             ; the endpoint will be used.
+             ;
+             ; (default: "")
+
+;username=   ; Username to use for account (Required)
+
+;password=   ; PlainText password used for authentication (default: "")
+
+;password_digest= <digest-spec>
+             ; As an alternative to specifying a plain text password, you can
+             ; specify pre-computed digests.
+             ;
+             ; <digest-spec> = <IANA_digest_algorithm>:<hashed-credential>
+             ; <IANA_digest_algorithm>: One of the supported hash algorithms
+             ;    which currently are "MD5", "SHA-256" and "SHA-512-256" but
+             ;    see the note above.
+             ; <hashed-credential>:  The result of passing the following
+             ;    string through the selected hash algorithm:
+             ;    <username>:<realm>:<password>
+             ; Example:
+             ; $ echo -n "fred:asterisk:mypass" | openssl dgst -md5
+             ; MD5(stdin)= 43a8d9be3da524f9a59ca0593d7b1b5d
+             ; would be specified as...
+;password_digest = MD5:43a8d9be3da524f9a59ca0593d7b1b5d
+             ; You can specify this parameter once for each algorithm.
+             ; See the documentation linked above for more info.
+
+;md5_cred=   ; (deprecated)  Will be automatically converted to a
+             ; "password_digest" parameter.
+
+;supported_algorithms_uas= <IANA_digest_algorithm>[,<IANA_digest_algorithm>]...
+             ; Specify the digest algorithms to offer when this auth object
+             ; is used by Asterisk acting as a UAS.  Specify one or more of
+             ; the supported hash algorithms, which currently are "MD5",
+             ; "SHA-256" and "SHA-512-256", but see the note above.
+             ; The default is the value specified in the global object's
+             ; default_auth_algorithms_uas parameter.
+
+;supported_algorithms_uac= <IANA_digest_algorithm>[,<IANA_digest_algorithm>]...
+             ; Specify the digest algorithms to respond with when this auth
+             ; object is used by Asterisk acting as a UAC.  Specify one or more of
+             ; the supported hash algorithms, which currently are "MD5",
+             ; "SHA-256" and "SHA-512-256", but see the note above.
+             ; The default is the value specified in the global object's
+             ; default_auth_algorithms_uac parameter.
+
+;nonce_lifetime=32 ; Lifetime of a nonce associated with this
+             ; authentication config (default: "32")
+
+; For the Google OAuth authentication mechanism, the following parameters are
+; required:
+;refresh_token=  ; OAuth 2.0 refresh token
+;oauth_clientid= ; OAuth 2.0 application's client id
+;oauth_secret=   ; OAuth 2.0 application's secret
 
 
 ;==========================DOMAIN_ALIAS SECTION OPTIONS=========================
@@ -1021,8 +1154,6 @@
 ;[transport]
 ;  SYNOPSIS: SIP Transport
 ;
-;async_operations=1     ; Number of simultaneous Asynchronous Operations
-                        ; (default: "1")
 ;bind=  ; IP Address and optional port to bind to for this transport (default:
         ; "")
 ; Note that for the Websocket transport the TLS configuration is configured
@@ -1041,11 +1172,16 @@
                 ; and/or "asterisk_ecc.pem" are loaded (certificate, inter-
                 ; mediates, private key), to support multiple algorithms for
                 ; server authentication (RSA, DSA, ECDSA). If the chains are
-                ; different, at least OpenSSL 1.0.2 is required.
+                ; different, at least OpenSSL 1.0.2 is required. This option
+                ; can be reloaded resulting in an updated certificate if the
+                ; filename remains unchanged.
                 ; (default: "")
 ;cipher=        ; Preferred cryptography cipher names TLS ONLY (default: "")
 ;method=        ; Method of SSL transport TLS ONLY (default: "")
-;priv_key_file= ; Private key file TLS ONLY (default: "")
+;priv_key_file= ; Private key file TLS ONLY. This option can be reloaded
+                ; resulting in an updated private key if the filename remains
+                ; unchanged.
+                ; (default: "")
 ;verify_client= ; Require verification of client certificate TLS ONLY (default:
                 ; "")
 ;verify_server= ; Require verification of server certificate TLS ONLY (default:
@@ -1088,6 +1224,15 @@
                         ; URI is not a hostname, the saved transport will be
                         ; used and the 'x-ast-txp' parameter stripped from the
                         ; outgoing packet.
+;allow_wildcard_certs=no ; In conjunction with verify_server, if 'yes' allow use
+                         ; of wildcards, i.e. '*.' in certs for common, and
+                         ; subject alt names of type DNS for TLS transport
+                         ; types. Note, names must start with the wildcard.
+                         ; Partial wildcards, e.g. 'f*.example.com' and
+                         ; 'foo.*.com' are disallowed. As well, names only
+                         ; match against a single level meaning '*.example.com'
+                         ; matches 'foo.example.com', but not
+                         ; 'foo.bar.example.com'. Defaults to 'no'.
 
 ;==========================AOR SECTION OPTIONS=========================
 ;[aor]
@@ -1127,6 +1272,8 @@
 ;qualify_frequency=0    ; Interval at which to qualify an AoR via OPTIONS requests.
                         ; (default: "0")
 ;qualify_timeout=3.0      ; Qualify timeout in fractional seconds (default: "3.0")
+;qualify_2xx_only=no    ; If true, only qualify AoR if OPTIONS request returns 2XX
+                        ; (default: "no")
 ;authenticate_qualify=no        ; Authenticates a qualify request if needed
                                 ; (default: "no")
 ;outbound_proxy=        ; Proxy through which to send OPTIONS requests, a full SIP URI
@@ -1309,6 +1456,32 @@
                     ; creating an implicit subscription (see RFC 4488).
                     ; (default: "yes")
 
+;all_codecs_on_empty_reinvite=yes
+                    ; On reception of a re-INVITE without SDP Asterisk will send an SDP
+                    ; offer in the 200 OK response containing all configured codecs on the
+                    ; endpoint, instead of simply those that have already been negotiated.
+                    ; RFC 3261 specifies this as a SHOULD requirement.
+                    ; (default: "no")
+
+;allow_sending_180_after_183=yes	; Allow Asterisk to send 180 Ringing to an endpoint
+					; after 183 Session Progress has been send.
+					; If disabled Asterisk will instead send only a
+					; 183 Session Progress to the endpoint.
+					; (default: "no")
+
+;default_auth_algorithms_uas = MD5
+             ; The default list of digest algorithms to support when an
+             ; auth object is used as a UAS. See the "supported_algorithms_uas"
+             ; parameter in the "auth" object above.
+             ; The default is MD5
+
+;default_auth_algorithms_uac = MD5
+             ; The default list of digest algorithms to support when an
+             ; auth object is used as a UAC. See the "supported_algorithms_uac"
+             ; parameter in the "auth" object above.
+             ; The default is MD5
+
+
 ; MODULE PROVIDING BELOW SECTION(S): res_pjsip_acl
 ;==========================ACL SECTION OPTIONS=========================
 ;[acl]
@@ -1342,6 +1515,11 @@
                 ; (default: "")
 ;outbound_proxy=        ; Proxy through which to send registrations, a full SIP URI
                         ; must be provided (default: "")
+;max_random_initial_delay=10    ; Maximum random delay for initial registrations (default: 10)
+                                ; Generally it is a good idea to space out registrations
+                                ; to not overload the system. If you have a small number
+                                ; of registrations and need them to register more quickly,
+                                ; you can reduce this to a lower value.
 ;retry_interval=60      ; Interval in seconds between retries if outbound
                         ; registration is unsuccessful (default: "60")
 ;forbidden_retry_interval=0     ; Interval used when receiving a 403 Forbidden
@@ -1402,7 +1580,7 @@
 
 ; MODULE PROVIDING BELOW SECTION(S): res_pjsip_outbound_publish
 ;======================OUTBOUND_PUBLISH SECTION OPTIONS=====================
-; See https://wiki.asterisk.org/wiki/display/AST/Publishing+Extension+State
+; See https://docs.asterisk.org/Configuration/Channel-Drivers/SIP/Configuring-res_pjsip/Publishing-Extension-State/
 ; for more information.
 ;[outbound-publish]
 ;type=outbound-publish     ; Must be of type 'outbound-publish'.
@@ -1457,9 +1635,9 @@
 
 
 ; MODULE PROVIDING BELOW SECTION(S): res_pjsip_pubsub
-;=============================RESOURCE-LIST===================================
-; See https://wiki.asterisk.org/wiki/pages/viewpage.action?pageId=30278158
+; See https://docs.asterisk.org/Configuration/Channel-Drivers/SIP/Configuring-res_pjsip/Resource-List-Subscriptions-RLS/
 ; for more information.
+;=============================RESOURCE-LIST===================================
 ;[resource_list]
 ;type=resource_list        ; Must be of type 'resource_list'.
 
@@ -1516,7 +1694,7 @@
 
 
 ;==========================INBOUND_PUBLICATION================================
-; See https://wiki.asterisk.org/wiki/display/AST/Exchanging+Device+and+Mailbox+State+Using+PJSIP
+; See https://docs.asterisk.org/Configuration/Channel-Drivers/SIP/Configuring-res_pjsip/Exchanging-Device-and-Mailbox-State-Using-PJSIP/
 ; for more information.
 ;[inbound-publication]
 ;type=                     ; Must be of type 'inbound-publication'.
@@ -1527,7 +1705,7 @@
 
 ; MODULE PROVIDING BELOW SECTION(S): res_pjsip_publish_asterisk
 ;==========================ASTERISK_PUBLICATION===============================
-; See https://wiki.asterisk.org/wiki/display/AST/Exchanging+Device+and+Mailbox+State+Using+PJSIP
+; See https://docs.asterisk.org/Configuration/Channel-Drivers/SIP/Configuring-res_pjsip/Exchanging-Device-and-Mailbox-State-Using-PJSIP/
 ; for more information.
 ;[asterisk-publication]
 ;type=asterisk-publication ; Must be of type 'asterisk-publication'.
@@ -1549,3 +1727,16 @@
 
 ;mailbox_state_filter=     ; Optional regular expression used to filter what
                            ; mailboxes we accept events for.
+
+
+;================================TEL URIs=====================================
+;
+; Asterisk has TEL URI support, but with limited scope. Support is only for
+; TEL URIs present in traffic from a remote party. Asterisk does not generate
+; any TEL URIs of its own.
+;
+; Currently, the allowed request types are INVITE, ACK, BYE, and CANCEL. Any
+; other request type that contains a TEL URI will behave as it did before.
+; TEL URIs are allowed in the request, From, and To headers.
+;
+; You can match a TEL URI From header by IP, header, or auth_username.

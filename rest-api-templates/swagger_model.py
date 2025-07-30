@@ -332,6 +332,7 @@ class SwaggerType(Stringify):
         self.is_discriminator = None
         self.is_list = None
         self.singular_name = None
+        self.lc_singular_name = None
         self.is_primitive = None
         self.is_binary = None
 
@@ -345,8 +346,10 @@ class SwaggerType(Stringify):
         self.is_list = type_param is not None
         if self.is_list:
             self.singular_name = type_param
+            self.lc_singular_name = type_param.lower()
         else:
             self.singular_name = self.name
+            self.lc_singular_name = self.name.lower()
         self.is_primitive = self.singular_name in SWAGGER_PRIMITIVES
         self.is_binary = (self.singular_name == 'binary')
         processor.process_type(self, context)
@@ -364,20 +367,25 @@ class Operation(Stringify):
     def __init__(self):
         self.http_method = None
         self.nickname = None
+        self.nickname_lc = None
         self.response_class = None
         self.parameters = []
         self.summary = None
         self.notes = None
         self.error_responses = []
+        self.since = []
 
     def load(self, op_json, processor, context):
         context = context.next_stack(op_json, 'nickname')
         validate_required_fields(op_json, self.required_fields, context)
         self.http_method = op_json.get('httpMethod')
         self.nickname = op_json.get('nickname')
+        self.nickname_lc = self.nickname.lower() 
         response_class = op_json.get('responseClass')
         self.response_class = response_class and SwaggerType().load(
             response_class, processor, context)
+        since = op_json.get('since') or []
+        self.since = ", ".join(since)
 
         # Specifying WebSocket URL's is our own extension
         self.is_websocket = op_json.get('upgrade') == 'websocket'
@@ -456,7 +464,7 @@ def get_list_parameter_type(type_string):
     @param type_string: Type string to parse
     @returns Type parameter of the list, or None if not a List.
     """
-    list_match = re.match('^List\[(.*)\]$', type_string)
+    list_match = re.match(r'^List\[(.*)\]$', type_string)
     return list_match and list_match.group(1)
 
 
@@ -498,6 +506,7 @@ class Model(Stringify):
 
     def __init__(self):
         self.id = None
+        self.id_lc = None
         self.subtypes = []
         self.__subtype_types = []
         self.notes = None
@@ -511,6 +520,7 @@ class Model(Stringify):
         validate_required_fields(model_json, self.required_fields, context)
         # The duplication of the model's id is required by the Swagger spec.
         self.id = model_json.get('id')
+        self.id_lc = self.id.lower() 
         if id != self.id:
             raise SwaggerError("Model id doesn't match name", context)
         self.subtypes = model_json.get('subTypes') or []
@@ -547,6 +557,9 @@ class Model(Stringify):
 
     def extends(self):
         return self.__extends_type and self.__extends_type.id
+
+    def extends_lc(self):
+        return self.__extends_type and self.__extends_type.id_lc
 
     def set_extends_type(self, extends_type):
         self.__extends_type = extends_type
@@ -601,6 +614,7 @@ class ApiDeclaration(Stringify):
         self.api_version = None
         self.base_path = None
         self.resource_path = None
+        self.since = []
         self.apis = []
         self.models = []
 
@@ -648,6 +662,8 @@ class ApiDeclaration(Stringify):
         self.base_path = api_decl_json.get('basePath')
         self.resource_path = api_decl_json.get('resourcePath')
         self.requires_modules = api_decl_json.get('requiresModules') or []
+        since = api_decl_json.get('since') or []
+        self.since = ", ".join(since)
         api_json = api_decl_json.get('apis') or []
         self.apis = [
             Api().load(j, processor, context) for j in api_json]

@@ -96,6 +96,9 @@
 
 /*** DOCUMENTATION
 	<function name="EXCEPTION" language="en_US">
+		<since>
+			<version>1.6.0</version>
+		</since>
 		<synopsis>
 			Retrieve the details of the current dialplan exception.
 		</synopsis>
@@ -127,6 +130,9 @@
 		</see-also>
 	</function>
 	<function name="TESTTIME" language="en_US">
+		<since>
+			<version>1.8.0</version>
+		</since>
 		<synopsis>
 			Sets a time to be used with the channel to test logical conditions.
 		</synopsis>
@@ -152,6 +158,9 @@
 		</see-also>
 	</function>
 	<manager name="ShowDialPlan" language="en_US">
+		<since>
+			<version>1.6.0</version>
+		</since>
 		<synopsis>
 			Show dialplan contexts and extensions
 		</synopsis>
@@ -170,6 +179,9 @@
 		</description>
 	</manager>
 	<manager name="ExtensionStateList" language="en_US">
+		<since>
+			<version>13.0.0</version>
+		</since>
 		<synopsis>
 			List the current known extension states.
 		</synopsis>
@@ -193,6 +205,9 @@
 			</list-elements>
 			<managerEvent name="ExtensionStateListComplete" language="en_US">
 				<managerEventInstance class="EVENT_FLAG_COMMAND">
+					<since>
+						<version>13.0.0</version>
+					</since>
 					<synopsis>
 						Indicates the end of the list the current known extension states.
 					</synopsis>
@@ -280,21 +295,28 @@ struct scoreboard  /* make sure all fields are 0 before calling new_find_extensi
 	struct ast_exten *exten;
 };
 
-/*! \brief ast_context: An extension context - must remain in sync with fake_context */
+/*! \brief ast_context: An extension context */
 struct ast_context {
-	ast_rwlock_t lock;			/*!< A lock to prevent multiple threads from clobbering the context */
-	struct ast_exten *root;			/*!< The root of the list of extensions */
-	struct ast_hashtab *root_table;            /*!< For exact matches on the extensions in the pattern tree, and for traversals of the pattern_tree  */
-	struct match_char *pattern_tree;        /*!< A tree to speed up extension pattern matching */
-	struct ast_context *next;		/*!< Link them together */
-	struct ast_includes includes;		/*!< Include other contexts */
-	struct ast_ignorepats ignorepats;	/*!< Patterns for which to continue playing dialtone */
-	struct ast_sws alts;			/*!< Alternative switches */
-	char *registrar;			/*!< Registrar -- make sure you malloc this, as the registrar may have to survive module unloads */
-	int refcount;                   /*!< each module that would have created this context should inc/dec this as appropriate */
-	int autohints;                  /*!< Whether autohints support is enabled or not */
-	ast_mutex_t macrolock;			/*!< A lock to implement "exclusive" macros - held whilst a call is executing in the macro */
-	char name[0];				/*!< Name of the context */
+	const char *name;
+	const char *registrar;
+
+	ast_rwlock_t lock;                /*!< A lock to prevent multiple threads from clobbering the context */
+	struct ast_exten *root;           /*!< The root of the list of extensions */
+	struct ast_hashtab *root_table;   /*!< For exact matches on the extensions in the pattern tree, and for traversals of the pattern_tree  */
+	struct match_char *pattern_tree;  /*!< A tree to speed up extension pattern matching */
+	struct ast_context *next;         /*!< Link them together */
+	struct ast_includes includes;     /*!< Include other contexts */
+	struct ast_ignorepats ignorepats; /*!< Patterns for which to continue playing dialtone */
+	struct ast_sws alts;              /*!< Alternative switches */
+	int refcount;                     /*!< each module that would have created this context should inc/dec this as appropriate */
+	int autohints;                    /*!< Whether autohints support is enabled or not */
+
+	/*!
+	 * Buffer to hold the name & registrar character data.
+	 *
+	 * The context name *must* be stored first in this buffer.
+	 */
+	char data[];
 };
 
 /*! \brief ast_state_cb: An extension state notify register item */
@@ -1000,7 +1022,7 @@ static void pbx_destroy(struct ast_pbx *p)
  * in a similar collating sequence as sorting alphabetic strings, from left to
  * right. Thus, "1XXXXX" comes before "X11111", and would be the "better" match,
  * because "1" is more specific than "X".
- * So, to accomodate this philosophy, I sort the tree branches along the alt_char
+ * So, to accommodate this philosophy, I sort the tree branches along the alt_char
  * line so they are lowest to highest in specificity numbers. This way, as soon
  * as we encounter our first complete match, we automatically have the "best"
  * match and can stop the traversal immediately. Same for CANMATCH/MATCHMORE.
@@ -1652,6 +1674,7 @@ static const char *get_pattern_node(struct pattern_node *node, const char *src, 
 #undef INC_DST_OVERFLOW_CHECK
 }
 
+#define MAX_EXTENBUF_SIZE 512
 static struct match_char *add_exten_to_pattern_tree(struct ast_context *con, struct ast_exten *e1, int findonly)
 {
 	struct match_char *m1 = NULL;
@@ -1662,11 +1685,13 @@ static struct match_char *add_exten_to_pattern_tree(struct ast_context *con, str
 	int pattern = 0;
 	int idx_cur;
 	int idx_next;
-	char extenbuf[512];
+	char extenbuf[MAX_EXTENBUF_SIZE];
+	volatile size_t required_space = strlen(e1->exten) + 1;
 	struct pattern_node pat_node[2];
 
 	if (e1->matchcid) {
-		if (sizeof(extenbuf) < strlen(e1->exten) + strlen(e1->cidmatch) + 2) {
+		required_space += (strlen(e1->cidmatch) + 2 /* '/' + NULL */);
+		if (required_space > MAX_EXTENBUF_SIZE) {
 			ast_log(LOG_ERROR,
 				"The pattern %s/%s is too big to deal with: it will be ignored! Disaster!\n",
 				e1->exten, e1->cidmatch);
@@ -1674,7 +1699,13 @@ static struct match_char *add_exten_to_pattern_tree(struct ast_context *con, str
 		}
 		sprintf(extenbuf, "%s/%s", e1->exten, e1->cidmatch);/* Safe.  We just checked. */
 	} else {
-		ast_copy_string(extenbuf, e1->exten, sizeof(extenbuf));
+		if (required_space > MAX_EXTENBUF_SIZE) {
+			ast_log(LOG_ERROR,
+				"The pattern %s/%s is too big to deal with: it will be ignored! Disaster!\n",
+				e1->exten, e1->cidmatch);
+			return NULL;
+		}
+		ast_copy_string(extenbuf, e1->exten, required_space);
 	}
 
 #ifdef NEED_DEBUG
@@ -2420,35 +2451,18 @@ int ast_extension_close(const char *pattern, const char *data, int needmore)
 	return extension_match_core(pattern, data, needmore);
 }
 
-/* This structure must remain in sync with ast_context for proper hashtab matching */
-struct fake_context /* this struct is purely for matching in the hashtab */
-{
-	ast_rwlock_t lock;
-	struct ast_exten *root;
-	struct ast_hashtab *root_table;
-	struct match_char *pattern_tree;
-	struct ast_context *next;
-	struct ast_includes includes;
-	struct ast_ignorepats ignorepats;
-	struct ast_sws alts;
-	const char *registrar;
-	int refcount;
-	int autohints;
-	ast_mutex_t macrolock;
-	char name[256];
-};
-
 struct ast_context *ast_context_find(const char *name)
 {
 	struct ast_context *tmp;
-	struct fake_context item;
+	struct ast_context item = {
+		.name = name,
+	};
 
 	if (!name) {
 		return NULL;
 	}
 	ast_rdlock_contexts();
 	if (contexts_table) {
-		ast_copy_string(item.name, name, sizeof(item.name));
 		tmp = ast_hashtab_lookup(contexts_table, &item);
 	} else {
 		tmp = NULL;
@@ -2759,7 +2773,10 @@ struct ast_exten *pbx_find_extension(struct ast_channel *chan,
 			return NULL;
 		}
 	}
-	q->incstack[q->stacklen++] = tmp->name;	/* Setup the stack */
+	/* Technically we should be using tmp->name here, but if we used that we
+	 * would have to cast away the constness of the 'name' pointer and I do
+	 * not want to do that. */
+	q->incstack[q->stacklen++] = tmp->data;	/* Setup the stack */
 	/* Now try any includes we have in this context */
 	for (idx = 0; idx < ast_context_includes_count(tmp); idx++) {
 		const struct ast_include *i = ast_context_includes_get(tmp, idx);
@@ -2925,11 +2942,17 @@ static int pbx_extension_helper(struct ast_channel *c, struct ast_context *con,
 				ast_log(LOG_WARNING, "No application '%s' for extension (%s, %s, %d)\n", e->app, context, exten, priority);
 				return -1;
 			}
+			ast_channel_lock(c);
+			if (ast_channel_softhangup_internal_flag(c) & AST_SOFTHANGUP_ASYNCGOTO) {
+				ast_channel_unlock(c);
+				return 0;
+			}
 			if (ast_channel_context(c) != context)
 				ast_channel_context_set(c, context);
 			if (ast_channel_exten(c) != exten)
 				ast_channel_exten_set(c, exten);
 			ast_channel_priority_set(c, priority);
+			ast_channel_unlock(c);
 			if (substitute) {
 				pbx_substitute_variables_helper(c, substitute, passdata, sizeof(passdata)-1);
 			}
@@ -2975,7 +2998,7 @@ static int pbx_extension_helper(struct ast_channel *c, struct ast_context *con,
 			break;
 		case STATUS_NO_LABEL:
 			if (context && !combined_find_spawn)
-				ast_log(LOG_NOTICE, "No such label '%s' in extension '%s' in context '%s'\n", label, exten, S_OR(context, ""));
+				ast_log(LOG_NOTICE, "No such label '%s' in extension '%s' in context '%s'\n", S_OR(label, ""), exten, S_OR(context, ""));
 			break;
 		default:
 			ast_debug(1, "Shouldn't happen!\n");
@@ -4324,7 +4347,7 @@ static enum ast_pbx_result __ast_pbx_run(struct ast_channel *c,
 	callid = ast_read_threadstorage_callid();
 	/* If the thread isn't already associated with a callid, we should create that association. */
 	if (!callid) {
-		/* Associate new PBX thread with the channel call id if it is availble.
+		/* Associate new PBX thread with the channel call id if it is available.
 		 * If not, create a new one instead.
 		 */
 		callid = ast_channel_callid(c);
@@ -4797,9 +4820,9 @@ void pbx_set_overrideswitch(const char *newval)
  */
 static struct ast_context *find_context(const char *context)
 {
-	struct fake_context item;
-
-	ast_copy_string(item.name, context, sizeof(item.name));
+	struct ast_context item = {
+		.name = context,
+	};
 
 	return ast_hashtab_lookup(contexts_table, &item);
 }
@@ -4812,9 +4835,9 @@ static struct ast_context *find_context(const char *context)
 static struct ast_context *find_context_locked(const char *context)
 {
 	struct ast_context *c;
-	struct fake_context item;
-
-	ast_copy_string(item.name, context, sizeof(item.name));
+	struct ast_context item = {
+		.name = context,
+	};
 
 	ast_rdlock_contexts();
 	c = ast_hashtab_lookup(contexts_table, &item);
@@ -5065,7 +5088,7 @@ int ast_context_remove_extension_callerid2(struct ast_context *con, const char *
 					}
 				}
 			} else {
-				ast_log(LOG_ERROR,"Could not find priority %d of exten %s in context %s!\n",
+				ast_debug(3,"Could not find priority %d of exten %s in context %s!\n",
 						priority, exten->name, con->name);
 			}
 		}
@@ -5146,49 +5169,6 @@ int ast_context_remove_extension_callerid2(struct ast_context *con, const char *
 	return found ? 0 : -1;
 }
 
-
-/*!
- * \note This function locks contexts list by &conlist, searches for the right context
- * structure, and locks the macrolock mutex in that context.
- * macrolock is used to limit a macro to be executed by one call at a time.
- */
-int ast_context_lockmacro(const char *macrocontext)
-{
-	struct ast_context *c;
-	int ret = -1;
-
-	c = find_context_locked(macrocontext);
-	if (c) {
-		ast_unlock_contexts();
-
-		/* if we found context, lock macrolock */
-		ret = ast_mutex_lock(&c->macrolock);
-	}
-
-	return ret;
-}
-
-/*!
- * \note This function locks contexts list by &conlist, searches for the right context
- * structure, and unlocks the macrolock mutex in that context.
- * macrolock is used to limit a macro to be executed by one call at a time.
- */
-int ast_context_unlockmacro(const char *macrocontext)
-{
-	struct ast_context *c;
-	int ret = -1;
-
-	c = find_context_locked(macrocontext);
-	if (c) {
-		ast_unlock_contexts();
-
-		/* if we found context, unlock macrolock */
-		ret = ast_mutex_unlock(&c->macrolock);
-	}
-
-	return ret;
-}
-
 /*
  * Help for CLI commands ...
  */
@@ -5239,7 +5219,7 @@ static char *handle_show_hints(struct ast_cli_entry *e, int cmd, struct ast_cli_
 			ast_get_extension_name(hint->exten),
 			ast_get_context_name(ast_get_extension_context(hint->exten)));
 
-		ast_cli(a->fd, "%-20.20s: %-20.20s  State:%-15.15s Presence:%-15.15s Watchers %2d\n",
+		ast_cli(a->fd, "%-30.30s: %-60.60s  State:%-15.15s Presence:%-15.15s Watchers %2d\n",
 			buf,
 			ast_get_extension_app(hint->exten),
 			ast_extension_state2str(hint->laststate),
@@ -5340,7 +5320,7 @@ static char *handle_show_hint(struct ast_cli_entry *e, int cmd, struct ast_cli_a
 			sprintf(buf, "%s@%s",
 				ast_get_extension_name(hint->exten),
 				ast_get_context_name(ast_get_extension_context(hint->exten)));
-			ast_cli(a->fd, "%-20.20s: %-20.20s  State:%-15.15s Presence:%-15.15s Watchers %2d\n",
+			ast_cli(a->fd, "%-30.30s: %-60.60s  State:%-15.15s Presence:%-15.15s Watchers %2d\n",
 				buf,
 				ast_get_extension_app(hint->exten),
 				ast_extension_state2str(hint->laststate),
@@ -6190,8 +6170,12 @@ void unreference_cached_app(struct ast_app *app)
 struct ast_context *ast_context_find_or_create(struct ast_context **extcontexts, struct ast_hashtab *exttable, const char *name, const char *registrar)
 {
 	struct ast_context *tmp, **local_contexts;
-	struct fake_context search;
-	int length = sizeof(struct ast_context) + strlen(name) + 1;
+	struct ast_context search = {
+		.name = name,
+	};
+	size_t name_bytes = strlen(name);
+	size_t registrar_bytes = strlen(registrar);
+	int length = sizeof(struct ast_context) + name_bytes + registrar_bytes + 2;
 
 	if (!contexts_table) {
 		/* Protect creation of contexts_table from reentrancy. */
@@ -6207,7 +6191,6 @@ struct ast_context *ast_context_find_or_create(struct ast_context **extcontexts,
 		ast_unlock_contexts();
 	}
 
-	ast_copy_string(search.name, name, sizeof(search.name));
 	if (!extcontexts) {
 		ast_rdlock_contexts();
 		local_contexts = &contexts;
@@ -6228,15 +6211,19 @@ struct ast_context *ast_context_find_or_create(struct ast_context **extcontexts,
 
 	if ((tmp = ast_calloc(1, length))) {
 		ast_rwlock_init(&tmp->lock);
-		ast_mutex_init(&tmp->macrolock);
-		strcpy(tmp->name, name);
+		tmp->name = memcpy(&tmp->data[0], name, name_bytes);
+		tmp->registrar = memcpy(&tmp->data[name_bytes + 1], registrar, registrar_bytes);
 		tmp->root = NULL;
 		tmp->root_table = NULL;
-		tmp->registrar = ast_strdup(registrar);
 		AST_VECTOR_INIT(&tmp->includes, 0);
 		AST_VECTOR_INIT(&tmp->ignorepats, 0);
 		AST_VECTOR_INIT(&tmp->alts, 0);
 		tmp->refcount = 1;
+
+		/* The context 'name' must be stored at the beginning of 'data.' The
+		 * order of subsequent strings (currently only 'registrar') is not
+		 * relevant. */
+		ast_assert(tmp->name == &tmp->data[0]);
 	} else {
 		ast_log(LOG_ERROR, "Danger! We failed to allocate a context for %s!\n", name);
 		if (!extcontexts) {
@@ -6674,20 +6661,20 @@ void ast_merge_contexts_and_delete(struct ast_context **extcontexts, struct ast_
 
 	ft = ast_tvdiff_us(writelocktime, begintime);
 	ft /= 1000000.0;
-	ast_verb(3,"Time to scan old dialplan and merge leftovers back into the new: %8.6f sec\n", ft);
+	ast_verb(5,"Time to scan old dialplan and merge leftovers back into the new: %8.6f sec\n", ft);
 
 	ft = ast_tvdiff_us(endlocktime, writelocktime);
 	ft /= 1000000.0;
-	ast_verb(3,"Time to restore hints and swap in new dialplan: %8.6f sec\n", ft);
+	ast_verb(5,"Time to restore hints and swap in new dialplan: %8.6f sec\n", ft);
 
 	ft = ast_tvdiff_us(enddeltime, endlocktime);
 	ft /= 1000000.0;
-	ast_verb(3,"Time to delete the old dialplan: %8.6f sec\n", ft);
+	ast_verb(5,"Time to delete the old dialplan: %8.6f sec\n", ft);
 
 	ft = ast_tvdiff_us(enddeltime, begintime);
 	ft /= 1000000.0;
-	ast_verb(3,"Total time merge_contexts_delete: %8.6f sec\n", ft);
-	ast_verb(3, "%s successfully loaded %d contexts (enable debug for details).\n", registrar, ctx_count);
+	ast_verb(5,"Total time merge_contexts_delete: %8.6f sec\n", ft);
+	ast_verb(5, "%s successfully loaded %d contexts (enable debug for details).\n", registrar, ctx_count);
 }
 
 /*
@@ -6983,6 +6970,10 @@ int ast_explicit_goto(struct ast_channel *chan, const char *context, const char 
 
 	ast_channel_lock(chan);
 
+	if (ast_channel_softhangup_internal_flag(chan) & AST_SOFTHANGUP_ASYNCGOTO) {
+		ast_channel_unlock(chan);
+		return -1;
+	}
 	if (!ast_strlen_zero(context))
 		ast_channel_context_set(chan, context);
 	if (!ast_strlen_zero(exten))
@@ -8063,9 +8054,6 @@ static void __ast_internal_context_destroy( struct ast_context *con)
 	AST_VECTOR_CALLBACK_VOID(&tmp->alts, sw_free);
 	AST_VECTOR_FREE(&tmp->alts);
 
-	if (tmp->registrar)
-		ast_free(tmp->registrar);
-
 	/* destroy the hash tabs */
 	if (tmp->root_table) {
 		ast_hashtab_destroy(tmp->root_table, 0);
@@ -8086,7 +8074,6 @@ static void __ast_internal_context_destroy( struct ast_context *con)
 	}
 	tmp->root = NULL;
 	ast_rwlock_destroy(&tmp->lock);
-	ast_mutex_destroy(&tmp->macrolock);
 	ast_free(tmp);
 }
 
@@ -8171,7 +8158,7 @@ void __ast_context_destroy(struct ast_context *list, struct ast_hashtab *context
 						if (!prio_item->registrar || strcmp(prio_item->registrar, registrar) != 0) {
 							continue;
 						}
-						ast_verb(3, "Remove %s/%s/%d, registrar=%s; con=%s(%p); con->root=%p\n",
+						ast_verb(5, "Remove %s/%s/%d, registrar=%s; con=%s(%p); con->root=%p\n",
 								 tmp->name, prio_item->name, prio_item->priority, registrar, con? con->name : "<nil>", con, con? con->root_table: NULL);
 						ast_copy_string(extension, prio_item->exten, sizeof(extension));
 						if (prio_item->cidmatch) {
@@ -8465,7 +8452,7 @@ int load_pbx(void)
 	/* Initialize the PBX */
 	ast_verb(1, "Asterisk PBX Core Initializing\n");
 
-	ast_verb(2, "Registering builtin functions:\n");
+	ast_verb(5, "Registering builtin functions:\n");
 	ast_cli_register_multiple(pbx_cli, ARRAY_LEN(pbx_cli));
 	__ast_custom_function_register(&exception_function, NULL);
 	__ast_custom_function_register(&testtime_function, NULL);
@@ -8826,6 +8813,47 @@ int ast_async_goto_if_exists(struct ast_channel *chan, const char * context, con
 	return __ast_goto_if_exists(chan, context, exten, priority, 1);
 }
 
+int pbx_parse_location(struct ast_channel *chan, char **contextp, char **extenp, char **prip, int *ipri, int *mode, char *rest)
+{
+	char *context, *exten, *pri;
+	/* do the strsep before here, so we don't have to alloc and free */
+	if (!*extenp) {
+		/* Only a priority in this one */
+		*prip = *contextp;
+		*extenp = NULL;
+		*contextp = NULL;
+	} else if (!*prip) {
+		/* Only an extension and priority in this one */
+		*prip = *extenp;
+		*extenp = *contextp;
+		*contextp = NULL;
+	}
+	context = *contextp;
+	exten = *extenp;
+	pri = *prip;
+	if (mode) {
+		if (*pri == '+') {
+			*mode = 1;
+			pri++;
+		} else if (*pri == '-') {
+			*mode = -1;
+			pri++;
+		}
+	}
+	if ((rest && sscanf(pri, "%30d%1s", ipri, rest) != 1) || sscanf(pri, "%30d", ipri) != 1) {
+		*ipri = ast_findlabel_extension(chan, context ? context : ast_channel_context(chan),
+			exten ? exten : ast_channel_exten(chan), pri,
+			S_COR(ast_channel_caller(chan)->id.number.valid, ast_channel_caller(chan)->id.number.str, NULL));
+		if (*ipri < 1) {
+			ast_log(LOG_WARNING, "Priority '%s' must be a number > 0, or valid label\n", pri);
+			return -1;
+		} else if (mode) {
+			*mode = 0;
+		}
+	}
+	return 0;
+}
+
 static int pbx_parseable_goto(struct ast_channel *chan, const char *goto_string, int async)
 {
 	char *exten, *pri, *context;
@@ -8842,31 +8870,9 @@ static int pbx_parseable_goto(struct ast_channel *chan, const char *goto_string,
 	context = strsep(&stringp, ",");	/* guaranteed non-null */
 	exten = strsep(&stringp, ",");
 	pri = strsep(&stringp, ",");
-	if (!exten) {	/* Only a priority in this one */
-		pri = context;
-		exten = NULL;
-		context = NULL;
-	} else if (!pri) {	/* Only an extension and priority in this one */
-		pri = exten;
-		exten = context;
-		context = NULL;
-	}
-	if (*pri == '+') {
-		mode = 1;
-		pri++;
-	} else if (*pri == '-') {
-		mode = -1;
-		pri++;
-	}
-	if (sscanf(pri, "%30d%1s", &ipri, rest) != 1) {
-		ipri = ast_findlabel_extension(chan, context ? context : ast_channel_context(chan),
-			exten ? exten : ast_channel_exten(chan), pri,
-			S_COR(ast_channel_caller(chan)->id.number.valid, ast_channel_caller(chan)->id.number.str, NULL));
-		if (ipri < 1) {
-			ast_log(LOG_WARNING, "Priority '%s' must be a number > 0, or valid label\n", pri);
-			return -1;
-		} else
-			mode = 0;
+
+	if (pbx_parse_location(chan, &context, &exten, &pri, &ipri, &mode, rest)) {
+		return -1;
 	}
 	/* At this point we have a priority and maybe an extension and a context */
 

@@ -57,6 +57,9 @@
 
 /*** DOCUMENTATION
 	<function name="CALENDAR_BUSY" language="en_US">
+		<since>
+			<version>1.8.0</version>
+		</since>
 		<synopsis>
 			Determine if the calendar is marked busy at this time.
 		</synopsis>
@@ -74,6 +77,9 @@
 		</see-also>
 	</function>
 	<function name="CALENDAR_EVENT" language="en_US">
+		<since>
+			<version>1.8.0</version>
+		</since>
 		<synopsis>
 			Get calendar event notification data from a notification call.
 		</synopsis>
@@ -106,6 +112,9 @@
 		</see-also>
 	</function>
 	<function name="CALENDAR_QUERY" language="en_US">
+		<since>
+			<version>1.8.0</version>
+		</since>
 		<synopsis>Query a calendar server and store the data on a channel
 		</synopsis>
 		<syntax>
@@ -131,6 +140,9 @@
 		</see-also>
 	</function>
 	<function name="CALENDAR_QUERY_RESULT" language="en_US">
+		<since>
+			<version>1.8.0</version>
+		</since>
 		<synopsis>
 			Retrieve data from a previously run CALENDAR_QUERY() call
 		</synopsis>
@@ -172,6 +184,9 @@
 		</see-also>
 	</function>
 	<function name="CALENDAR_WRITE" language="en_US">
+		<since>
+			<version>1.8.0</version>
+		</since>
 		<synopsis>Write an event to a calendar</synopsis>
 		<syntax>
 			<parameter name="calendar" required="true">
@@ -193,7 +208,9 @@
 			</parameter>
 		</syntax>
 		<description>
-			<para>Example: CALENDAR_WRITE(calendar,field1,field2,field3)=val1,val2,val3</para>
+			<example title="Set calendar fields">
+			same => n,Set(CALENDAR_WRITE(calendar,field1,field2,field3)=val1,val2,val3)
+			</example>
 			<para>The field and value arguments can easily be set/passed using the HASHKEYS() and HASH() functions</para>
 			<variablelist>
 				<variable name="CALENDAR_SUCCESS">
@@ -998,10 +1015,15 @@ static int schedule_calendar_event(struct ast_calendar *cal, struct ast_calendar
 	if (!cmp_event || old_event->end != event->end) {
 		changed = 1;
 		devstate_sched_end = (event->end - now.tv_sec) * 1000;
-		ast_mutex_lock(&refreshlock);
-		AST_SCHED_REPLACE(old_event->bs_end_sched, sched, devstate_sched_end, calendar_devstate_change, old_event);
-		ast_mutex_unlock(&refreshlock);
-		ast_debug(3, "Calendar bs_end event notification scheduled to happen in %ld ms\n", (long) devstate_sched_end);
+
+		if (devstate_sched_end <= 0) { /* if we let this slip by, Asterisk will assert */
+			ast_log(LOG_WARNING, "Whoops! Event end notification scheduled in the past: %ld ms\n", (long) devstate_sched_end);
+		} else {
+			ast_mutex_lock(&refreshlock);
+			AST_SCHED_REPLACE(old_event->bs_end_sched, sched, devstate_sched_end, calendar_devstate_change, old_event);
+			ast_mutex_unlock(&refreshlock);
+			ast_debug(3, "Calendar bs_end event notification scheduled to happen in %ld ms\n", (long) devstate_sched_end);
+		}
 	}
 
 	if (changed) {
@@ -1601,6 +1623,21 @@ static char *epoch_to_string(char *buf, size_t buflen, time_t epoch)
 	return buf;
 }
 
+static const char *ast_calendar_busy_state_to_str(enum ast_calendar_busy_state busy_state)
+{
+	switch (busy_state) {
+	case AST_CALENDAR_BS_FREE:
+		return "Free";
+	case AST_CALENDAR_BS_BUSY_TENTATIVE:
+		return "Busy (Tentative)";
+	case AST_CALENDAR_BS_BUSY:
+		return "Busy";
+	default:
+		return "Unknown (Busy)";
+	}
+}
+
+
 static char *handle_show_calendar(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
 {
 #define FORMAT  "%-18.18s : %-20.20s\n"
@@ -1676,6 +1713,7 @@ static char *handle_show_calendar(struct ast_cli_entry *e, int cmd, struct ast_c
 		ast_cli(a->fd, FORMAT2, "Start", epoch_to_string(buf, sizeof(buf), event->start));
 		ast_cli(a->fd, FORMAT2, "End", epoch_to_string(buf, sizeof(buf), event->end));
 		ast_cli(a->fd, FORMAT2, "Alarm", epoch_to_string(buf, sizeof(buf), event->alarm));
+		ast_cli(a->fd, FORMAT2, "Busy State", ast_calendar_busy_state_to_str(event->busy_state));
 		ast_cli(a->fd, "\n");
 
 		event = ast_calendar_unref_event(event);

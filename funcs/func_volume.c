@@ -41,6 +41,9 @@
 
 /*** DOCUMENTATION
 	<function name="VOLUME" language="en_US">
+		<since>
+			<version>1.6.0</version>
+		</since>
 		<synopsis>
 			Set or get the TX or RX volume of a channel.
 		</synopsis>
@@ -59,11 +62,24 @@
 		<description>
 			<para>The VOLUME function can be used to increase or decrease the <literal>tx</literal> or
 			<literal>rx</literal> gain of any channel.</para>
-			<para>For example:</para>
-			<para>Set(VOLUME(TX)=3)</para>
-			<para>Set(VOLUME(RX)=2)</para>
-			<para>Set(VOLUME(TX,p)=3)</para>
-			<para>Set(VOLUME(RX,p)=3)</para>
+			<example title="Increase volume">
+			same => n,Set(VOLUME(TX)=3)
+			</example>
+			<example title="Increase volume">
+			same => n,Set(VOLUME(RX)=2)
+			</example>
+			<example title="Increase volume with DTMF control">
+			same => n,Set(VOLUME(TX,p)=3)
+			</example>
+			<example title="Increase RX volume with DTMF control">
+			same => n,Set(VOLUME(RX,p)=3)
+			</example>
+			<example title="Decrease RX volume">
+			same => n,Set(VOLUME(RX)=-4)
+			</example>
+			<example title="Reset to normal">
+			same => n,Set(VOLUME(RX)=0)
+			</example>
 		</description>
 	</function>
  ***/

@@ -126,7 +126,7 @@ static void write_openssl_error_to_log(void)
 		ast_log(LOG_ERROR, "%.*s\n", (int) length, buffer);
 	}
 
-	ast_free(buffer);
+	ast_std_free(buffer);
 }
 #endif
 
@@ -379,7 +379,8 @@ static void __ssl_setup_certs(struct ast_tls_config *cfg, const size_t cert_file
 }
 #endif
 
-static int __ssl_setup(struct ast_tls_config *cfg, int client)
+static int __ssl_setup(struct ast_tls_config *cfg, int client,
+	int suppress_progress_msgs)
 {
 #ifndef DO_SSL
 	if (cfg->enabled) {
@@ -534,7 +535,9 @@ static int __ssl_setup(struct ast_tls_config *cfg, int client)
 				if (SSL_CTX_set_tmp_dh(cfg->ssl_ctx, dh)) {
 					long options = SSL_OP_CIPHER_SERVER_PREFERENCE | SSL_OP_SINGLE_DH_USE | SSL_OP_SINGLE_ECDH_USE;
 					options = SSL_CTX_set_options(cfg->ssl_ctx, options);
-					ast_verb(2, "TLS/SSL DH initialized, PFS cipher-suites enabled\n");
+					if (!suppress_progress_msgs) {
+						ast_verb(2, "TLS/SSL DH initialized, PFS cipher-suites enabled\n");
+					}
 				}
 				DH_free(dh);
 			}
@@ -548,7 +551,9 @@ static int __ssl_setup(struct ast_tls_config *cfg, int client)
 	#endif
 	/* SSL_CTX_set_ecdh_auto(cfg->ssl_ctx, on); requires OpenSSL 1.0.2 which wraps: */
 	if (SSL_CTX_ctrl(cfg->ssl_ctx, SSL_CTRL_SET_ECDH_AUTO, 1, NULL)) {
-		ast_verb(2, "TLS/SSL ECDH initialized (automatic), faster PFS ciphers enabled\n");
+		if (!suppress_progress_msgs) {
+			ast_verb(2, "TLS/SSL ECDH initialized (automatic), faster PFS ciphers enabled\n");
+		}
 #if !defined(OPENSSL_NO_ECDH) && (OPENSSL_VERSION_NUMBER >= 0x10000000L) && (OPENSSL_VERSION_NUMBER < 0x10100000L)
 	} else {
 		/* enables AES-128 ciphers, to get AES-256 use NID_secp384r1 */
@@ -562,14 +567,16 @@ static int __ssl_setup(struct ast_tls_config *cfg, int client)
 #endif
 	}
 
-	ast_verb(2, "TLS/SSL certificate ok\n");	/* We should log which one that is ok. This message doesn't really make sense in production use */
+	if (!suppress_progress_msgs) {
+		ast_verb(2, "TLS/SSL certificate ok\n");	/* We should log which one that is ok. This message doesn't really make sense in production use */
+	}
 	return 1;
 #endif
 }
 
 int ast_ssl_setup(struct ast_tls_config *cfg)
 {
-	return __ssl_setup(cfg, 0);
+	return __ssl_setup(cfg, 0, 0);
 }
 
 void ast_ssl_teardown(struct ast_tls_config *cfg)
@@ -653,8 +660,10 @@ struct ast_tcptls_session_instance *ast_tcptls_client_start_timeout(
 	}
 
 	if (socket_connect(desc->accept_fd, &desc->remote_address, timeout)) {
-		ast_log(LOG_WARNING, "Unable to connect %s to %s: %s\n", desc->name,
-				ast_sockaddr_stringify(&desc->remote_address), strerror(errno));
+		if (!desc->suppress_connection_msgs) {
+			ast_log(LOG_WARNING, "Unable to connect %s to %s: %s\n", desc->name,
+					ast_sockaddr_stringify(&desc->remote_address), strerror(errno));
+		}
 
 		ao2_ref(tcptls_session, -1);
 		return NULL;
@@ -663,8 +672,7 @@ struct ast_tcptls_session_instance *ast_tcptls_client_start_timeout(
 	ast_fd_clear_flags(desc->accept_fd, O_NONBLOCK);
 
 	if (desc->tls_cfg) {
-		desc->tls_cfg->enabled = 1;
-		__ssl_setup(desc->tls_cfg, 1);
+		__ssl_setup(desc->tls_cfg, 1, desc->suppress_connection_msgs);
 	}
 
 	return handle_tcptls_connection(tcptls_session);
@@ -679,6 +687,10 @@ struct ast_tcptls_session_instance *ast_tcptls_client_create(struct ast_tcptls_s
 {
 	int fd, x = 1;
 	struct ast_tcptls_session_instance *tcptls_session = NULL;
+
+	ast_assert(!desc->tls_cfg
+			|| ast_test_flag(&desc->tls_cfg->flags, AST_SSL_DONT_VERIFY_SERVER)
+			|| !ast_strlen_zero(desc->hostname));
 
 	/* Do nothing if nothing has changed */
 	if (!ast_sockaddr_cmp(&desc->old_address, &desc->remote_address)) {
@@ -736,6 +748,13 @@ struct ast_tcptls_session_instance *ast_tcptls_client_create(struct ast_tcptls_s
 
 	/* Set current info */
 	ast_sockaddr_copy(&desc->old_address, &desc->remote_address);
+
+	if (!ast_strlen_zero(desc->hostname)) {
+		if (ast_iostream_set_sni_hostname(tcptls_session->stream, desc->hostname) != 0) {
+			ast_log(LOG_WARNING, "Unable to set SNI hostname '%s' on connection '%s'\n",
+				desc->hostname, desc->name);
+		}
+	}
 
 	return tcptls_session;
 
@@ -837,6 +856,7 @@ void ast_tcptls_server_start(struct ast_tcptls_session_args *desc)
 
 	if (desc->accept_fd != -1) {
 		close(desc->accept_fd);
+		desc->accept_fd = -1;
 	}
 
 	/* If there's no new server, stop here */

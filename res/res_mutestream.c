@@ -26,7 +26,7 @@
  *
  * \note This module only handles audio streams today, but can easily be appended to also
  * zero out text streams if there's an application for it.
- * When we know and understands what happens if we zero out video, we can do that too.
+ * When we know and understand what happens if we zero out video, we can do that too.
  */
 
 /*** MODULEINFO
@@ -49,6 +49,9 @@
 
 /*** DOCUMENTATION
 	<function name="MUTEAUDIO" language="en_US">
+		<since>
+			<version>1.8.0</version>
+		</since>
 		<synopsis>
 			Muting audio streams in the channel
 		</synopsis>
@@ -69,19 +72,19 @@
 			</parameter>
 		</syntax>
 		<description>
-			<para>The MUTEAUDIO function can be used to mute inbound (to the PBX) or outbound audio in a call.
-			</para>
-			<para>Examples:
-			</para>
-			<para>
-			MUTEAUDIO(in)=on
-			</para>
-			<para>
-			MUTEAUDIO(in)=off
-			</para>
+			<para>The MUTEAUDIO function can be used to mute inbound (to the PBX) or outbound audio in a call.</para>
+			<example title="Mute incoming audio">
+			exten => s,1,Set(MUTEAUDIO(in)=on)
+			</example>
+			<example title="Do not mute incoming audio">
+			exten => s,1,Set(MUTEAUDIO(in)=off)
+			</example>
 		</description>
 	</function>
 	<manager name="MuteAudio" language="en_US">
+		<since>
+			<version>1.8.0</version>
+		</since>
 		<synopsis>
 			Mute an audio stream.
 		</synopsis>

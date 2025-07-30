@@ -335,6 +335,7 @@ enum ast_control_frame_type {
 	AST_CONTROL_STREAM_RESTART = 1002,	/*!< Indicate to a channel in playback to restart the stream */
 	AST_CONTROL_STREAM_REVERSE = 1003,	/*!< Indicate to a channel in playback to rewind */
 	AST_CONTROL_STREAM_FORWARD = 1004,	/*!< Indicate to a channel in playback to fast forward */
+	AST_CONTROL_PLAYBACK_BEGIN = 1005,	/*!< Indicate to a dialing interface that playback of an audio file should begin on the dialing channel. Currently only supported by app_dial. */
 	/* Control frames to manipulate recording on a channel. */
 	AST_CONTROL_RECORD_CANCEL = 1100,	/*!< Indicated to a channel in record to stop recording and discard the file */
 	AST_CONTROL_RECORD_STOP = 1101,	/*!< Indicated to a channel in record to stop recording */
@@ -408,6 +409,9 @@ struct ast_control_t38_parameters {
 enum ast_control_transfer {
 	AST_TRANSFER_SUCCESS = 0, /*!< Transfer request on the channel worked */
 	AST_TRANSFER_FAILED,      /*!< Transfer request on the channel failed */
+	AST_TRANSFER_PROGRESS,    /*!< Transfer request on the channel is in progress */
+	AST_TRANSFER_UNAVAILABLE, /*!< Transfer request on the channel is unavailable */
+	AST_TRANSFER_INVALID,     /*!< Invalid state for none of the above. */
 };
 
 struct ast_control_pvt_cause_code {
@@ -462,7 +466,12 @@ struct ast_control_pvt_cause_code {
  * Option data is a single signed char value 0 or 1
  *
  * \note This option appears to be unused in the code. It is handled, but never
- * set or queried. */
+ * set or queried.
+ * (chan_dahdi does allow setting via CHANNEL(echocan_mode), but this uses
+ * the func_write callback, not the setoption callback.
+ * If another channel driver added echocan support, it might make sense to move
+ * this to the setoption callback and then actually use this option.)
+ */
 #define	AST_OPTION_ECHOCAN		8
 
 /*! \brief Handle channel write data

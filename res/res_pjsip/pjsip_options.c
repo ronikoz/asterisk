@@ -180,6 +180,8 @@ struct sip_options_aor {
 	unsigned int available;
 	/*! \brief Frequency to send OPTIONS requests to AOR contacts. 0 is disabled. */
 	unsigned int qualify_frequency;
+	/*! \brief If true only authenticate if OPTIONS response is 2XX */
+	int qualify_2xx_only;
 	/*! If true authenticate the qualify challenge response if needed */
 	int authenticate_qualify;
 	/*! \brief Qualify timeout. 0 is diabled. */
@@ -242,8 +244,7 @@ static pj_status_t send_options_response(pjsip_rx_data *rdata, int code)
 	/*
 	 * XXX TODO: pjsip doesn't care a lot about either of these headers -
 	 * while it provides specific methods to create them, they are defined
-	 * to be the standard string header creation. We never did add them
-	 * in chan_sip, although RFC 3261 says they SHOULD. Hard coded here.
+	 * to be the standard string header creation. Hard coded here.
 	 */
 	ast_sip_add_header(tdata, "Accept-Encoding", DEFAULT_ENCODING);
 	ast_sip_add_header(tdata, "Accept-Language", DEFAULT_LANGUAGE);
@@ -269,7 +270,6 @@ static pj_bool_t options_on_rx_request(pjsip_rx_data *rdata)
 {
 	RAII_VAR(struct ast_sip_endpoint *, endpoint, NULL, ao2_cleanup);
 	pjsip_uri *ruri;
-	pjsip_sip_uri *sip_ruri;
 	char exten[AST_MAX_EXTENSION];
 
 	if (pjsip_method_cmp(&rdata->msg_info.msg->line.req.method, &pjsip_options_method)) {
@@ -281,13 +281,12 @@ static pj_bool_t options_on_rx_request(pjsip_rx_data *rdata)
 	}
 
 	ruri = rdata->msg_info.msg->line.req.uri;
-	if (!PJSIP_URI_SCHEME_IS_SIP(ruri) && !PJSIP_URI_SCHEME_IS_SIPS(ruri)) {
+	if (!ast_sip_is_allowed_uri(ruri)) {
 		send_options_response(rdata, 416);
 		return PJ_TRUE;
 	}
 
-	sip_ruri = pjsip_uri_get_uri(ruri);
-	ast_copy_pj_str(exten, &sip_ruri->user, sizeof(exten));
+	ast_copy_pj_str(exten, ast_sip_pjsip_uri_get_username(ruri), sizeof(exten));
 
 	/*
 	 * We may want to match in the dialplan without any user
@@ -350,6 +349,8 @@ static void sip_contact_status_dtor(void *obj)
 {
 	struct ast_sip_contact_status *contact_status = obj;
 
+	ast_sip_security_mechanisms_vector_destroy(&contact_status->security_mechanisms);
+
 	ast_string_field_free_memory(contact_status);
 }
 
@@ -367,6 +368,7 @@ static struct ast_sip_contact_status *sip_contact_status_alloc(const char *name)
 		ao2_ref(contact_status, -1);
 		return NULL;
 	}
+	AST_VECTOR_INIT(&contact_status->security_mechanisms, 0);
 	strcpy(contact_status->name, name); /* SAFE */
 	return contact_status;
 }
@@ -387,6 +389,8 @@ static struct ast_sip_contact_status *sip_contact_status_copy(const struct ast_s
 	dst->rtt = src->rtt;
 	dst->status = src->status;
 	dst->last_status = src->last_status;
+
+	ast_sip_security_mechanisms_vector_copy(&dst->security_mechanisms, &src->security_mechanisms);
 	return dst;
 }
 
@@ -797,7 +801,12 @@ static void qualify_contact_cb(void *token, pjsip_event *e)
 		status = UNAVAILABLE;
 		break;
 	case PJSIP_EVENT_RX_MSG:
-		status = AVAILABLE;
+		if (contact_callback_data->aor_options->qualify_2xx_only &&
+			(e->body.tsx_state.tsx->status_code < 200 || e->body.tsx_state.tsx->status_code >= 300)) {
+			status = UNAVAILABLE;
+		} else {
+			status = AVAILABLE;
+		}
 		break;
 	}
 
@@ -806,7 +815,7 @@ static void qualify_contact_cb(void *token, pjsip_event *e)
 
 	if (ast_sip_push_task(contact_callback_data->aor_options->serializer,
 		sip_options_contact_status_notify_task, contact_callback_data)) {
-		ast_log(LOG_NOTICE, "Unable to queue contact status update for '%s' on AOR '%s', state will be incorrect\n",
+		ast_log(LOG_WARNING, "Unable to queue contact status update for '%s' on AOR '%s', state will be incorrect\n",
 			ast_sorcery_object_get_id(contact_callback_data->contact),
 			contact_callback_data->aor_options->name);
 		ao2_ref(contact_callback_data, -1);
@@ -1339,6 +1348,7 @@ static void sip_options_apply_aor_configuration(struct sip_options_aor *aor_opti
 	}
 
 	aor_options->authenticate_qualify = aor->authenticate_qualify;
+	aor_options->qualify_2xx_only = aor->qualify_2xx_only;
 	aor_options->qualify_timeout = aor->qualify_timeout;
 
 	/*
@@ -2080,6 +2090,7 @@ static int has_qualify_changed (const struct ast_sip_contact *contact, const str
 		}
 	} else if (contact->qualify_frequency != aor_options->qualify_frequency
 		|| contact->authenticate_qualify != aor_options->authenticate_qualify
+		|| contact->qualify_2xx_only != aor_options->qualify_2xx_only
 		|| ((int)(contact->qualify_timeout * 1000)) != ((int)(aor_options->qualify_timeout * 1000))) {
 		return 1;
 	}
@@ -2528,6 +2539,7 @@ static char *cli_show_qualify_endpoint(struct ast_cli_entry *e, int cmd, struct 
 		ast_cli(a->fd, " * AOR '%s' on endpoint '%s'\n", aor_name, endpoint_name);
 		ast_cli(a->fd, "  Qualify frequency    : %d sec\n", aor_options->qualify_frequency);
 		ast_cli(a->fd, "  Qualify timeout      : %d ms\n", (int)(aor_options->qualify_timeout / 1000));
+		ast_cli(a->fd, "  Qualify 2xx only     : %s\n", aor_options->qualify_2xx_only ? "yes" : "no");
 		ast_cli(a->fd, "  Authenticate qualify : %s\n", aor_options->authenticate_qualify?"yes":"no");
 		ast_cli(a->fd, "\n");
 		ao2_ref(aor_options, -1);
@@ -2567,6 +2579,7 @@ static char *cli_show_qualify_aor(struct ast_cli_entry *e, int cmd, struct ast_c
 	ast_cli(a->fd, " * AOR '%s'\n", aor_name);
 	ast_cli(a->fd, "  Qualify frequency    : %d sec\n", aor_options->qualify_frequency);
 	ast_cli(a->fd, "  Qualify timeout      : %d ms\n", (int)(aor_options->qualify_timeout / 1000));
+	ast_cli(a->fd, "  Qualify 2xx only     : %s\n", aor_options->qualify_2xx_only ? "yes" : "no");
 	ast_cli(a->fd, "  Authenticate qualify : %s\n", aor_options->authenticate_qualify?"yes":"no");
 	ao2_ref(aor_options, -1);
 
@@ -2762,6 +2775,7 @@ int ast_sip_format_contact_ami(void *obj, void *arg, int flags)
 	ast_str_append(&buf, 0, "Path: %s\r\n", contact->path);
 	ast_str_append(&buf, 0, "QualifyFrequency: %u\r\n", contact->qualify_frequency);
 	ast_str_append(&buf, 0, "QualifyTimeout: %.3f\r\n", contact->qualify_timeout);
+	ast_str_append(&buf, 0, "Qualify2xxOnly: %d\r\n", contact->qualify_2xx_only);
 
 	astman_append(ami->s, "%s\r\n", ast_str_buffer(buf));
 	ami->count++;

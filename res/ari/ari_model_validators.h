@@ -572,6 +572,22 @@ int ast_ari_validate_mailbox(struct ast_json *json);
 ari_validator ast_ari_validate_mailbox_fn(void);
 
 /*!
+ * \brief Validator for AdditionalParam.
+ *
+ * Protocol specific additional parameter
+ *
+ * \param json JSON object to validate.
+ * \retval True (non-zero) if valid.
+ * \retval False (zero) if invalid.
+ */
+int ast_ari_validate_additional_param(struct ast_json *json);
+
+/*!
+ * \brief Function pointer to ast_ari_validate_additional_param().
+ */
+ari_validator ast_ari_validate_additional_param_fn(void);
+
+/*!
  * \brief Validator for ApplicationMoveFailed.
  *
  * Notification that trying to move a channel to another Stasis application failed.
@@ -586,6 +602,22 @@ int ast_ari_validate_application_move_failed(struct ast_json *json);
  * \brief Function pointer to ast_ari_validate_application_move_failed().
  */
 ari_validator ast_ari_validate_application_move_failed_fn(void);
+
+/*!
+ * \brief Validator for ApplicationRegistered.
+ *
+ * Notification that a Stasis app has been registered.
+ *
+ * \param json JSON object to validate.
+ * \retval True (non-zero) if valid.
+ * \retval False (zero) if invalid.
+ */
+int ast_ari_validate_application_registered(struct ast_json *json);
+
+/*!
+ * \brief Function pointer to ast_ari_validate_application_registered().
+ */
+ari_validator ast_ari_validate_application_registered_fn(void);
 
 /*!
  * \brief Validator for ApplicationReplaced.
@@ -604,6 +636,22 @@ int ast_ari_validate_application_replaced(struct ast_json *json);
  * \brief Function pointer to ast_ari_validate_application_replaced().
  */
 ari_validator ast_ari_validate_application_replaced_fn(void);
+
+/*!
+ * \brief Validator for ApplicationUnregistered.
+ *
+ * Notification that a Stasis app has been unregistered.
+ *
+ * \param json JSON object to validate.
+ * \retval True (non-zero) if valid.
+ * \retval False (zero) if invalid.
+ */
+int ast_ari_validate_application_unregistered(struct ast_json *json);
+
+/*!
+ * \brief Function pointer to ast_ari_validate_application_unregistered().
+ */
+ari_validator ast_ari_validate_application_unregistered_fn(void);
 
 /*!
  * \brief Validator for BridgeAttendedTransfer.
@@ -912,6 +960,38 @@ int ast_ari_validate_channel_talking_started(struct ast_json *json);
 ari_validator ast_ari_validate_channel_talking_started_fn(void);
 
 /*!
+ * \brief Validator for ChannelToneDetected.
+ *
+ * Tone was detected on the channel.
+ *
+ * \param json JSON object to validate.
+ * \retval True (non-zero) if valid.
+ * \retval False (zero) if invalid.
+ */
+int ast_ari_validate_channel_tone_detected(struct ast_json *json);
+
+/*!
+ * \brief Function pointer to ast_ari_validate_channel_tone_detected().
+ */
+ari_validator ast_ari_validate_channel_tone_detected_fn(void);
+
+/*!
+ * \brief Validator for ChannelTransfer.
+ *
+ * transfer on a channel.
+ *
+ * \param json JSON object to validate.
+ * \retval True (non-zero) if valid.
+ * \retval False (zero) if invalid.
+ */
+int ast_ari_validate_channel_transfer(struct ast_json *json);
+
+/*!
+ * \brief Function pointer to ast_ari_validate_channel_transfer().
+ */
+ari_validator ast_ari_validate_channel_transfer_fn(void);
+
+/*!
  * \brief Validator for ChannelUnhold.
  *
  * A channel initiated a media unhold.
@@ -1168,6 +1248,70 @@ int ast_ari_validate_playback_started(struct ast_json *json);
 ari_validator ast_ari_validate_playback_started_fn(void);
 
 /*!
+ * \brief Validator for RESTHeader.
+ *
+ * REST over Websocket header
+ *
+ * \param json JSON object to validate.
+ * \retval True (non-zero) if valid.
+ * \retval False (zero) if invalid.
+ */
+int ast_ari_validate_restheader(struct ast_json *json);
+
+/*!
+ * \brief Function pointer to ast_ari_validate_restheader().
+ */
+ari_validator ast_ari_validate_restheader_fn(void);
+
+/*!
+ * \brief Validator for RESTQueryStringParameter.
+ *
+ * REST over Websocket Query String Parameter
+ *
+ * \param json JSON object to validate.
+ * \retval True (non-zero) if valid.
+ * \retval False (zero) if invalid.
+ */
+int ast_ari_validate_restquery_string_parameter(struct ast_json *json);
+
+/*!
+ * \brief Function pointer to ast_ari_validate_restquery_string_parameter().
+ */
+ari_validator ast_ari_validate_restquery_string_parameter_fn(void);
+
+/*!
+ * \brief Validator for RESTRequest.
+ *
+ * REST over Websocket Request.
+ *
+ * \param json JSON object to validate.
+ * \retval True (non-zero) if valid.
+ * \retval False (zero) if invalid.
+ */
+int ast_ari_validate_restrequest(struct ast_json *json);
+
+/*!
+ * \brief Function pointer to ast_ari_validate_restrequest().
+ */
+ari_validator ast_ari_validate_restrequest_fn(void);
+
+/*!
+ * \brief Validator for RESTResponse.
+ *
+ * REST over Websocket Response.
+ *
+ * \param json JSON object to validate.
+ * \retval True (non-zero) if valid.
+ * \retval False (zero) if invalid.
+ */
+int ast_ari_validate_restresponse(struct ast_json *json);
+
+/*!
+ * \brief Function pointer to ast_ari_validate_restresponse().
+ */
+ari_validator ast_ari_validate_restresponse_fn(void);
+
+/*!
  * \brief Validator for RecordingFailed.
  *
  * Event showing failure of a recording operation.
@@ -1214,6 +1358,54 @@ int ast_ari_validate_recording_started(struct ast_json *json);
  * \brief Function pointer to ast_ari_validate_recording_started().
  */
 ari_validator ast_ari_validate_recording_started_fn(void);
+
+/*!
+ * \brief Validator for ReferTo.
+ *
+ * transfer destination requested by transferee
+ *
+ * \param json JSON object to validate.
+ * \retval True (non-zero) if valid.
+ * \retval False (zero) if invalid.
+ */
+int ast_ari_validate_refer_to(struct ast_json *json);
+
+/*!
+ * \brief Function pointer to ast_ari_validate_refer_to().
+ */
+ari_validator ast_ari_validate_refer_to_fn(void);
+
+/*!
+ * \brief Validator for ReferredBy.
+ *
+ * transfer destination requested by transferee
+ *
+ * \param json JSON object to validate.
+ * \retval True (non-zero) if valid.
+ * \retval False (zero) if invalid.
+ */
+int ast_ari_validate_referred_by(struct ast_json *json);
+
+/*!
+ * \brief Function pointer to ast_ari_validate_referred_by().
+ */
+ari_validator ast_ari_validate_referred_by_fn(void);
+
+/*!
+ * \brief Validator for RequiredDestination.
+ *
+ * Information about the requested destination
+ *
+ * \param json JSON object to validate.
+ * \retval True (non-zero) if valid.
+ * \retval False (zero) if invalid.
+ */
+int ast_ari_validate_required_destination(struct ast_json *json);
+
+/*!
+ * \brief Function pointer to ast_ari_validate_required_destination().
+ */
+ari_validator ast_ari_validate_required_destination_fn(void);
 
 /*!
  * \brief Validator for StasisEnd.
@@ -1346,6 +1538,7 @@ ari_validator ast_ari_validate_application_fn(void);
  * Channel
  * - accountcode: string (required)
  * - caller: CallerID (required)
+ * - caller_rdnis: string
  * - channelvars: object
  * - connected: CallerID (required)
  * - creationtime: Date (required)
@@ -1353,7 +1546,9 @@ ari_validator ast_ari_validate_application_fn(void);
  * - id: string (required)
  * - language: string (required)
  * - name: string (required)
+ * - protocol_id: string (required)
  * - state: string (required)
+ * - tenantid: string
  * Dialed
  * DialplanCEP
  * - app_data: string (required)
@@ -1438,6 +1633,9 @@ ari_validator ast_ari_validate_application_fn(void);
  * - name: string (required)
  * - new_messages: int (required)
  * - old_messages: int (required)
+ * AdditionalParam
+ * - parameter_name: string (required)
+ * - parameter_value: string (required)
  * ApplicationMoveFailed
  * - asterisk_id: string
  * - type: string (required)
@@ -1446,7 +1644,17 @@ ari_validator ast_ari_validate_application_fn(void);
  * - args: List[string] (required)
  * - channel: Channel (required)
  * - destination: string (required)
+ * ApplicationRegistered
+ * - asterisk_id: string
+ * - type: string (required)
+ * - application: string (required)
+ * - timestamp: Date (required)
  * ApplicationReplaced
+ * - asterisk_id: string
+ * - type: string (required)
+ * - application: string (required)
+ * - timestamp: Date (required)
+ * ApplicationUnregistered
  * - asterisk_id: string
  * - type: string (required)
  * - application: string (required)
@@ -1603,6 +1811,20 @@ ari_validator ast_ari_validate_application_fn(void);
  * - application: string (required)
  * - timestamp: Date (required)
  * - channel: Channel (required)
+ * ChannelToneDetected
+ * - asterisk_id: string
+ * - type: string (required)
+ * - application: string (required)
+ * - timestamp: Date (required)
+ * - channel: Channel (required)
+ * ChannelTransfer
+ * - asterisk_id: string
+ * - type: string (required)
+ * - application: string (required)
+ * - timestamp: Date (required)
+ * - refer_to: ReferTo (required)
+ * - referred_by: ReferredBy (required)
+ * - state: string
  * ChannelUnhold
  * - asterisk_id: string
  * - type: string (required)
@@ -1705,6 +1927,33 @@ ari_validator ast_ari_validate_application_fn(void);
  * - application: string (required)
  * - timestamp: Date (required)
  * - playback: Playback (required)
+ * RESTHeader
+ * - name: string (required)
+ * - value: string (required)
+ * RESTQueryStringParameter
+ * - name: string (required)
+ * - value: string (required)
+ * RESTRequest
+ * - content_type: string
+ * - message_body: string
+ * - method: string (required)
+ * - query_strings: List[RESTQueryStringParameter]
+ * - request_id: string (required)
+ * - transaction_id: string (required)
+ * - type: string (required)
+ * - uri: string (required)
+ * RESTResponse
+ * - asterisk_id: string
+ * - type: string (required)
+ * - application: string (required)
+ * - timestamp: Date (required)
+ * - content_type: string
+ * - message_body: string
+ * - reason_phrase: string (required)
+ * - request_id: string (required)
+ * - status_code: int (required)
+ * - transaction_id: string (required)
+ * - uri: string (required)
  * RecordingFailed
  * - asterisk_id: string
  * - type: string (required)
@@ -1723,6 +1972,19 @@ ari_validator ast_ari_validate_application_fn(void);
  * - application: string (required)
  * - timestamp: Date (required)
  * - recording: LiveRecording (required)
+ * ReferTo
+ * - bridge: Bridge
+ * - connected_channel: Channel
+ * - destination_channel: Channel
+ * - requested_destination: RequiredDestination (required)
+ * ReferredBy
+ * - bridge: Bridge
+ * - connected_channel: Channel
+ * - source_channel: Channel (required)
+ * RequiredDestination
+ * - additional_protocol_params: List[AdditionalParam]
+ * - destination: string
+ * - protocol_id: string
  * StasisEnd
  * - asterisk_id: string
  * - type: string (required)

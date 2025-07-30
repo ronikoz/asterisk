@@ -95,9 +95,7 @@ struct ast_vm_recording_data {
 		AST_STRING_FIELD(folder);
 		AST_STRING_FIELD(recording_file);
 		AST_STRING_FIELD(recording_ext);
-
 		AST_STRING_FIELD(call_context);
-		AST_STRING_FIELD(call_macrocontext);
 		AST_STRING_FIELD(call_extension);
 		AST_STRING_FIELD(call_callerchan);
 		AST_STRING_FIELD(call_callerid);
@@ -125,6 +123,16 @@ enum ast_timelen {
 */
 int ast_ivr_menu_run(struct ast_channel *c, struct ast_ivr_menu *menu, void *cbdata);
 
+enum ast_getdata_result {
+	AST_GETDATA_FAILED = -1,
+	AST_GETDATA_COMPLETE = 0,
+	AST_GETDATA_TIMEOUT = 1,
+	AST_GETDATA_INTERRUPTED = 2,
+	/*! indicates a user terminated empty string rather than an empty string resulting
+	 * from a timeout or other factors */
+	AST_GETDATA_EMPTY_END_TERMINATED = 3,
+};
+
 /*! \brief Plays a stream and gets DTMF data from a channel
  * \param c Which channel one is interacting with
  * \param prompt File to pass to ast_streamfile (the one that you wish to play).
@@ -139,7 +147,7 @@ int ast_ivr_menu_run(struct ast_channel *c, struct ast_ivr_menu *menu, void *cbd
  *  is pressed during playback, it will immediately break out of the message and continue
  *  execution of your code.
  */
-int ast_app_getdata(struct ast_channel *c, const char *prompt, char *s, int maxlen, int timeout);
+enum ast_getdata_result ast_app_getdata(struct ast_channel *c, const char *prompt, char *s, int maxlen, int timeout);
 
 /*! \brief Plays a stream and gets DTMF data from a channel
  * \param c Which channel one is interacting with
@@ -156,54 +164,10 @@ int ast_app_getdata(struct ast_channel *c, const char *prompt, char *s, int maxl
  *  is pressed during playback, it will immediately break out of the message and continue
  *  execution of your code.
  */
-int ast_app_getdata_terminator(struct ast_channel *c, const char *prompt, char *s, int maxlen, int timeout, char *terminator);
+enum ast_getdata_result ast_app_getdata_terminator(struct ast_channel *c, const char *prompt, char *s, int maxlen, int timeout, char *terminator);
 
 /*! \brief Full version with audiofd and controlfd.  NOTE: returns '2' on ctrlfd available, not '1' like other full functions */
 int ast_app_getdata_full(struct ast_channel *c, const char *prompt, char *s, int maxlen, int timeout, int audiofd, int ctrlfd);
-
-/*!
- * \brief Run a macro on a channel, placing an optional second channel into autoservice.
- * \since 11.0
- *
- * \details
- * This is a shorthand method that makes it very easy to run a
- * macro on any given channel.  It is perfectly reasonable to
- * supply a NULL autoservice_chan here in case there is no
- * channel to place into autoservice.
- *
- * \note Absolutely _NO_ channel locks should be held before calling this function.
- *
- * \param autoservice_chan A channel to place into autoservice while the macro is run
- * \param macro_chan Channel to execute macro on.
- * \param macro_args Macro application argument string.
- *
- * \retval 0 success
- * \retval -1 on error
- */
-int ast_app_exec_macro(struct ast_channel *autoservice_chan, struct ast_channel *macro_chan, const char *macro_args);
-
-/*!
- * \since 1.8
- * \brief Run a macro on a channel, placing an optional second channel into autoservice.
- *
- * \details
- * This is a shorthand method that makes it very easy to run a
- * macro on any given channel.  It is perfectly reasonable to
- * supply a NULL autoservice_chan here in case there is no
- * channel to place into autoservice.
- *
- * \note Absolutely _NO_ channel locks should be held before calling this function.
- *
- * \param autoservice_chan A channel to place into autoservice while the macro is run
- * \param macro_chan Channel to execute macro on.
- * \param macro_name The name of the macro to run.
- * \param macro_args The arguments to pass to the macro.
- *
- * \retval 0 success
- * \retval -1 on error
- */
-int ast_app_run_macro(struct ast_channel *autoservice_chan,
-	struct ast_channel *macro_chan, const char *macro_name, const char *macro_args);
 
 /*!
  * \brief Stack applications callback functions.
@@ -1195,16 +1159,6 @@ int ast_play_and_record(struct ast_channel *chan, const char *playfile, const ch
  */
 int ast_play_and_prepend(struct ast_channel *chan, char *playfile, char *recordfile, int maxtime_sec, char *fmt, int *duration, int *sound_duration, int beep, int silencethreshold, int maxsilence_ms);
 
-enum ast_getdata_result {
-	AST_GETDATA_FAILED = -1,
-	AST_GETDATA_COMPLETE = 0,
-	AST_GETDATA_TIMEOUT = 1,
-	AST_GETDATA_INTERRUPTED = 2,
-	/*! indicates a user terminated empty string rather than an empty string resulting
-	 * from a timeout or other factors */
-	AST_GETDATA_EMPTY_END_TERMINATED = 3,
-};
-
 enum AST_LOCK_RESULT {
 	AST_LOCK_SUCCESS = 0,
 	AST_LOCK_TIMEOUT = -1,
@@ -1537,6 +1491,10 @@ int ast_safe_fork(int stop_reaper);
 
 /*!
  * \brief Common routine to cleanup after fork'ed process is complete (if reaping was stopped)
+ *
+ * \note This must <b>not</b> be called unless ast_safe_fork(1) has been called
+ * previously.
+ *
  * \since 1.6.1
  */
 void ast_safe_fork_cleanup(void);

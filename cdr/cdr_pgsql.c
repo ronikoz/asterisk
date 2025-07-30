@@ -375,7 +375,7 @@ static int pgsql_log(struct ast_cdr *cdr)
 
 						/* If our argument size exceeds our buffer, grow it,
 						 * as PQescapeStringConn() expects the buffer to be
-						 * adequitely sized and does *NOT* do size checking.
+						 * adequately sized and does *NOT* do size checking.
 						 */
 						if (required_size > bufsize) {
 							char *tmpbuf = ast_realloc(escapebuf, required_size);
@@ -783,12 +783,23 @@ static int config_module(int reload)
 
 static int load_module(void)
 {
-	ast_cli_register_multiple(cdr_pgsql_status_cli, sizeof(cdr_pgsql_status_cli) / sizeof(struct ast_cli_entry));
+	int res;
+
 	if (config_module(0)) {
-		return AST_MODULE_LOAD_DECLINE;
+		res = AST_MODULE_LOAD_DECLINE;
+	} else if (ast_cdr_register(name, ast_module_info->description, pgsql_log)) {
+		res = AST_MODULE_LOAD_DECLINE;
+	} else if (ast_cli_register_multiple(cdr_pgsql_status_cli, ARRAY_LEN(cdr_pgsql_status_cli))) {
+		res = AST_MODULE_LOAD_DECLINE;
+	} else {
+		res = AST_MODULE_LOAD_SUCCESS;
 	}
-	return ast_cdr_register(name, ast_module_info->description, pgsql_log)
-		? AST_MODULE_LOAD_DECLINE : 0;
+
+	if (res != AST_MODULE_LOAD_SUCCESS) {
+		unload_module();
+	}
+
+	return res;
 }
 
 static int reload(void)

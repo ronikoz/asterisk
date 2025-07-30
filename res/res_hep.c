@@ -45,6 +45,9 @@
 		<synopsis>Resource for integration with Homer using HEPv3</synopsis>
 		<configFile name="hep.conf">
 			<configObject name="general">
+				<since>
+					<version>12.2.0</version>
+				</since>
 				<synopsis>General settings.</synopsis>
 				<description><para>
 					The <emphasis>general</emphasis> settings section contains information
@@ -52,6 +55,9 @@
 					</para>
 				</description>
 				<configOption name="enabled" default="yes">
+					<since>
+						<version>12.2.0</version>
+					</since>
 					<synopsis>Enable or disable packet capturing.</synopsis>
 					<description>
 						<enumlist>
@@ -61,6 +67,9 @@
 					</description>
 				</configOption>
 				<configOption name="uuid_type" default="call-id">
+					<since>
+						<version>12.2.0</version>
+					</since>
 					<synopsis>The preferred type of UUID to pass to Homer.</synopsis>
 					<description>
 						<enumlist>
@@ -70,13 +79,30 @@
 					</description>
 				</configOption>
 				<configOption name="capture_address">
+					<since>
+						<version>13.16.0</version>
+						<version>14.5.0</version>
+					</since>
 					<synopsis>The address and port of the Homer server to send packets to.</synopsis>
 				</configOption>
 				<configOption name="capture_password">
+					<since>
+						<version>12.2.0</version>
+					</since>
 					<synopsis>If set, the authentication password to send to Homer.</synopsis>
 				</configOption>
 				<configOption name="capture_id" default="0">
+					<since>
+						<version>12.2.0</version>
+					</since>
 					<synopsis>The ID for this capture agent.</synopsis>
+				</configOption>
+				<configOption name="capture_name" default="">
+					<since>
+						<version>18.16.0</version>
+						<version>20.1.0</version>
+					</since>
+					<synopsis>The name for this capture agent.</synopsis>
 				</configOption>
 			</configObject>
 		</configFile>
@@ -155,6 +181,9 @@ enum hepv3_chunk_types {
 
 	/*! THE UUID FOR THIS PACKET */
 	CHUNK_TYPE_UUID = 0X0011,
+
+	/*! THE CAPTURE AGENT NAME */
+	CHUNK_TYPE_CAPTURE_AGENT_NAME = 0X0013,
 };
 
 #define INITIALIZE_GENERIC_HEP_IDS(hep_chunk, type) do { \
@@ -240,6 +269,7 @@ struct hepv3_global_config {
 	AST_DECLARE_STRING_FIELDS(
 		AST_STRING_FIELD(capture_address);   /*!< Address to send to */
 		AST_STRING_FIELD(capture_password);  /*!< Password for Homer server */
+		AST_STRING_FIELD(capture_name);      /*!< Capture name for this agent */
 	);
 };
 
@@ -458,7 +488,7 @@ static int hep_queue_cb(void *data)
 	unsigned int packet_len = 0, sock_buffer_len;
 	struct hep_chunk_ip4 ipv4_src, ipv4_dst;
 	struct hep_chunk_ip6 ipv6_src, ipv6_dst;
-	struct hep_chunk auth_key, payload, uuid;
+	struct hep_chunk auth_key, payload, uuid, capturename;
 	void *sock_buffer;
 	int res;
 
@@ -512,6 +542,10 @@ static int hep_queue_cb(void *data)
 		INITIALIZE_GENERIC_HEP_IDS_VAR(&auth_key, CHUNK_TYPE_AUTH_KEY, strlen(config->general->capture_password));
 		packet_len += (sizeof(auth_key) + strlen(config->general->capture_password));
 	}
+	if (!ast_strlen_zero(config->general->capture_name))  {
+		INITIALIZE_GENERIC_HEP_IDS_VAR(&capturename, CHUNK_TYPE_CAPTURE_AGENT_NAME, strlen(config->general->capture_name));
+		packet_len += (sizeof(capturename) + strlen(config->general->capture_name));
+	}
 	INITIALIZE_GENERIC_HEP_IDS_VAR(&uuid, CHUNK_TYPE_UUID, strlen(capture_info->uuid));
 	packet_len += (sizeof(uuid) + strlen(capture_info->uuid));
 	INITIALIZE_GENERIC_HEP_IDS_VAR(&payload,
@@ -555,6 +589,14 @@ static int hep_queue_cb(void *data)
 	sock_buffer_len += sizeof(uuid);
 	memcpy(sock_buffer + sock_buffer_len, capture_info->uuid, strlen(capture_info->uuid));
 	sock_buffer_len += strlen(capture_info->uuid);
+
+	/* Capture Agent Name */
+	if (!ast_strlen_zero(config->general->capture_name)) {
+		memcpy(sock_buffer + sock_buffer_len, &capturename, sizeof(capturename));
+		sock_buffer_len += sizeof(capturename);
+		memcpy(sock_buffer + sock_buffer_len, config->general->capture_name, strlen(config->general->capture_name));
+		sock_buffer_len += strlen(config->general->capture_name);
+	}
 
 	/* Packet! */
 	memcpy(sock_buffer + sock_buffer_len, &payload, sizeof(payload));
@@ -681,6 +723,7 @@ static int load_module(void)
 	aco_option_register(&cfg_info, "capture_address", ACO_EXACT, global_options, "", OPT_STRINGFIELD_T, 1, STRFLDSET(struct hepv3_global_config, capture_address));
 	aco_option_register(&cfg_info, "capture_password", ACO_EXACT, global_options, "", OPT_STRINGFIELD_T, 0, STRFLDSET(struct hepv3_global_config, capture_password));
 	aco_option_register(&cfg_info, "capture_id", ACO_EXACT, global_options, "0", OPT_UINT_T, 0, STRFLDSET(struct hepv3_global_config, capture_id));
+	aco_option_register(&cfg_info, "capture_name", ACO_EXACT, global_options, "", OPT_STRINGFIELD_T, 0, STRFLDSET(struct hepv3_global_config, capture_name));
 	aco_option_register_custom(&cfg_info, "uuid_type", ACO_EXACT, global_options, "call-id", uuid_type_handler, 0);
 
 	if (aco_process_config(&cfg_info, 0) == ACO_PROCESS_ERROR) {

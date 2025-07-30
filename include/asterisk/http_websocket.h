@@ -47,6 +47,26 @@
  *
  */
 
+/*! \brief WebSocket connection/configuration types.
+ *
+ * These may look like they overlap or are redundant, but
+ * they're shared by other modules like ari and chan_websocket
+ * and it didn't make sense to force them to define their
+ * own types.
+ */
+enum ast_websocket_type {
+	AST_WS_TYPE_CLIENT_PERSISTENT = (1 << 0),
+	AST_WS_TYPE_CLIENT_PER_CALL_CONFIG = (1 << 1),
+	AST_WS_TYPE_CLIENT_PER_CALL = (1 << 2),
+	AST_WS_TYPE_CLIENT = (1 << 3),
+	AST_WS_TYPE_INBOUND = (1 << 4),
+	AST_WS_TYPE_SERVER = (1 << 5),
+	AST_WS_TYPE_ANY = (0xFFFFFFFF),
+};
+
+const char *ast_websocket_type_to_str(enum ast_websocket_type type);
+
+
 /*! \brief WebSocket operation codes */
 enum ast_websocket_opcode {
 	AST_WEBSOCKET_OPCODE_TEXT = 0x1,         /*!< Text frame */
@@ -56,6 +76,14 @@ enum ast_websocket_opcode {
 	AST_WEBSOCKET_OPCODE_CLOSE = 0x8,        /*!< Connection is being closed */
 	AST_WEBSOCKET_OPCODE_CONTINUATION = 0x0, /*!< Continuation of a previous frame */
 };
+
+#ifdef LOW_MEMORY
+/*! \brief Size of the pre-determined buffer for WebSocket frames */
+#define AST_WEBSOCKET_MAX_RX_PAYLOAD_SIZE 8192
+#else
+/*! \brief Size of the pre-determined buffer for WebSocket frames */
+#define AST_WEBSOCKET_MAX_RX_PAYLOAD_SIZE 65535
+#endif
 
 /*!
  * \brief Opaque structure for WebSocket server.
@@ -397,7 +425,7 @@ AST_OPTIONAL_API(const char *, ast_websocket_session_id, (struct ast_websocket *
  * \brief Result code for a websocket client.
  */
 enum ast_websocket_result {
-	WS_OK,
+	WS_OK = 0,
 	WS_ALLOCATE_ERROR,
 	WS_KEY_ERROR,
 	WS_URI_PARSE_ERROR,
@@ -411,6 +439,7 @@ enum ast_websocket_result {
 	WS_NOT_SUPPORTED,
 	WS_WRITE_ERROR,
 	WS_CLIENT_START_ERROR,
+	WS_UNAUTHORIZED,
 };
 
 /*!
@@ -468,6 +497,9 @@ struct ast_websocket_client_options {
 	 * Secure websocket credentials
 	 */
 	struct ast_tls_config *tls_cfg;
+	const char *username;          /*!< Auth username */
+	const char *password;          /*!< Auth password */
+	int suppress_connection_msgs;  /*!< Suppress connection log messages */
 };
 
 /*!
@@ -509,5 +541,14 @@ AST_OPTIONAL_API(const char *, ast_websocket_client_accept_protocol,
  * \retval -1 on failure
  */
 AST_OPTIONAL_API(int, ast_websocket_set_timeout, (struct ast_websocket *session, int timeout), {return -1;});
+
+/*!
+ * \brief Convert a websocket result code to a string.
+ *
+ * \param result The result code to convert
+ *
+ * \return A string representation of the result code
+ */
+AST_OPTIONAL_API(const char *, ast_websocket_result_to_str, (enum ast_websocket_result result), {return "";});
 
 #endif

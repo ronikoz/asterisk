@@ -106,6 +106,9 @@ extern "C" {
  */
 #define MAX_CHANNEL_ID 152
 
+/*!< DTMF samples per second */
+#define DEFAULT_DTMF_SAMPLE_RATE_MS    8000
+
 struct ast_rtp_instance;
 struct ast_rtp_glue;
 
@@ -174,6 +177,8 @@ enum ast_rtp_instance_stat_field {
 	AST_RTP_INSTANCE_STAT_FIELD_QUALITY_LOSS,
 	/*! Retrieve quality information about round trip time */
 	AST_RTP_INSTANCE_STAT_FIELD_QUALITY_RTT,
+	/*! Retrieve quality information about Media Experience Score */
+	AST_RTP_INSTANCE_STAT_FIELD_QUALITY_MES,
 };
 
 /*! Statistics that can be retrieved from an RTP instance */
@@ -250,6 +255,29 @@ enum ast_rtp_instance_stat {
 	AST_RTP_INSTANCE_STAT_TXOCTETCOUNT,
 	/*! Retrieve number of octets received */
 	AST_RTP_INSTANCE_STAT_RXOCTETCOUNT,
+
+	/*! Retrieve ALL statistics relating to Media Experience Score */
+	AST_RTP_INSTANCE_STAT_COMBINED_MES,
+	/*! Retrieve MES on transmitted packets */
+	AST_RTP_INSTANCE_STAT_TXMES,
+	/*! Retrieve MES on received packets */
+	AST_RTP_INSTANCE_STAT_RXMES,
+	/*! Retrieve maximum MES on remote side */
+	AST_RTP_INSTANCE_STAT_REMOTE_MAXMES,
+	/*! Retrieve minimum MES on remote side */
+	AST_RTP_INSTANCE_STAT_REMOTE_MINMES,
+	/*! Retrieve average MES on remote side */
+	AST_RTP_INSTANCE_STAT_REMOTE_NORMDEVMES,
+	/*! Retrieve standard deviation MES on remote side */
+	AST_RTP_INSTANCE_STAT_REMOTE_STDEVMES,
+	/*! Retrieve maximum MES on local side */
+	AST_RTP_INSTANCE_STAT_LOCAL_MAXMES,
+	/*! Retrieve minimum MES on local side */
+	AST_RTP_INSTANCE_STAT_LOCAL_MINMES,
+	/*! Retrieve average MES on local side */
+	AST_RTP_INSTANCE_STAT_LOCAL_NORMDEVMES,
+	/*! Retrieve standard deviation MES on local side */
+	AST_RTP_INSTANCE_STAT_LOCAL_STDEVMES,
 };
 
 enum ast_rtp_instance_rtcp {
@@ -286,6 +314,8 @@ struct ast_rtp_payload_type {
 	unsigned int primary_mapping:1;
 	/*! When the payload type became non-primary. */
 	struct timeval when_retired;
+	/*! Sample rate to over-ride mime type defaults */
+	unsigned int sample_rate;
 };
 
 /* Common RTCP report types */
@@ -428,6 +458,27 @@ struct ast_rtp_instance_stats {
 	unsigned int txoctetcount;
 	/*! Number of octets received */
 	unsigned int rxoctetcount;
+
+	/*! Media Experience Score on transmitted packets */
+	double txmes;
+	/*! Media Experience Score on received packets */
+	double rxmes;
+	/*! Maximum MES on remote side */
+	double remote_maxmes;
+	/*! Minimum MES on remote side */
+	double remote_minmes;
+	/*! Average MES on remote side */
+	double remote_normdevmes;
+	/*! Standard deviation MES on remote side */
+	double remote_stdevmes;
+	/*! Maximum MES on local side */
+	double local_maxmes;
+	/*! Minimum MES on local side */
+	double local_minmes;
+	/*! Average MES on local side */
+	double local_normdevmes;
+	/*! Standard deviation MES on local side */
+	double local_stdevmes;
 };
 
 #define AST_RTP_STAT_SET(current_stat, combined, placement, value) \
@@ -711,10 +762,17 @@ struct ast_rtp_codecs {
 	AST_VECTOR(, struct ast_rtp_payload_type *) payload_mapping_tx;
 	/*! The framing for this media session */
 	unsigned int framing;
+	/*! The preferred format, as the mappings are numerically sorted */
+	struct ast_format *preferred_format;
+	/*! The preferred dtmf sample rate */
+	int preferred_dtmf_rate;
+	/*! The preferred dtmf payload type */
+	int preferred_dtmf_pt;
 };
 
 #define AST_RTP_CODECS_NULL_INIT \
-    { .codecs_lock = AST_RWLOCK_INIT_VALUE, .payload_mapping_rx = { 0, }, .payload_mapping_tx = { 0, }, .framing = 0, }
+    { .codecs_lock = AST_RWLOCK_INIT_VALUE, .payload_mapping_rx = { 0, }, .payload_mapping_tx = { 0, }, .framing = 0, .preferred_format = NULL, \
+	.preferred_dtmf_rate = -1, .preferred_dtmf_pt = -1}
 
 /*! Structure that represents the glue that binds an RTP instance to a channel */
 struct ast_rtp_glue {
@@ -1614,6 +1672,113 @@ enum ast_media_type ast_rtp_codecs_get_stream_type(struct ast_rtp_codecs *codecs
 struct ast_rtp_payload_type *ast_rtp_codecs_get_payload(struct ast_rtp_codecs *codecs, int payload);
 
 /*!
+ * \brief Retrieve rx preferred format
+ *
+ * \param codecs Codecs structure to look in
+ *
+ * \return format information.
+ * \retval NULL if format does not exist.
+ *
+ * \note The format returned by this function has its reference count increased.
+ *       Callers are responsible for decrementing the reference count.
+ *
+ * Example usage:
+ *
+ * \code
+ * struct ast_format *payload_format;
+ * payload_format = ast_rtp_codecs_get_preferred_format(&codecs);
+ * \endcode
+ *
+ * This looks up the preferred format on the codec
+ */
+struct ast_format *ast_rtp_codecs_get_preferred_format(struct ast_rtp_codecs *codecs);
+
+/*!
+ * \brief Set the preferred format
+ *
+ * \param codecs Codecs structure to set the preferred format in
+ * \param format Preferred format to set.
+ *
+ * \return 0
+ *
+ * \note The format passed this function has its reference count increased. If an existing
+ * 		 format is set, that format is replaced.
+ *
+ * Example usage:
+ *
+ * \code
+ * struct ast_format *preferred_format = ast_format_cap_get_format(joint, 0);
+ * ast_rtp_codecs_set_preferred_format(&codecs, preferred_format));
+ * \endcode
+ *
+ * This sets the first joint format as the preferred format.
+ */
+int ast_rtp_codecs_set_preferred_format(struct ast_rtp_codecs *codecs, struct ast_format *format);
+
+/*!
+ * \brief Retrieve rx preferred dtmf format payload type
+ *
+ * \param codecs Codecs structure to look in
+ *
+ * \return Payload type of preferred dtmf format.
+ * \retval -1 if not set.
+ *
+ * Example usage:
+ *
+ * \code
+ * int payload;
+ * payload = ast_rtp_codecs_get_preferred_dtmf_format_pt(codec);
+ * \endcode
+ *
+ * This looks up the preferred dtmf format pt on the codec
+ */
+int ast_rtp_codecs_get_preferred_dtmf_format_pt(struct ast_rtp_codecs *codecs);
+
+/*!
+ * \brief Retrieve rx preferred dtmf format sample rate
+ *
+ * \param codecs Codecs structure to look in
+ *
+ * \return Sample rate of preferred dtmf format.
+ * \retval -1 if not set.
+ *
+ * Example usage:
+ *
+ * \code
+ * int sample_rate;
+ * sample_rate = ast_rtp_codecs_get_preferred_dtmf_format_rate(codec);
+ * \endcode
+ *
+ * This looks up the preferred dtmf format sample rate on the codec
+ */
+int ast_rtp_codecs_get_preferred_dtmf_format_rate(struct ast_rtp_codecs *codecs);
+
+/*!
+ * \brief Set the preferred dtmf format pt and sample rate
+ *
+ * \param codecs Codecs structure to set the preferred format in
+ * \param pt Preferred dtmf payload type to set.
+ * \param rate Preferred dtmf payload rate to set.
+ *
+ * \return 0
+ *
+ * \note The format passed this function has its reference count increased. If an existing
+ * 		 format is set, that format is replaced.
+ *
+ * Example usage:
+ *
+ * \code
+ * int dtmf_code = atoi(dtmf_pt);
+ * int dtmf_rate = clock_rate;
+ * ast_rtp_codecs_set_preferred_dtmf_format(codecs, dtmf_code, dtmf_rate);
+ * \endcode
+ *
+ * This sets the preferred dtmf_code and dtmf_rate on the codec.
+ */
+int ast_rtp_codecs_set_preferred_dtmf_format(struct ast_rtp_codecs *codecs, int pt, int rate);
+
+
+/*!
  * \brief Update the format associated with a tx payload type in a codecs structure
  *
  * \param codecs Codecs structure to operate on
@@ -1719,7 +1884,7 @@ void ast_rtp_codecs_payload_formats(struct ast_rtp_codecs *codecs, struct ast_fo
  * Example usage:
  *
  * \code
- * int payload = ast_rtp_codecs_payload_code(&codecs, 1, ast_format_set(&tmp_fmt, AST_FORMAT_ULAW, 0), 0);
+ * int payload = ast_rtp_codecs_payload_code(&codecs, 1, ast_format_ulaw, 0);
  * \endcode
  *
  * This looks for the numerical payload for ULAW in the codecs structure.
@@ -1727,6 +1892,36 @@ void ast_rtp_codecs_payload_formats(struct ast_rtp_codecs *codecs, struct ast_fo
  * \since 1.8
  */
 int ast_rtp_codecs_payload_code(struct ast_rtp_codecs *codecs, int asterisk_format, struct ast_format *format, int code);
+
+
+/*!
+ * \brief Retrieve a rx mapped payload type based on whether it is an Asterisk format, the code and the sample rate.
+ *
+ * \param codecs Codecs structure to look in
+ * \param asterisk_format Non-zero if the given Asterisk format is present
+ * \param format Asterisk format to look for
+ * \param code The format to look for
+ * \param sample_rate Non-zero if we want to also match on sample rate.
+ *
+ * \details
+ * Find the currently assigned rx mapped payload type based on whether it
+ * is an Asterisk format or non-format code.  If one is currently not
+ * assigned then create a rx payload type mapping.
+ *
+ * \return Numerical payload type
+ * \retval -1 if could not assign.
+ *
+ * Example usage:
+ *
+ * \code
+ * int payload = ast_rtp_codecs_payload_code_sample_rate(&codecs, 0, NULL, AST_RTP_DTMF, 8000);
+ * \endcode
+ *
+ * This looks for the numerical payload for a DTMF type with a sample rate of 8kHz in the codecs structure.
+ *
+ * \since 22.0.0
+ */
+int ast_rtp_codecs_payload_code_sample_rate(struct ast_rtp_codecs *codecs, int asterisk_format, struct ast_format *format, int code, unsigned int sample_rate);
 
 /*!
  * \brief Set a payload code for use with a specific Asterisk format
@@ -1743,6 +1938,21 @@ int ast_rtp_codecs_payload_code(struct ast_rtp_codecs *codecs, int asterisk_form
 int ast_rtp_codecs_payload_set_rx(struct ast_rtp_codecs *codecs, int code, struct ast_format *format);
 
 /*!
+ * \brief Set a payload code with sample rate for use with a specific Asterisk format
+ *
+ * \param codecs Codecs structure to manipulate
+ * \param code The payload code
+ * \param format Asterisk format
+ * \param sample_rate Sample rate of the format, 0 to use the format's default
+ *
+ * \retval 0 Payload was set to the given format
+ * \retval -1 Payload was in use or could not be set
+ *
+ * \since 22.0.0
+ */
+int ast_rtp_codecs_payload_set_rx_sample_rate(struct ast_rtp_codecs *codecs, int code, struct ast_format *format, unsigned int sample_rate);
+
+/*!
  * \brief Retrieve a tx mapped payload type based on whether it is an Asterisk format and the code
  * \since 14.0.0
  *
@@ -1755,6 +1965,21 @@ int ast_rtp_codecs_payload_set_rx(struct ast_rtp_codecs *codecs, int code, struc
  * \retval -1 if not found.
  */
 int ast_rtp_codecs_payload_code_tx(struct ast_rtp_codecs *codecs, int asterisk_format, const struct ast_format *format, int code);
+
+/*!
+ * \brief Retrieve a tx mapped payload type based on whether it is an Asterisk format and the code
+ * \since 22.0.0
+ *
+ * \param codecs Codecs structure to look in
+ * \param asterisk_format Non-zero if the given Asterisk format is present
+ * \param format Asterisk format to look for
+ * \param code The format to look for
+ * \param sample_rate The sample rate to look for, zero if we don't care
+ *
+ * \return Numerical payload type
+ * \retval -1 if not found.
+ */
+int ast_rtp_codecs_payload_code_tx_sample_rate(struct ast_rtp_codecs *codecs, int asterisk_format, const struct ast_format *format, int code, unsigned int sample_rate);
 
 /*!
  * \brief Search for the tx payload type in the ast_rtp_codecs structure
@@ -1788,7 +2013,7 @@ int ast_rtp_codecs_find_payload_code(struct ast_rtp_codecs *codecs, int payload)
  * Example usage:
  *
  * \code
- * const char *subtype = ast_rtp_lookup_mime_subtype2(1, ast_format_set(&tmp_fmt, AST_FORMAT_ULAW, 0), 0, 0);
+ * const char *subtype = ast_rtp_lookup_mime_subtype2(1, ast_format_ulaw, 0, 0);
  * \endcode
  *
  * This looks up the mime subtype for the ULAW format.
@@ -1816,8 +2041,8 @@ const char *ast_rtp_lookup_mime_subtype2(const int asterisk_format,
  * char buf[256] = "";
  * struct ast_format tmp_fmt;
  * struct ast_format_cap *cap = ast_format_cap_alloc_nolock();
- * ast_format_cap_append(cap, ast_format_set(&tmp_fmt, AST_FORMAT_ULAW, 0));
- * ast_format_cap_append(cap, ast_format_set(&tmp_fmt, AST_FORMAT_GSM, 0));
+ * ast_format_cap_append(cap, ast_format_ulaw, 0);
+ * ast_format_cap_append(cap, ast_format_ulaw, 0);
  * char *mime = ast_rtp_lookup_mime_multiple2(&buf, sizeof(buf), cap, 0, 1, 0);
  * ast_format_cap_destroy(cap);
  * \endcode
@@ -2220,7 +2445,7 @@ char *ast_rtp_instance_get_quality(struct ast_rtp_instance *instance, enum ast_r
  *
  * \code
  * struct ast_format tmp_fmt;
- * ast_rtp_instance_set_read_format(instance, ast_format_set(&tmp_fmt, AST_FORMAT_ULAW, 0));
+ * ast_rtp_instance_set_read_format(instance, ast_format_ulaw);
  * \endcode
  *
  * This requests that the RTP engine provide audio frames in the ULAW format.
@@ -2242,7 +2467,7 @@ int ast_rtp_instance_set_read_format(struct ast_rtp_instance *instance, struct a
  *
  * \code
  * struct ast_format tmp_fmt;
- * ast_rtp_instance_set_write_format(instance, ast_format_set(&tmp_fmt, AST_FORMAT_ULAW, 0));
+ * ast_rtp_instance_set_write_format(instance, ast_format_ulaw);
  * \endcode
  *
  * This tells the underlying RTP engine that audio frames will be provided to it in ULAW format.
@@ -2820,6 +3045,20 @@ int ast_rtp_get_rate(const struct ast_format *format);
  */
 struct stasis_topic *ast_rtp_topic(void);
 
+/*!
+ * \brief Determine if a type of payload is already present in mappings.
+ * \since 18
+ *
+ * \param codecs Codecs to be checked for mappings.
+ * \param to_match Payload type object to compare against.
+ *
+ * \note It is assumed that codecs is not locked before calling.
+ *
+ * \retval 0 not found
+ * \retval 1 found
+ */
+int ast_rtp_payload_mapping_tx_is_present(struct ast_rtp_codecs *codecs, const struct ast_rtp_payload_type *to_match);
+
 /* RTP debug logging category name */
 #define AST_LOG_CATEGORY_RTP "rtp"
 /* RTP packet debug logging category name */
@@ -2860,6 +3099,10 @@ uintmax_t ast_debug_category_ice_id(void);
 #define ast_debug_rtp(sublevel, ...) \
 	ast_debug_category(sublevel, AST_DEBUG_CATEGORY_RTP,  __VA_ARGS__)
 
+/* Allow logging of RTP? */
+#define ast_debug_rtp_is_allowed \
+	ast_debug_category_is_allowed(AST_LOG_CATEGORY_ENABLED, AST_DEBUG_CATEGORY_RTP)
+
 /* Allow logging of RTP packets? */
 #define ast_debug_rtp_packet_is_allowed \
 	ast_debug_category_is_allowed(AST_LOG_CATEGORY_ENABLED, AST_DEBUG_CATEGORY_RTP_PACKET)
@@ -2872,6 +3115,10 @@ uintmax_t ast_debug_category_ice_id(void);
  */
 #define ast_debug_rtcp(sublevel, ...) \
 	ast_debug_category(sublevel, AST_DEBUG_CATEGORY_RTCP, __VA_ARGS__)
+
+/* Allow logging of RTCP? */
+#define ast_debug_rtcp_is_allowed \
+	ast_debug_category_is_allowed(AST_LOG_CATEGORY_ENABLED, AST_DEBUG_CATEGORY_RTCP)
 
 /* Allow logging of RTCP packets? */
 #define ast_debug_rtcp_packet_is_allowed \

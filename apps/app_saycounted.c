@@ -31,6 +31,9 @@
 
 /*** DOCUMENTATION
 	<application name="SayCountedNoun" language="en_US">
+		<since>
+			<version>1.8.0</version>
+		</since>
 		<synopsis>
 			Say a noun in declined form in order to count things
 		</synopsis>
@@ -63,7 +66,7 @@
 			implement complicated spelling rules.  We simply record the word
 			"men" in the sound file named "mans".</para>
 			<para>This application does not automatically answer and should be
-			preceeded by an application such as Answer() or Progress.</para>
+			preceded by an application such as Answer() or Progress.</para>
 		</description>
 		<see-also>
 			<ref type="application">SayCountedAdj</ref>
@@ -71,6 +74,9 @@
 		</see-also>
 	</application>
 	<application name="SayCountedAdj" language="en_US">
+		<since>
+			<version>1.8.0</version>
+		</since>
 		<synopsis>
 			Say a adjective in declined form in order to count things
 		</synopsis>
@@ -102,7 +108,7 @@
 			SayCountedAdj(5,new,f) will play sound file "newx" (containing the
 			word "novikh").</para>
 			<para>This application does not automatically answer and should be
-			preceeded by an application such as Answer(), Progress(), or
+			preceded by an application such as Answer(), Progress(), or
 			Proceeding().</para>
 		</description>
 		<see-also>

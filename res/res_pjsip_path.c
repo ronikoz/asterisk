@@ -36,10 +36,23 @@
 static const pj_str_t PATH_NAME = { "Path", 4 };
 static pj_str_t PATH_SUPPORTED_NAME = { "path", 4 };
 
-static struct ast_sip_aor *find_aor(struct ast_sip_endpoint *endpoint, pjsip_uri *uri)
+static struct ast_sip_aor *find_aor(struct ast_sip_contact *contact)
+{
+	if (!contact) {
+		return NULL;
+	}
+	if (ast_strlen_zero(contact->aor)) {
+		return NULL;
+	}
+
+	return ast_sip_location_retrieve_aor(contact->aor);
+}
+
+static struct ast_sip_aor *find_aor2(struct ast_sip_endpoint *endpoint, pjsip_uri *uri)
 {
 	char *configured_aors, *aor_name;
-	pjsip_sip_uri *sip_uri;
+	const pj_str_t *uri_username;
+	const pj_str_t *uri_hostname;
 	char *domain_name;
 	char *username;
 	struct ast_str *id = NULL;
@@ -48,11 +61,13 @@ static struct ast_sip_aor *find_aor(struct ast_sip_endpoint *endpoint, pjsip_uri
 		return NULL;
 	}
 
-	sip_uri = pjsip_uri_get_uri(uri);
-	domain_name = ast_alloca(sip_uri->host.slen + 1);
-	ast_copy_pj_str(domain_name, &sip_uri->host, sip_uri->host.slen + 1);
-	username = ast_alloca(sip_uri->user.slen + 1);
-	ast_copy_pj_str(username, &sip_uri->user, sip_uri->user.slen + 1);
+	uri_hostname = ast_sip_pjsip_uri_get_hostname(uri);
+	domain_name = ast_alloca(uri_hostname->slen + 1);
+	ast_copy_pj_str(domain_name, uri_hostname, uri_hostname->slen + 1);
+
+	uri_username = ast_sip_pjsip_uri_get_username(uri);
+	username = ast_alloca(uri_username->slen + 1);
+	ast_copy_pj_str(username, uri_username, uri_username->slen + 1);
 
 	/*
 	 * We may want to match without any user options getting
@@ -74,7 +89,7 @@ static struct ast_sip_aor *find_aor(struct ast_sip_endpoint *endpoint, pjsip_uri
 			break;
 		}
 
-		if (!id && !(id = ast_str_create(strlen(username) + sip_uri->host.slen + 2))) {
+		if (!id && !(id = ast_str_create(strlen(username) + uri_hostname->slen + 2))) {
 			aor_name = NULL;
 			break;
 		}
@@ -99,6 +114,42 @@ static struct ast_sip_aor *find_aor(struct ast_sip_endpoint *endpoint, pjsip_uri
 
 	return ast_sip_location_retrieve_aor(aor_name);
 }
+
+static struct ast_sip_contact *find_contact(struct ast_sip_aor *aor, pjsip_uri *uri)
+{
+	struct ao2_iterator it_contacts;
+	struct ast_sip_contact *contact;
+	char contact_buf[512];
+	int contact_buf_len;
+	int res = 0;
+
+	RAII_VAR(struct ao2_container *, contacts, NULL, ao2_cleanup);
+
+	if (!(contacts = ast_sip_location_retrieve_aor_contacts(aor))) {
+		/* No contacts are available, skip it as well */
+		return NULL;
+	} else if (!ao2_container_count(contacts)) {
+		/* We were given a container but no contacts are in it... */
+		return NULL;
+	}
+
+	contact_buf_len = pjsip_uri_print(PJSIP_URI_IN_CONTACT_HDR, uri, contact_buf, 512);
+	contact_buf[contact_buf_len] = '\0';
+
+	it_contacts = ao2_iterator_init(contacts, 0);
+	for (; (contact = ao2_iterator_next(&it_contacts)); ao2_ref(contact, -1)) {
+		if (!strcmp(contact_buf, contact->uri)) {
+			res = 1;
+			break;
+		}
+	}
+	ao2_iterator_destroy(&it_contacts);
+	if (!res) {
+		return NULL;
+	}
+	return contact;
+}
+
 
 /*!
  * \brief Get the path string associated with this contact and tdata
@@ -170,7 +221,10 @@ static void path_outgoing_request(struct ast_sip_endpoint *endpoint, struct ast_
 		return;
 	}
 
-	aor = find_aor(endpoint, tdata->msg->line.req.uri);
+	aor = find_aor(contact);
+	if (!aor) {
+		aor = find_aor2(endpoint, tdata->msg->line.req.uri);
+	}
 	if (!aor || !aor->support_path) {
 		return;
 	}
@@ -179,8 +233,19 @@ static void path_outgoing_request(struct ast_sip_endpoint *endpoint, struct ast_
 		return;
 	}
 
-	if (contact && !ast_strlen_zero(contact->path)) {
-		ast_sip_set_outbound_proxy(tdata, contact->path);
+	if (!contact) {
+		contact = find_contact(aor, tdata->msg->line.req.uri);
+		if (contact) {
+			if (!ast_strlen_zero(contact->path)) {
+				ast_sip_set_outbound_proxy(tdata, contact->path);
+			}
+			ao2_ref(contact, -1);
+			contact = NULL;
+		}
+	} else {
+		if (!ast_strlen_zero(contact->path)) {
+			ast_sip_set_outbound_proxy(tdata, contact->path);
+		}
 	}
 }
 
@@ -202,7 +267,6 @@ static void path_outgoing_response(struct ast_sip_endpoint *endpoint, struct ast
 	struct pjsip_status_line status = tdata->msg->line.status;
 	pj_str_t path_dup;
 	pjsip_generic_string_hdr *path_hdr;
-	pjsip_contact_hdr *contact_hdr;
 	RAII_VAR(struct ast_sip_aor *, aor, NULL, ao2_cleanup);
 	pjsip_cseq_hdr *cseq = pjsip_msg_find_hdr(tdata->msg, PJSIP_H_CSEQ, NULL);
 	const pj_str_t REGISTER_METHOD = {"REGISTER", 8};
@@ -213,12 +277,7 @@ static void path_outgoing_response(struct ast_sip_endpoint *endpoint, struct ast
 		return;
 	}
 
-	contact_hdr = pjsip_msg_find_hdr(tdata->msg, PJSIP_H_CONTACT, NULL);
-	if (!contact_hdr) {
-		return;
-	}
-
-	aor = find_aor(endpoint, contact_hdr->uri);
+	aor = find_aor(contact);
 	if (!aor || !aor->support_path || add_supported(tdata)
 		|| path_get_string(tdata->pool, contact, &path_dup)) {
 		return;

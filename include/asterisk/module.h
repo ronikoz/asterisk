@@ -150,6 +150,20 @@ enum ast_module_helper_type {
 enum ast_module_load_result ast_load_resource(const char *resource_name);
 
 /*!
+ * \brief Unload and load a module again.
+ * \param resource_name The name of the module to unload.
+ * \param ast_module_unload_mode The force flag. This should be set using one of the AST_FORCE flags.
+ * \param recursive Attempt to recursively unload any dependents of this module
+ *        if that will allow the module to unload, and load them back again afterwards.
+ *
+ *
+ * \retval 0 on success.
+ * \retval 1 on error unloading modules.
+ * \retval -1 on error loading modules back.
+ */
+int ast_refresh_resource(const char *resource_name, enum ast_module_unload_mode force, int recursive);
+
+/*!
  * \brief Unload a module.
  * \param resource_name The name of the module to unload.
  * \param ast_module_unload_mode The force flag. This should be set using one of the AST_FORCE flags.
@@ -242,7 +256,7 @@ int ast_update_module_list_condition(int (*modentry)(const char *module, const c
 
 /*!
  * \brief Check if module with the name given is loaded
- * \param name Module name, like "chan_sip.so"
+ * \param name Module name, like "chan_pjsip.so"
  * \retval 1 if true
  * \retval 0 if false
  */
@@ -283,7 +297,7 @@ int ast_loader_unregister(int (*updater)(void));
  * \param type The type of action that will be performed by CLI.
  *
  * \retval A possible completion of the partial match.
- * \retval NULL if no matches were found.
+ * \retval NULL if no matches were found or Asterisk is not yet fully booted.
  */
 char *ast_module_helper(const char *line, const char *word, int pos, int state, int rpos, enum ast_module_helper_type type);
 

@@ -118,6 +118,7 @@ struct ast_audiohook {
 	ast_audiohook_manipulate_callback manipulate_callback; /*!< Manipulation callback */
 	struct ast_audiohook_options options;                  /*!< Applicable options */
 	unsigned int hook_internal_samp_rate;                  /*!< internal read/write sample rate on the audiohook.*/
+	enum ast_audiohook_direction direction;                /*!< Intended audiohook direction, BOTH by default on init */
 	AST_LIST_ENTRY(ast_audiohook) list;                    /*!< Linked list information */
 };
 
@@ -139,6 +140,14 @@ int ast_audiohook_init(struct ast_audiohook *audiohook, enum ast_audiohook_type 
  * \retval -1 on failure
  */
 int ast_audiohook_destroy(struct ast_audiohook *audiohook);
+
+/*! \brief Sets direction on audiohook
+ * \param audiohook
+ * \param direction In which direction should the audiohook feed frames, ie if we are snooping 'in', set direction to READ so that only the 'in' frames are fed to the slin factory
+ * \retval 0 on success
+ * \retval -1 on failure due to audiohook already in use or in shutdown. Can only set direction on NEW audiohooks
+ */
+int ast_audiohook_set_frame_feed_direction(struct ast_audiohook *audiohook, enum ast_audiohook_direction direction);
 
 /*! \brief Writes a frame into the audiohook structure
  * \param audiohook
@@ -320,6 +329,16 @@ int ast_channel_audiohook_count_by_source_running(struct ast_channel *chan, cons
 int ast_audiohook_volume_set(struct ast_channel *chan, enum ast_audiohook_direction direction, int volume);
 
 /*!
+ * \brief Adjust the volume on frames read from or written to a channel
+ * \param chan Channel to muck with
+ * \param direction Direction to set on
+ * \param volume Value to adjust the volume by
+ * \retval 0 on success
+ * \retval -1 on failure
+ */
+int ast_audiohook_volume_set_float(struct ast_channel *chan, enum ast_audiohook_direction direction, float volume);
+
+/*!
  * \brief Retrieve the volume adjustment value on frames read from or written to a channel
  * \param chan Channel to retrieve volume adjustment from
  * \param direction Direction to retrieve
@@ -327,6 +346,14 @@ int ast_audiohook_volume_set(struct ast_channel *chan, enum ast_audiohook_direct
  * \since 1.6.1
  */
 int ast_audiohook_volume_get(struct ast_channel *chan, enum ast_audiohook_direction direction);
+
+/*!
+ * \brief Retrieve the volume adjustment value on frames read from or written to a channel
+ * \param chan Channel to retrieve volume adjustment from
+ * \param direction Direction to retrieve
+ * \return adjustment value
+ */
+float ast_audiohook_volume_get_float(struct ast_channel *chan, enum ast_audiohook_direction direction);
 
 /*!
  * \brief Adjust the volume on frames read from or written to a channel
@@ -339,6 +366,16 @@ int ast_audiohook_volume_get(struct ast_channel *chan, enum ast_audiohook_direct
  */
 int ast_audiohook_volume_adjust(struct ast_channel *chan, enum ast_audiohook_direction direction, int volume);
 
+/*!
+ * \brief Adjust the volume on frames read from or written to a channel
+ * \param chan Channel to muck with
+ * \param direction Direction to increase
+ * \param volume Value to adjust the adjustment by
+ * \retval 0 on success
+ * \retval -1 on failure
+ */
+int ast_audiohook_volume_adjust_float(struct ast_channel *chan, enum ast_audiohook_direction direction, float volume);
+
 /*! \brief Mute frames read from or written to a channel
  * \param chan Channel to muck with
  * \param source Type of audiohook
@@ -348,6 +385,16 @@ int ast_audiohook_volume_adjust(struct ast_channel *chan, enum ast_audiohook_dir
  * \retval -1 failure
  */
 int ast_audiohook_set_mute(struct ast_channel *chan, const char *source, enum ast_audiohook_flags flag, int clear);
+
+/*! \brief Mute frames read from or written for all audiohooks on a channel
+ * \param chan Channel to muck with
+ * \param source Type of audiohooks
+ * \param flag which direction to set / clear
+ * \param clear set or clear muted frames on direction based on flag parameter
+ * \retval >=0 number of muted audiohooks
+ * \retval -1 failure
+ */
+int ast_audiohook_set_mute_all(struct ast_channel *chan, const char *source, enum ast_audiohook_flags flag, int clear);
 
 #if defined(__cplusplus) || defined(c_plusplus)
 }

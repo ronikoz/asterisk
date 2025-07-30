@@ -26,7 +26,7 @@
  * in or out the DO_SSL macro.
  *
  * TLS/SSL support is basically implemented by reading from a config file
- * (currently manager.conf, http.conf and sip.conf) the names of the certificate
+ * (currently manager.conf, http.conf and pjsip.conf) the names of the certificate
  * files and cipher to use, and then run ssl_setup() to create an appropriate
  * data structure named ssl_ctx.
  *
@@ -142,6 +142,7 @@ struct ast_tcptls_session_args {
 	void *(*worker_fn)(void *); /*!< the function in charge of doing the actual work */
 	const char *name;
 	struct ast_tls_config *old_tls_cfg; /*!< copy of the SSL configuration to determine whether changes have been made */
+	int suppress_connection_msgs; /*!< suppress connection messages to allow caller to manage logging */
 };
 
 /*! \brief

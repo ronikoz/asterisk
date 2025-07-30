@@ -29,7 +29,7 @@
 ;bindaddr=0.0.0.0
 ;port=4520
 ;
-; See https://wiki.asterisk.org/wiki/display/AST/IP+Quality+of+Service for a description of the tos parameter.
+; See https://docs.asterisk.org/Configuration/Channel-Drivers/IP-Quality-of-Service for a description of the tos parameter.
 ;tos=ef
 ;
 ; Our entity identifier.  (It should generally be the MAC address of the
@@ -75,6 +75,18 @@ autokill=yes
 ; off by default due to performance impacts.
 ;
 ;storehistory=yes
+;
+; Channel technology to use for outgoing calls using SIP (Session Initiation Protocol).
+; Options are 'SIP' for chan_sip and 'PJSIP' for chan_pjsip. Default is 'PJSIP'.
+; If specified, all outgoing SIP calls using DUNDi will use the specified channel tech.
+;
+;outgoing_sip_tech=pjsip
+;
+; Name of endpoint from pjsip.conf to use for outgoing calls from this system,
+; when using the PJSIP technology to complete a call to a SIP-based destination.
+; (Required for PJSIP, since PJSIP calls must specify an endpoint explicitly).
+;
+;pjsip_outgoing_endpoint=outgoing
 
 [mappings]
 ;

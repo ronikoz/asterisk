@@ -80,6 +80,7 @@ int ast_streamfile(struct ast_channel *c, const char *filename, const char *pref
  * \brief stream file until digit
  * If the file name is non-empty, try to play it.
  * \note If digits == "" then we can simply check for non-zero.
+ * \note If a failure is encountered, the stream will be closed before returning.
  * \retval 0 if success.
  * \retval -1 if error.
  * \retval digit if interrupted by a digit.
@@ -139,12 +140,13 @@ int ast_filecopy(const char *oldname, const char *newname, const char *fmt);
 
 /*!
  * \brief same as mkstemp, but return a FILE
- * \param template The template for the unique file name to generate. Modified in place to return the file name.
+ * \param template_name The template for the unique file name to generate.
+ *                      Modified in place to return the file name.
  * \param mode The mode for file permissions
  *
  * \return FILE handle to the temporary file on success or NULL if creation failed
  */
-FILE *ast_file_mkftemp(char *template, mode_t mode);
+FILE *ast_file_mkftemp(char *template_name, mode_t mode);
 
 /*!
  * \brief Create a temporary file located at path

@@ -27,6 +27,7 @@
 #include <pjsip.h>
 #include <pjsip_ua.h>
 
+#include "asterisk/app.h"
 #include "asterisk/cli.h"
 #include "asterisk/config.h"
 #include "asterisk/manager.h"
@@ -38,6 +39,9 @@
 
 /*** DOCUMENTATION
 	<manager name="PJSIPNotify" language="en_US">
+		<since>
+			<version>12.0.0</version>
+		</since>
 		<synopsis>
 			Send a NOTIFY to either an endpoint, an arbitrary URI, or inside a SIP dialog.
 		</synopsis>
@@ -52,11 +56,16 @@
 			<parameter name="channel" required="false">
 				<para>Channel name to send the NOTIFY. Must be a PJSIP channel.</para>
 			</parameter>
-			<parameter name="Variable" required="true">
+			<parameter name="Option" required="false">
+				<para>The config section name from <literal>pjsip_notify.conf</literal> to use.</para>
+				<para>One of Option or Variable must be specified.</para>
+			</parameter>
+			<parameter name="Variable" required="false">
 				<para>Appends variables as headers/content to the NOTIFY. If the variable is
 				named <literal>Content</literal>, then the value will compose the body
 				of the message if another variable sets <literal>Content-Type</literal>.
 				<replaceable>name</replaceable>=<replaceable>value</replaceable></para>
+				<para>One of Option or Variable must be specified.</para>
 			</parameter>
 		</syntax>
 		<description>
@@ -77,6 +86,9 @@
 				<synopsis>Unused, but reserved.</synopsis>
 			</configObject>
 			<configObject name="notify">
+				<since>
+					<version>12.0.0</version>
+				</since>
 				<synopsis>Configuration of a NOTIFY request.</synopsis>
 				<description>
 					<para>Each key-value pair in a <literal>notify</literal>
@@ -312,6 +324,14 @@ static void notify_cli_uri_data_destroy(void *obj)
 	ao2_cleanup(data->info);
 }
 
+static void notify_cli_channel_data_destroy(void *obj)
+{
+	struct notify_channel_data *data = obj;
+
+	ao2_cleanup(data->info);
+	ao2_cleanup(data->session);
+}
+
 /*!
  * \internal
  * \brief Destroy the notify CLI data releasing any resources (URI variant)
@@ -362,6 +382,29 @@ static struct notify_uri_data* notify_cli_uri_data_create(
 		return NULL;
 	}
 
+	data->info = info;
+	ao2_ref(data->info, +1);
+
+	data->build_notify = build_cli_notify;
+
+	return data;
+}
+
+/*!
+ * \internal
+ * \brief Construct a notify URI data object for CLI.
+ */
+static struct notify_channel_data* notify_cli_channel_data_create(
+	struct ast_sip_session *session, void *info)
+{
+	struct notify_channel_data *data = ao2_alloc_options(sizeof(*data),
+		notify_cli_channel_data_destroy, AO2_ALLOC_OPT_LOCK_NOLOCK);
+
+	if (!data) {
+		return NULL;
+	}
+
+	data->session = session;
 	data->info = info;
 	ao2_ref(data->info, +1);
 
@@ -940,14 +983,13 @@ static char *cli_complete_endpoint(const char *word)
  * \internal
  * \brief Do completion on the notify CLI command.
  */
-static char *cli_complete_notify(const char *line, const char *word,
-				 int pos, int state, int using_uri)
+static char *cli_complete_notify(struct ast_cli_args *a)
 {
 	char *c = NULL;
 
-	if (pos == 3) {
+	if (a->pos == 3) {
 		int which = 0;
-		int wordlen = strlen(word);
+		int wordlen = strlen(a->word);
 
 		RAII_VAR(struct notify_cfg *, cfg,
 			 ao2_global_obj_ref(globals), ao2_cleanup);
@@ -956,7 +998,7 @@ static char *cli_complete_notify(const char *line, const char *word,
 		/* do completion for notify type */
 		struct ao2_iterator i = ao2_iterator_init(cfg->notify_options, 0);
 		while ((option = ao2_iterator_next(&i))) {
-			if (!strncasecmp(word, option->name, wordlen) && ++which > state) {
+			if (!strncasecmp(a->word, option->name, wordlen) && ++which > a->n) {
 				c = ast_strdup(option->name);
 			}
 
@@ -969,27 +1011,38 @@ static char *cli_complete_notify(const char *line, const char *word,
 		return c;
 	}
 
-	if (pos == 4) {
-		int wordlen = strlen(word);
+	if (a->pos == 4) {
+		int wordlen = strlen(a->word);
 
-		if (ast_strlen_zero(word)) {
-		    if (state == 0) {
+		if (ast_strlen_zero(a->word)) {
+		    if (a->n == 0) {
 		        c = ast_strdup("endpoint");
-		    } else if (state == 1) {
+		    } else if (a->n == 1) {
 		        c = ast_strdup("uri");
+		    } else if (a->n == 2) {
+				c = ast_strdup("channel");
 		    }
-		} else if (state == 0) {
-		    if (!strncasecmp(word, "endpoint", wordlen)) {
+		} else if (a->n == 0) {
+		    if (!strncasecmp(a->word, "endpoint", wordlen)) {
 		        c = ast_strdup("endpoint");
-		    } else if (!strncasecmp(word, "uri", wordlen)) {
+		    } else if (!strncasecmp(a->word, "uri", wordlen)) {
 		        c = ast_strdup("uri");
+		    } else if (!strncasecmp(a->word, "channel", wordlen)) {
+		        c = ast_strdup("channel");
 		    }
 		}
 
 		return c;
 	}
 
-	return pos > 4 && !using_uri ? cli_complete_endpoint(word) : NULL;
+	if (a->pos > 4) {
+		if (!strcasecmp(a->argv[4], "endpoint")) {
+			return cli_complete_endpoint(a->word);
+		} else if (!strcasecmp(a->argv[4], "channel")) {
+			return ast_complete_channels(a->line, a->word, a->pos, a->n, 5);
+		}
+	}
+	return NULL;
 }
 
 /*!
@@ -1007,21 +1060,18 @@ static char *cli_notify(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a
 
 	int i;
 	int using_uri = 0;
+	int using_channel = 0;
 
 	switch (cmd) {
 	case CLI_INIT:
 		e->command = "pjsip send notify";
 		e->usage =
-			"Usage: pjsip send notify <type> {endpoint|uri} <peer> [<peer>...]\n"
+			"Usage: pjsip send notify <type> {endpoint|uri|channel} <peer> [<peer>...]\n"
 			"       Send a NOTIFY request to an endpoint\n"
 			"       Message types are defined in pjsip_notify.conf\n";
 		return NULL;
 	case CLI_GENERATE:
-		if (a->argc > 4 && (!strcasecmp(a->argv[4], "uri"))) {
-			using_uri = 1;
-		}
-
-		return cli_complete_notify(a->line, a->word, a->pos, a->n, using_uri);
+		return cli_complete_notify(a);
 	}
 
 	if (a->argc < 6) {
@@ -1030,6 +1080,8 @@ static char *cli_notify(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a
 
 	if (!strcasecmp(a->argv[4], "uri")) {
 		using_uri = 1;
+	} else if (!strcasecmp(a->argv[4], "channel")) {
+		using_channel = 1;
 	} else if (strcasecmp(a->argv[4], "endpoint")) {
 		return CLI_SHOWUSAGE;
 	}
@@ -1044,14 +1096,23 @@ static char *cli_notify(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a
 	}
 
 	for (i = 5; i < a->argc; ++i) {
+		enum notify_result result;
 		ast_cli(a->fd, "Sending NOTIFY of type '%s' to '%s'\n",
 			a->argv[3], a->argv[i]);
 
-		switch (using_uri ? push_notify_uri(a->argv[i], option, notify_cli_uri_data_create) :
-		                    push_notify(a->argv[i], option, notify_cli_data_create)) {
+		if (using_uri) {
+			result = push_notify_uri(a->argv[i], option, notify_cli_uri_data_create);
+		} else if (using_channel) {
+			result = push_notify_channel(a->argv[i], option, notify_cli_channel_data_create);
+		} else {
+			result = push_notify(a->argv[i], option, notify_cli_data_create);
+		}
+		switch(result) {
 		case INVALID_ENDPOINT:
-			ast_cli(a->fd, "Unable to retrieve endpoint %s\n",
-				a->argv[i]);
+			ast_cli(a->fd, "Unable to retrieve endpoint %s\n", a->argv[i]);
+			break;
+		case INVALID_CHANNEL:
+			ast_cli(a->fd, "Unable to find channel %s\n", a->argv[i]);
 			break;
 		case ALLOC_ERROR:
 			ast_cli(a->fd, "Unable to allocate NOTIFY task data\n");
@@ -1071,6 +1132,47 @@ static struct ast_cli_entry cli_options[] = {
 	AST_CLI_DEFINE(cli_notify, "Send a NOTIFY request to a SIP endpoint")
 };
 
+enum notify_type {
+	NOTIFY_ENDPOINT,
+	NOTIFY_URI,
+	NOTIFY_CHANNEL,
+};
+
+static void manager_send_response(struct mansession *s, const struct message *m, enum notify_type type, enum notify_result res, struct ast_variable *vars, const char *endpoint_name)
+{
+	switch (res) {
+	case INVALID_CHANNEL:
+		if (type == NOTIFY_CHANNEL) {
+			ast_variables_destroy(vars);
+			astman_send_error(s, m, "Channel not found");
+		} else {
+			/* Shouldn't be possible. */
+			ast_assert(0);
+		}
+		break;
+	case INVALID_ENDPOINT:
+		if (type == NOTIFY_ENDPOINT) {
+			ast_variables_destroy(vars);
+			astman_send_error_va(s, m, "Unable to retrieve endpoint %s", endpoint_name);
+		} else {
+			/* Shouldn't be possible. */
+			ast_assert(0);
+		}
+		break;
+	case ALLOC_ERROR:
+		ast_variables_destroy(vars);
+		astman_send_error(s, m, "Unable to allocate NOTIFY task data");
+		break;
+	case TASK_PUSH_ERROR:
+		/* Don't need to destroy vars since it is handled by cleanup in push_notify, push_notify_uri, etc. */
+		astman_send_error(s, m, "Unable to push Notify task");
+		break;
+	case SUCCESS:
+		astman_send_ack(s, m, "NOTIFY sent");
+		break;
+	}
+}
+
 /*!
  * \internal
  * \brief Completes SIPNotify AMI command in Endpoint mode.
@@ -1078,7 +1180,19 @@ static struct ast_cli_entry cli_options[] = {
 static void manager_notify_endpoint(struct mansession *s,
 	const struct message *m, const char *endpoint_name)
 {
-	struct ast_variable *vars = astman_get_variables_order(m, ORDER_NATURAL);
+	RAII_VAR(struct notify_cfg *, cfg, NULL, ao2_cleanup);
+	RAII_VAR(struct notify_option *, option, NULL, ao2_cleanup);
+	struct ast_variable *vars = NULL;
+	enum notify_result res;
+	const char *option_name = astman_get_header(m, "Option");
+
+	if (!ast_strlen_zero(option_name) && (cfg = ao2_global_obj_ref(globals)) && !(option = notify_option_find(cfg->notify_options, option_name))) {
+		astman_send_error_va(s, m, "Unable to find notify type '%s'\n", option_name);
+		return;
+	}
+	if (!option) {
+		vars = astman_get_variables_order(m, ORDER_NATURAL);
+	}
 
 	if (!strncasecmp(endpoint_name, "sip/", 4)) {
 		endpoint_name += 4;
@@ -1088,28 +1202,13 @@ static void manager_notify_endpoint(struct mansession *s,
 		endpoint_name += 6;
 	}
 
-	switch (push_notify(endpoint_name, vars, notify_ami_data_create)) {
-	case INVALID_CHANNEL:
-		/* Shouldn't be possible. */
-		ast_assert(0);
-		break;
-	case INVALID_ENDPOINT:
-		ast_variables_destroy(vars);
-		astman_send_error_va(s, m, "Unable to retrieve endpoint %s",
-			endpoint_name);
-		break;
-	case ALLOC_ERROR:
-		ast_variables_destroy(vars);
-		astman_send_error(s, m, "Unable to allocate NOTIFY task data");
-		break;
-	case TASK_PUSH_ERROR:
-		/* Don't need to destroy vars since it is handled by cleanup in push_notify */
-		astman_send_error(s, m, "Unable to push NOTIFY task");
-		break;
-	case SUCCESS:
-		astman_send_ack(s, m, "NOTIFY sent");
-		break;
+	if (option) {
+		res = push_notify(endpoint_name, option, notify_cli_data_create); /* The CLI version happens to be suitable for options. */
+	} else {
+		res = push_notify(endpoint_name, vars, notify_ami_data_create);
 	}
+
+	manager_send_response(s, m, NOTIFY_ENDPOINT, res, vars, endpoint_name);
 }
 
 /*!
@@ -1119,29 +1218,27 @@ static void manager_notify_endpoint(struct mansession *s,
 static void manager_notify_uri(struct mansession *s,
 	const struct message *m, const char *uri)
 {
-	struct ast_variable *vars = astman_get_variables_order(m, ORDER_NATURAL);
+	RAII_VAR(struct notify_cfg *, cfg, NULL, ao2_cleanup);
+	RAII_VAR(struct notify_option *, option, NULL, ao2_cleanup);
+	enum notify_result res;
+	const char *option_name = astman_get_header(m, "Option");
+	struct ast_variable *vars = NULL;
 
-	switch (push_notify_uri(uri, vars, notify_ami_uri_data_create)) {
-	case INVALID_CHANNEL:
-		/* Shouldn't be possible. */
-		ast_assert(0);
-		break;
-	case INVALID_ENDPOINT:
-		/* Shouldn't be possible. */
-		ast_assert(0);
-		break;
-	case ALLOC_ERROR:
-		ast_variables_destroy(vars);
-		astman_send_error(s, m, "Unable to allocate NOTIFY task data");
-		break;
-	case TASK_PUSH_ERROR:
-		/* Don't need to destroy vars since it is handled by cleanup in push_notify_uri */
-		astman_send_error(s, m, "Unable to push Notify task");
-		break;
-	case SUCCESS:
-		astman_send_ack(s, m, "NOTIFY sent");
-		break;
+	if (!ast_strlen_zero(option_name) && (cfg = ao2_global_obj_ref(globals)) && !(option = notify_option_find(cfg->notify_options, option_name))) {
+		astman_send_error_va(s, m, "Unable to find notify type '%s'\n", option_name);
+		return;
 	}
+	if (!option) {
+		vars = astman_get_variables_order(m, ORDER_NATURAL);
+	}
+
+	if (option) {
+		res = push_notify_uri(uri, option, notify_cli_uri_data_create);
+	} else {
+		res = push_notify_uri(uri, vars, notify_ami_uri_data_create);
+	}
+
+	manager_send_response(s, m, NOTIFY_URI, res, vars, NULL);
 }
 
 /*!
@@ -1151,29 +1248,13 @@ static void manager_notify_uri(struct mansession *s,
 static void manager_notify_channel(struct mansession *s,
 	const struct message *m, const char *channel)
 {
-	struct ast_variable *vars = astman_get_variables_order(m, ORDER_NATURAL);
+	enum notify_result res;
+	struct ast_variable *vars = NULL;
 
-	switch (push_notify_channel(channel, vars, notify_ami_channel_data_create)) {
-	case INVALID_CHANNEL:
-		ast_variables_destroy(vars);
-		astman_send_error(s, m, "Channel not found");
-		break;
-	case INVALID_ENDPOINT:
-		/* Shouldn't be possible. */
-		ast_assert(0);
-		break;
-	case ALLOC_ERROR:
-		ast_variables_destroy(vars);
-		astman_send_error(s, m, "Unable to allocate NOTIFY task data");
-		break;
-	case TASK_PUSH_ERROR:
-		/* Don't need to destroy vars since it is handled by cleanup in push_notify_channel */
-		astman_send_error(s, m, "Unable to push Notify task");
-		break;
-	case SUCCESS:
-		astman_send_ack(s, m, "NOTIFY sent");
-		break;
-	}
+	vars = astman_get_variables_order(m, ORDER_NATURAL);
+	res = push_notify_channel(channel, vars, notify_ami_channel_data_create);
+
+	manager_send_response(s, m, NOTIFY_CHANNEL, res, vars, NULL);
 }
 
 /*!
@@ -1185,6 +1266,8 @@ static int manager_notify(struct mansession *s, const struct message *m)
 	const char *endpoint_name = astman_get_header(m, "Endpoint");
 	const char *uri = astman_get_header(m, "URI");
 	const char *channel = astman_get_header(m, "Channel");
+	const char *variables = astman_get_header(m, "Variable");
+	const char *option = astman_get_header(m, "Option");
 	int count = 0;
 
 	if (!ast_strlen_zero(endpoint_name)) {
@@ -1197,7 +1280,11 @@ static int manager_notify(struct mansession *s, const struct message *m)
 		++count;
 	}
 
-	if (1 < count) {
+	if ((!ast_strlen_zero(option) && !ast_strlen_zero(variables)) || (ast_strlen_zero(option) && ast_strlen_zero(variables))) {
+		astman_send_error(s, m,
+			"PJSIPNotify requires either an Option or Variable(s)."
+			"You must use only one of them.");
+	} else if (1 < count) {
 		astman_send_error(s, m,
 			"PJSIPNotify requires either an endpoint name, a SIP URI, or a channel.  "
 			"You must use only one of them.");
@@ -1213,6 +1300,97 @@ static int manager_notify(struct mansession *s, const struct message *m)
 	}
 
 	return 0;
+}
+
+/*! \brief Convert headers string such as "Event=hold&Event=answer&..." into ast variable list*/
+/* Caller has to call ast_variables_destroy() to free the list*/
+static struct ast_variable *headers_to_variables(const char *headers)
+{
+	struct ast_variable *varlist = NULL;
+	struct ast_variable *var;
+	char *cur;
+	char *header;
+
+	cur = (char *)headers;
+
+	while( (header = strsep(&cur, "&")) ) {
+		char *name;
+		char *value;
+
+		name = value = header;
+		strsep(&value, "=");
+
+		if (!value || ast_strlen_zero(name)) {
+			continue;
+		}
+
+		var = ast_variable_new(name, value, "");
+		var->next = varlist;
+		varlist = var;
+	}
+	return varlist;
+}
+
+/*! \brief Application entry point to send a SIP notify to an endpoint. */
+static int app_notify(struct ast_channel *chan, const char *data)
+{
+	RAII_VAR(struct notify_cfg *, cfg, NULL, ao2_cleanup);
+	RAII_VAR(struct notify_option *, option, NULL, ao2_cleanup);
+
+	struct ast_variable *varlist = NULL;
+	char *tmp;
+	int res;
+	AST_DECLARE_APP_ARGS(args,
+		AST_APP_ARG(to);
+		AST_APP_ARG(headers);
+	);
+
+
+	if (ast_strlen_zero(data)) {
+		ast_log(LOG_WARNING, "PJSIPNotify requires arguments (to, &header=...)\n");
+		return -1;
+	}
+
+	tmp = ast_strdupa(data);
+	AST_STANDARD_APP_ARGS(args, tmp);
+	cfg = ao2_global_obj_ref(globals);
+
+	if (!(option = notify_option_find(cfg->notify_options, args.headers))) {
+		/* If the app is passed a list of headers, use the notify_ami_*_data_create
+		   functions as the option data is handled the same way as the ami command. */
+		varlist = headers_to_variables(args.headers);
+		if (ast_strlen_zero(args.to)) {
+			res = push_notify_channel(ast_channel_name(chan), varlist, notify_ami_channel_data_create);
+		} else {
+			res = push_notify_uri(args.to, varlist, notify_ami_uri_data_create);
+		}
+	} else {
+		/* If the app is passed a configured notify option, use the notify_cli_*_data_create
+		   functions as the option data is handled the same way as the cli command. */
+		if (ast_strlen_zero(args.to)) {
+			res = push_notify_channel(ast_channel_name(chan), option, notify_cli_channel_data_create);
+		} else {
+			res = push_notify_uri(args.to, option, notify_cli_uri_data_create);
+		}
+	}
+
+	switch (res) {
+		case INVALID_CHANNEL:
+		case INVALID_ENDPOINT:
+		case ALLOC_ERROR:
+			res = -1;
+			ast_variables_destroy(varlist);
+			break;
+		case TASK_PUSH_ERROR:
+			/* Don't need to destroy vars since it is handled by cleanup in push_notify_channel */
+			res = -1;
+			break;
+		case SUCCESS:
+			res = 0;
+			break;
+	}
+
+	return res;
 }
 
 static int load_module(void)
@@ -1231,6 +1409,7 @@ static int load_module(void)
 
 	ast_cli_register_multiple(cli_options, ARRAY_LEN(cli_options));
 	ast_manager_register_xml("PJSIPNotify", EVENT_FLAG_SYSTEM, manager_notify);
+	ast_register_application_xml("PJSIPNotify", app_notify);
 
 	return AST_MODULE_LOAD_SUCCESS;
 }
@@ -1247,6 +1426,7 @@ static int reload_module(void)
 static int unload_module(void)
 {
 	ast_manager_unregister("PJSIPNotify");
+	ast_unregister_application("PJSIPNotify");
 	ast_cli_unregister_multiple(cli_options, ARRAY_LEN(cli_options));
 	aco_info_destroy(&notify_cfg);
 	ao2_global_obj_release(globals);

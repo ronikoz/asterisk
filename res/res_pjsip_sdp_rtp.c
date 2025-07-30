@@ -344,6 +344,14 @@ static void get_codecs(struct ast_sip_session *session, const struct pjmedia_sdp
 
 		ast_copy_pj_str(name, &rtpmap->enc_name, sizeof(name));
 		if (strcmp(name, "telephone-event") == 0) {
+			if (tel_event == 0) {
+				int dtmf_rate = 0, dtmf_code = 0;
+				char dtmf_pt[8];
+				ast_copy_pj_str(dtmf_pt, &rtpmap->pt, sizeof(dtmf_pt));
+				dtmf_code = atoi(dtmf_pt);
+				dtmf_rate = rtpmap->clock_rate;
+				ast_rtp_codecs_set_preferred_dtmf_format(codecs, dtmf_code, dtmf_rate);
+			}
 			tel_event++;
 		}
 
@@ -384,9 +392,14 @@ static void get_codecs(struct ast_sip_session *session, const struct pjmedia_sdp
 		}
 	}
 
-	if (!tel_event && (session->dtmf == AST_SIP_DTMF_AUTO)) {
-		ast_rtp_instance_dtmf_mode_set(session_media->rtp, AST_RTP_DTMF_MODE_INBAND);
-		ast_rtp_instance_set_prop(session_media->rtp, AST_RTP_PROPERTY_DTMF, 0);
+	if (session->dtmf == AST_SIP_DTMF_AUTO) {
+		if  (tel_event) {
+			ast_rtp_instance_dtmf_mode_set(session_media->rtp, AST_RTP_DTMF_MODE_RFC2833);
+			ast_rtp_instance_set_prop(session_media->rtp, AST_RTP_PROPERTY_DTMF, 1);
+		} else {
+			ast_rtp_instance_dtmf_mode_set(session_media->rtp, AST_RTP_DTMF_MODE_INBAND);
+			ast_rtp_instance_set_prop(session_media->rtp, AST_RTP_PROPERTY_DTMF, 0);
+		}
 	}
 
 	if (session->dtmf == AST_SIP_DTMF_AUTO_INFO) {
@@ -538,6 +551,11 @@ static int set_caps(struct ast_sip_session *session,
 			ast_codec_media_type2str(session_media->type),
 			ast_format_cap_get_names(caps, &usbuf),
 			ast_format_cap_get_names(peer, &thembuf));
+	} else {
+		struct ast_format *preferred_fmt = ast_format_cap_get_format(joint, 0);
+
+		ast_rtp_codecs_set_preferred_format(&codecs, preferred_fmt);
+		ao2_ref(preferred_fmt, -1);
 	}
 
 	if (is_offer) {
@@ -559,7 +577,7 @@ static int set_caps(struct ast_sip_session *session,
 			AST_MEDIA_TYPE_UNKNOWN);
 		ast_format_cap_remove_by_type(caps, media_type);
 
-		if (session->endpoint->preferred_codec_only){
+		if (session->endpoint->preferred_codec_only) {
 			struct ast_format *preferred_fmt = ast_format_cap_get_format(joint, 0);
 			ast_format_cap_append(caps, preferred_fmt, 0);
 			ao2_ref(preferred_fmt, -1);
@@ -638,6 +656,42 @@ static pjmedia_sdp_attr* generate_rtpmap_attr(struct ast_sip_session *session, p
 
 	rtpmap.pt = media->desc.fmt[media->desc.fmt_count - 1];
 	rtpmap.clock_rate = ast_rtp_lookup_sample_rate2(asterisk_format, format, code);
+	pj_strdup2(pool, &rtpmap.enc_name, ast_rtp_lookup_mime_subtype2(asterisk_format, format, code, options));
+	if (!pj_stricmp2(&rtpmap.enc_name, "opus")) {
+		pj_cstr(&rtpmap.param, "2");
+	} else {
+		pj_cstr(&rtpmap.param, NULL);
+	}
+
+	pjmedia_sdp_rtpmap_to_attr(pool, &rtpmap, &attr);
+
+	return attr;
+}
+
+
+static pjmedia_sdp_attr* generate_rtpmap_attr2(struct ast_sip_session *session, pjmedia_sdp_media *media, pj_pool_t *pool,
+					      int rtp_code, int asterisk_format, struct ast_format *format, int code, int sample_rate)
+{
+#ifndef HAVE_PJSIP_ENDPOINT_COMPACT_FORM
+	extern pj_bool_t pjsip_use_compact_form;
+#else
+	pj_bool_t pjsip_use_compact_form = pjsip_cfg()->endpt.use_compact_form;
+#endif
+	pjmedia_sdp_rtpmap rtpmap;
+	pjmedia_sdp_attr *attr = NULL;
+	char tmp[64];
+	enum ast_rtp_options options = session->endpoint->media.g726_non_standard ?
+		AST_RTP_OPT_G726_NONSTANDARD : 0;
+
+	snprintf(tmp, sizeof(tmp), "%d", rtp_code);
+	pj_strdup2(pool, &media->desc.fmt[media->desc.fmt_count++], tmp);
+
+	if (rtp_code <= AST_RTP_PT_LAST_STATIC && pjsip_use_compact_form) {
+		return NULL;
+	}
+
+	rtpmap.pt = media->desc.fmt[media->desc.fmt_count - 1];
+	rtpmap.clock_rate = sample_rate;
 	pj_strdup2(pool, &rtpmap.enc_name, ast_rtp_lookup_mime_subtype2(asterisk_format, format, code, options));
 	if (!pj_stricmp2(&rtpmap.enc_name, "opus")) {
 		pj_cstr(&rtpmap.param, "2");
@@ -1607,6 +1661,7 @@ static int add_crypto_to_stream(struct ast_sip_session *session,
 	static const pj_str_t STR_PASSIVE = { "passive", 7 };
 	static const pj_str_t STR_ACTPASS = { "actpass", 7 };
 	static const pj_str_t STR_HOLDCONN = { "holdconn", 8 };
+	static const pj_str_t STR_MEDSECREQ = { "requested", 9 };
 	enum ast_rtp_dtls_setup setup;
 
 	switch (session_media->encryption) {
@@ -1636,6 +1691,11 @@ static int add_crypto_to_stream(struct ast_sip_session *session,
 				pj_cstr(&stmp, crypto_attribute));
 			media->attr[media->attr_count++] = attr;
 		} while ((tmp = AST_LIST_NEXT(tmp, sdp_srtp_list)));
+
+		if (session->endpoint->security_negotiation == AST_SIP_SECURITY_NEG_MEDIASEC) {
+			attr = pjmedia_sdp_attr_create(pool, "3ge2ae", &STR_MEDSECREQ);
+			media->attr[media->attr_count++] = attr;
+		}
 
 		break;
 	case AST_SIP_MEDIA_ENCRYPT_DTLS:
@@ -1743,6 +1803,13 @@ static int create_outgoing_sdp_stream(struct ast_sip_session *session, struct as
 	pj_sockaddr ip;
 	int direct_media_enabled = !ast_sockaddr_isnull(&session_media->direct_media_addr) &&
 		ast_format_cap_count(session->direct_media_cap);
+
+	/* Keep track of the sample rates for offered codecs so we can build matching
+	   RFC 2833/4733 payload offers. */
+	AST_VECTOR(, int) sample_rates;
+	/* In case we can't init the sample rates, still try to do the rest. */
+	int build_dtmf_sample_rates = 1;
+
 	SCOPE_ENTER(1, "%s Type: %s %s\n", ast_sip_session_get_name(session),
 		ast_codec_media_type2str(media_type), ast_str_tmp(128, ast_stream_to_str(stream, &STR_TMP)));
 
@@ -1894,10 +1961,26 @@ static int create_outgoing_sdp_stream(struct ast_sip_session *session, struct as
 		ast_format_cap_append_from_cap(caps, ast_stream_get_formats(stream), media_type);
 	}
 
+	/* Init the sample rates before we start adding them. Assume we will have at least one. */
+	if (AST_VECTOR_INIT(&sample_rates, 1)) {
+		ast_log(LOG_ERROR, "Unable to add dtmf formats to SDP!\n");
+		build_dtmf_sample_rates = 0;
+	}
+
 	for (index = 0; index < ast_format_cap_count(caps); ++index) {
 		struct ast_format *format = ast_format_cap_get_format(caps, index);
 
 		if (ast_format_get_type(format) != media_type) {
+			ao2_ref(format, -1);
+			continue;
+		}
+
+		/* It is possible for some formats not to have SDP information available for them
+		 * and if this is the case, skip over them so the SDP can still be created.
+		 */
+		if (!ast_rtp_lookup_sample_rate2(1, format, 0)) {
+			ast_log(LOG_WARNING, "Format '%s' can not be added to SDP, consider disallowing it on endpoint '%s'\n",
+				ast_format_get_name(format), ast_sorcery_object_get_id(session->endpoint));
 			ao2_ref(format, -1);
 			continue;
 		}
@@ -1922,6 +2005,22 @@ static int create_outgoing_sdp_stream(struct ast_sip_session *session, struct as
 		}
 
 		if ((attr = generate_rtpmap_attr(session, media, pool, rtp_code, 1, format, 0))) {
+			int i, added = 0;
+			int newrate = ast_rtp_lookup_sample_rate2(1, format, 0);
+			if (build_dtmf_sample_rates) {
+				for (i = 0; i < AST_VECTOR_SIZE(&sample_rates); i++) {
+					/* Only add if we haven't already processed this sample rate. For instance
+						A-law and u-law 'share' one 8K DTMF payload type. */
+					if (newrate == AST_VECTOR_GET(&sample_rates, i)) {
+						added = 1;
+						break;
+					}
+				}
+
+				if (!added) {
+					AST_VECTOR_APPEND(&sample_rates, newrate);
+				}
+			}
 			media->attr[media->attr_count++] = attr;
 		}
 
@@ -1947,20 +2046,56 @@ static int create_outgoing_sdp_stream(struct ast_sip_session *session, struct as
 			if (!(noncodec & index)) {
 				continue;
 			}
-			rtp_code = ast_rtp_codecs_payload_code(
-				ast_rtp_instance_get_codecs(session_media->rtp), 0, NULL, index);
-			if (rtp_code == -1) {
-				continue;
-			}
 
-			if ((attr = generate_rtpmap_attr(session, media, pool, rtp_code, 0, NULL, index))) {
-				media->attr[media->attr_count++] = attr;
-			}
+			if (index != AST_RTP_DTMF) {
+				rtp_code = ast_rtp_codecs_payload_code(
+								ast_rtp_instance_get_codecs(session_media->rtp), 0, NULL, index);
+				if (rtp_code == -1) {
+					continue;
+				} else if ((attr = generate_rtpmap_attr(session, media, pool, rtp_code, 0, NULL, index))) {
+					media->attr[media->attr_count++] = attr;
+				}
+			} else if (build_dtmf_sample_rates) {
+				/*
+				 * Walk through the possible bitrates for the RFC 2833/4733 digits and generate the rtpmap
+				 * attributes.
+				 */
+				int i, found_default_offer = 0;
+				for (i = 0; i < AST_VECTOR_SIZE(&sample_rates); i++) {
+					rtp_code = ast_rtp_codecs_payload_code_sample_rate(
+									ast_rtp_instance_get_codecs(session_media->rtp), 0, NULL, index, AST_VECTOR_GET(&sample_rates, i));
 
-			if (index == AST_RTP_DTMF) {
-				snprintf(tmp, sizeof(tmp), "%d 0-16", rtp_code);
-				attr = pjmedia_sdp_attr_create(pool, "fmtp", pj_cstr(&stmp, tmp));
-				media->attr[media->attr_count++] = attr;
+					if (rtp_code == -1) {
+						continue;
+					}
+
+					if (AST_VECTOR_GET(&sample_rates, i) == DEFAULT_DTMF_SAMPLE_RATE_MS) {
+						/* we found and added a default offer, so no need to include a default one.*/
+						found_default_offer = 1;
+					}
+
+					if ((attr = generate_rtpmap_attr2(session, media, pool, rtp_code, 0, NULL, index, AST_VECTOR_GET(&sample_rates, i)))) {
+						media->attr[media->attr_count++] = attr;
+						snprintf(tmp, sizeof(tmp), "%d 0-16", (rtp_code));
+						attr = pjmedia_sdp_attr_create(pool, "fmtp", pj_cstr(&stmp, tmp));
+						media->attr[media->attr_count++] = attr;
+					}
+				}
+
+				/* If we weren't able to add any matching RFC 2833/4733, assume this endpoint is using a
+				 * mismatched 8K offer and try to add one as a fall-back/default.
+				 */
+				if (!found_default_offer) {
+					rtp_code = ast_rtp_codecs_payload_code_sample_rate(
+									ast_rtp_instance_get_codecs(session_media->rtp), 0, NULL, index, DEFAULT_DTMF_SAMPLE_RATE_MS);
+
+					if (rtp_code != -1 && (attr = generate_rtpmap_attr2(session, media, pool, rtp_code, 0, NULL, index, DEFAULT_DTMF_SAMPLE_RATE_MS))) {
+						media->attr[media->attr_count++] = attr;
+						snprintf(tmp, sizeof(tmp), "%d 0-16", (rtp_code));
+						attr = pjmedia_sdp_attr_create(pool, "fmtp", pj_cstr(&stmp, tmp));
+						media->attr[media->attr_count++] = attr;
+					}
+				}
 			}
 
 			if (media->desc.fmt_count == PJMEDIA_MAX_SDP_FMT) {
@@ -1969,6 +2104,8 @@ static int create_outgoing_sdp_stream(struct ast_sip_session *session, struct as
 		}
 	}
 
+	/* we are done with the sample rates */
+	AST_VECTOR_FREE(&sample_rates);
 
 	/* If no formats were actually added to the media stream don't add it to the SDP */
 	if (!media->desc.fmt_count) {
@@ -2085,6 +2222,7 @@ static int apply_negotiated_sdp_stream(struct ast_sip_session *session,
 	enum ast_media_type media_type = session_media->type;
 	char host[NI_MAXHOST];
 	int res;
+	int rtp_timeout;
 	struct ast_sip_session_media *session_media_transport;
 	SCOPE_ENTER(1, "%s Stream: %s\n", ast_sip_session_get_name(session),
 		ast_str_tmp(128, ast_stream_to_str(asterisk_stream, &STR_TMP)));
@@ -2183,14 +2321,18 @@ static int apply_negotiated_sdp_stream(struct ast_sip_session *session,
 	if (session_media->remotely_held_changed) {
 		if (session_media->remotely_held) {
 			/* The remote side has put us on hold */
-			ast_queue_hold(session->channel, session->endpoint->mohsuggest);
-			ast_rtp_instance_stop(session_media->rtp);
-			ast_queue_frame(session->channel, &ast_null_frame);
+			if (!session->endpoint->suppress_moh_on_sendonly) {
+				ast_queue_hold(session->channel, session->endpoint->mohsuggest);
+				ast_rtp_instance_stop(session_media->rtp);
+				ast_queue_frame(session->channel, &ast_null_frame);
+			}
 			session_media->remotely_held_changed = 0;
 		} else {
 			/* The remote side has taken us off hold */
-			ast_queue_unhold(session->channel);
-			ast_queue_frame(session->channel, &ast_null_frame);
+			if (!session->endpoint->suppress_moh_on_sendonly) {
+				ast_queue_unhold(session->channel);
+				ast_queue_frame(session->channel, &ast_null_frame);
+			}
 			session_media->remotely_held_changed = 0;
 		}
 	} else if ((pjmedia_sdp_neg_was_answer_remote(session->inv_session->neg) == PJ_FALSE)
@@ -2224,14 +2366,16 @@ static int apply_negotiated_sdp_stream(struct ast_sip_session *session,
 	 * instance itself.
 	 */
 	ast_rtp_instance_set_timeout(session_media->rtp, 0);
-	if (session->endpoint->media.rtp.timeout && !session_media->remotely_held) {
+	if (session->endpoint->media.rtp.timeout && !session_media->remotely_held && !session_media->locally_held) {
 		ast_rtp_instance_set_timeout(session_media->rtp, session->endpoint->media.rtp.timeout);
-	} else if (session->endpoint->media.rtp.timeout_hold && session_media->remotely_held) {
+	} else if (session->endpoint->media.rtp.timeout_hold && (session_media->remotely_held || session_media->locally_held)) {
 		ast_rtp_instance_set_timeout(session_media->rtp, session->endpoint->media.rtp.timeout_hold);
 	}
 
-	if (ast_rtp_instance_get_timeout(session_media->rtp)) {
-		session_media->timeout_sched_id = ast_sched_add_variable(sched,	500, rtp_check_timeout,
+	rtp_timeout = ast_rtp_instance_get_timeout(session_media->rtp);
+
+	if (rtp_timeout) {
+		session_media->timeout_sched_id = ast_sched_add_variable(sched,	rtp_timeout*1000, rtp_check_timeout,
 			session_media, 1);
 	}
 

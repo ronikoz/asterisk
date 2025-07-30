@@ -54,6 +54,9 @@
 #ifdef HAVE_BKTR
 #include <execinfo.h>
 #endif
+#ifdef DEBUG_THREADS
+#include <string.h>
+#endif
 
 #ifndef HAVE_PTHREAD_RWLOCK_TIMEDWRLOCK
 #include "asterisk/time.h"
@@ -62,6 +65,10 @@
 #include "asterisk/backtrace.h"
 #include "asterisk/logger.h"
 #include "asterisk/compiler.h"
+
+#if defined(__cplusplus) || defined(c_plusplus)
+extern "C" {
+#endif
 
 #define AST_PTHREADT_NULL (pthread_t) -1
 #define AST_PTHREADT_STOP (pthread_t) -2
@@ -134,14 +141,15 @@ struct ast_lock_track_flags {
  */
 struct ast_mutex_info {
 	pthread_mutex_t mutex;
-#if !defined(DEBUG_THREADS) && !defined(DEBUG_THREADS_LOOSE_ABI)
+#if !defined(DEBUG_THREADS) && !defined(DEBUG_THREADS_LOOSE_ABI) && \
+	!defined(DETECT_DEADLOCKS)
 	/*!
 	 * These fields are renamed to ensure they are never used when
 	 * DEBUG_THREADS is not defined.
 	 */
 	struct ast_lock_track *_track;
 	struct ast_lock_track_flags _flags;
-#elif defined(DEBUG_THREADS)
+#elif defined(DEBUG_THREADS) || defined(DETECT_DEADLOCKS)
 	/*! Track which thread holds this mutex. */
 	struct ast_lock_track *track;
 	struct ast_lock_track_flags flags;
@@ -155,14 +163,15 @@ struct ast_mutex_info {
  */
 struct ast_rwlock_info {
 	pthread_rwlock_t lock;
-#if !defined(DEBUG_THREADS) && !defined(DEBUG_THREADS_LOOSE_ABI)
+#if !defined(DEBUG_THREADS) && !defined(DEBUG_THREADS_LOOSE_ABI) && \
+	!defined(DETECT_DEADLOCKS)
 	/*!
 	 * These fields are renamed to ensure they are never used when
 	 * DEBUG_THREADS is not defined.
 	 */
 	struct ast_lock_track *_track;
 	struct ast_lock_track_flags _flags;
-#elif defined(DEBUG_THREADS)
+#elif defined(DEBUG_THREADS) || defined(DETECT_DEADLOCKS)
 	/*! Track which thread holds this lock */
 	struct ast_lock_track *track;
 	struct ast_lock_track_flags flags;
@@ -763,6 +772,10 @@ AST_INLINE_API(int ast_atomic_dec_and_test(volatile int *p),
 {
 	return ast_atomic_sub_fetch(p, 1, __ATOMIC_RELAXED) == 0;
 })
+
+#if defined(__cplusplus) || defined(c_plusplus)
+}
+#endif
 
 /*! @} */
 

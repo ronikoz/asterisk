@@ -63,20 +63,35 @@
 	<configInfo name="cel" language="en_US">
 		<configFile name="cel.conf">
 			<configObject name="general">
+				<since>
+					<version>12.0.0</version>
+				</since>
 				<synopsis>Options that apply globally to Channel Event Logging (CEL)</synopsis>
 				<configOption name="enable">
+					<since>
+						<version>12.0.0</version>
+					</since>
 					<synopsis>Determines whether CEL is enabled</synopsis>
 				</configOption>
 				<configOption name="dateformat">
+					<since>
+						<version>12.0.0</version>
+					</since>
 					<synopsis>The format to be used for dates when logging</synopsis>
 				</configOption>
 				<configOption name="apps">
+					<since>
+						<version>12.0.0</version>
+					</since>
 					<synopsis>List of apps for CEL to track</synopsis>
 					<description><para>A case-insensitive, comma-separated list of applications
 					to track when one or both of APP_START and APP_END events are flagged for
 					tracking</para></description>
 				</configOption>
 				<configOption name="events">
+					<since>
+						<version>12.0.0</version>
+					</since>
 					<synopsis>List of events for CEL to track</synopsis>
 					<description><para>A case-sensitive, comma-separated list of event names
 					to track. These event names do not include the leading <literal>AST_CEL</literal>.
@@ -102,6 +117,7 @@
 						<enum name="FORWARD"/>
 						<enum name="LINKEDID_END"/>
 						<enum name="LOCAL_OPTIMIZE"/>
+						<enum name="LOCAL_OPTIMIZE_BEGIN"/>
 					</enumlist>
 					</description>
 				</configOption>
@@ -321,6 +337,7 @@ static const char * const cel_event_types[CEL_MAX_EVENT_IDS] = {
 	[AST_CEL_FORWARD]          = "FORWARD",
 	[AST_CEL_LINKEDID_END]     = "LINKEDID_END",
 	[AST_CEL_LOCAL_OPTIMIZE]   = "LOCAL_OPTIMIZE",
+	[AST_CEL_LOCAL_OPTIMIZE_BEGIN]   = "LOCAL_OPTIMIZE_BEGIN",
 };
 
 struct cel_backend {
@@ -552,6 +569,7 @@ struct ast_event *ast_cel_create_event_with_time(struct ast_channel_snapshot *sn
 		AST_EVENT_IE_CEL_PEERACCT, AST_EVENT_IE_PLTYPE_STR, snapshot->peer->account,
 		AST_EVENT_IE_CEL_UNIQUEID, AST_EVENT_IE_PLTYPE_STR, snapshot->base->uniqueid,
 		AST_EVENT_IE_CEL_LINKEDID, AST_EVENT_IE_PLTYPE_STR, snapshot->peer->linkedid,
+		AST_EVENT_IE_CEL_TENANTID, AST_EVENT_IE_PLTYPE_STR, snapshot->base->tenantid,
 		AST_EVENT_IE_CEL_USERFIELD, AST_EVENT_IE_PLTYPE_STR, snapshot->base->userfield,
 		AST_EVENT_IE_CEL_EXTRA, AST_EVENT_IE_PLTYPE_STR, S_OR(extra_txt, ""),
 		AST_EVENT_IE_CEL_PEER, AST_EVENT_IE_PLTYPE_STR, S_OR(peer, ""),
@@ -851,6 +869,7 @@ int ast_cel_fill_record(const struct ast_event *e, struct ast_cel_event_record *
 	r->peer_account     = S_OR(ast_event_get_ie_str(e, AST_EVENT_IE_CEL_PEERACCT), "");
 	r->unique_id        = S_OR(ast_event_get_ie_str(e, AST_EVENT_IE_CEL_UNIQUEID), "");
 	r->linked_id        = S_OR(ast_event_get_ie_str(e, AST_EVENT_IE_CEL_LINKEDID), "");
+	r->tenant_id        = S_OR(ast_event_get_ie_str(e, AST_EVENT_IE_CEL_TENANTID), "");
 	r->amaflag          = ast_event_get_ie_uint(e, AST_EVENT_IE_CEL_AMAFLAGS);
 	r->user_field       = S_OR(ast_event_get_ie_str(e, AST_EVENT_IE_CEL_USERFIELD), "");
 	r->peer             = S_OR(ast_event_get_ie_str(e, AST_EVENT_IE_CEL_PEER), "");
@@ -1389,9 +1408,11 @@ static void cel_pickup_cb(
 	ast_json_unref(extra);
 }
 
-static void cel_local_cb(
+
+static void cel_local_optimization_cb_helper(
 	void *data, struct stasis_subscription *sub,
-	struct stasis_message *message)
+	struct stasis_message *message,
+	enum ast_cel_event_type event_type)
 {
 	struct ast_multi_channel_blob *obj = stasis_message_data(message);
 	struct ast_channel_snapshot *localone = ast_multi_channel_blob_get_channel(obj, "1");
@@ -1409,8 +1430,25 @@ static void cel_local_cb(
 		return;
 	}
 
-	cel_report_event(localone, AST_CEL_LOCAL_OPTIMIZE, stasis_message_timestamp(message), NULL, extra, NULL);
+	cel_report_event(localone, event_type, stasis_message_timestamp(message), NULL, extra, NULL);
 	ast_json_unref(extra);
+}
+
+static void cel_local_optimization_end_cb(
+	void *data, struct stasis_subscription *sub,
+	struct stasis_message *message)
+{
+	/* The AST_CEL_LOCAL_OPTIMIZE event has always been triggered by the end of optimization.
+	   This can either be used as an indication that the call was locally optimized, or as
+	   the END event in combination with the subsequently added BEGIN event. */
+	cel_local_optimization_cb_helper(data, sub, message, AST_CEL_LOCAL_OPTIMIZE);
+}
+
+static void cel_local_optimization_begin_cb(
+	void *data, struct stasis_subscription *sub,
+	struct stasis_message *message)
+{
+	cel_local_optimization_cb_helper(data, sub, message, AST_CEL_LOCAL_OPTIMIZE_BEGIN);
 }
 
 static void destroy_routes(void)
@@ -1555,7 +1593,12 @@ static int create_routes(void)
 
 	ret |= stasis_message_router_add(cel_state_router,
 		ast_local_optimization_end_type(),
-		cel_local_cb,
+		cel_local_optimization_end_cb,
+		NULL);
+
+	ret |= stasis_message_router_add(cel_state_router,
+		ast_local_optimization_begin_type(),
+		cel_local_optimization_begin_cb,
 		NULL);
 
 	if (ret) {
@@ -1661,6 +1704,21 @@ static int reload_module(void)
 	ast_verb(3, "CEL logging %sabled.\n", is_enabled ? "en" : "dis");
 
 	return 0;
+}
+
+void ast_cel_publish_user_event(struct ast_channel *chan,
+	const char *event,
+	const char *extra)
+{
+	RAII_VAR(struct ast_json *, blob, NULL, ast_json_unref);
+
+	blob = ast_json_pack("{s: s, s: {s: s}}",
+		"event", event,
+		"extra", "extra", S_OR(extra, ""));
+	if (!blob) {
+		return;
+	}
+	ast_cel_publish_event(chan, AST_CEL_USER_DEFINED, blob);
 }
 
 void ast_cel_publish_event(struct ast_channel *chan,

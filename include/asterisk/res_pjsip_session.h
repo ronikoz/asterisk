@@ -33,6 +33,8 @@
 /* Needed for pjmedia_sdp_session and pjsip_inv_session */
 #include <pjsip_ua.h>
 
+/* Needed for ast_sip_security_mechanism_vector */
+#include "asterisk/res_pjsip.h"
 
 /* Forward declarations */
 struct ast_sip_endpoint;
@@ -215,6 +217,8 @@ struct ast_sip_session {
 	unsigned int defer_terminate:1;
 	/*! Termination requested while termination deferred */
 	unsigned int terminate_while_deferred:1;
+	/*! Transferhandling ari */
+	unsigned int transferhandling_ari:1;
 	/*! Deferred incoming re-invite */
 	pjsip_rx_data *deferred_reinvite;
 	/*! Current T.38 state */
@@ -229,6 +233,8 @@ struct ast_sip_session {
 	unsigned int ended_while_deferred:1;
 	/*! Whether to pass through hold and unhold using re-invites with recvonly and sendrecv */
 	unsigned int moh_passthrough:1;
+	/*! Whether early media state has been confirmed through PRACK */
+	unsigned int early_confirmed:1;
 	/*! DTMF mode to use with this session, from endpoint but can change */
 	enum ast_sip_dtmf_mode dtmf;
 	/*! Initial incoming INVITE Request-URI.  NULL otherwise. */
@@ -795,6 +801,26 @@ void ast_sip_session_send_request_with_cb(struct ast_sip_session *session, pjsip
 struct ast_sip_session *ast_sip_dialog_get_session(pjsip_dialog *dlg);
 
 /*!
+ * \brief Retrieves a dialog from a session
+ *
+ * \param session The session to retrieve the dialog from
+ *
+ * \retval non-NULL if dialog exists
+ * \retval NULL if no dialog
+ */
+pjsip_dialog *ast_sip_session_get_dialog(const struct ast_sip_session *session);
+
+/*!
+ * \brief Retrieves the pjsip_inv_state from a session
+ *
+ * \param session The session to retrieve the state from
+ *
+ * \retval state if inv_session exists
+ * \retval PJSIP_INV_STATE_NULL if inv_session is NULL
+ */
+pjsip_inv_state ast_sip_session_get_pjsip_inv_state(const struct ast_sip_session *session);
+
+/*!
  * \brief Resumes processing of a deferred incoming re-invite
  *
  * \param session The session which has a pending incoming re-invite
@@ -938,5 +964,30 @@ struct ast_sip_session_media *ast_sip_session_media_get_transport(struct ast_sip
  * \retval Channel name or endpoint name or "unknown"
  */
 const char *ast_sip_session_get_name(const struct ast_sip_session *session);
+
+/*!
+ * \brief Determines if the Connected Line info can be presented for this session
+ *
+ * \param session The session
+ * \param id The Connected Line info to evaluate
+ *
+ * \retval 1 The Connected Line info can be presented
+ * \retval 0 The Connected Line info cannot be presented
+ */
+int ast_sip_can_present_connected_id(const struct ast_sip_session *session, const struct ast_party_id *id);
+
+/*!
+ * \brief Adds a Reason header in the next reponse to an incoming INVITE
+ *
+ * \param session The session
+ * \param protocol Usually "SIP" but may be "STIR" for stir-shaken
+ * \param code SIP response code
+ * \param text Reason string
+ *
+ * \retval 0 the header is accepted
+ * \retval -1 the header is rejected
+ */
+int ast_sip_session_add_reason_header(struct ast_sip_session *session,
+	const char *protocol, int code, const char *text);
 
 #endif /* _RES_PJSIP_SESSION_H */

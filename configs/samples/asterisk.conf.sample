@@ -89,16 +89,17 @@ documentation_language = en_US	; Set the language you want documentation
 				; configuration files (/etc/asterisk) with a
 				; lock.
 ;stdexten = gosub		; How to invoke the extensions.conf stdexten.
-				; macro - Invoke the stdexten using a macro as
-				;         done by legacy Asterisk versions.
 				; gosub - Invoke the stdexten using a gosub as
 				;         documented in extensions.conf.sample.
 				; Default gosub.
 ;live_dangerously = no		; Enable the execution of 'dangerous' dialplan
-				; functions from external sources (AMI,
-				; etc.) These functions (such as SHELL) are
-				; considered dangerous because they can allow
-				; privilege escalation.
+				; functions and configuration file access from
+				; external sources (AMI, etc.) These functions
+				; (such as SHELL) are considered dangerous
+				; because they can allow privilege escalation.
+				; Configuration files are considered dangerous
+				; if they exist outside of the Asterisk
+				; configuration directory.
 				; Default no
 ;entityid=00:11:22:33:44:55	; Entity ID.
 				; This is in the form of a MAC address.
@@ -125,6 +126,21 @@ documentation_language = en_US	; Set the language you want documentation
                 ; housekeeping AMI and ARI channel events.  This can
                 ; reduce the load on the manager and ARI applications
                 ; when the Digium Phone Module for Asterisk is in use.
+;sounds_search_custom_dir = no;  This option, if enabled, will
+                ; cause Asterisk to search for sounds files in
+                ; AST_DATA_DIR/sounds/custom before searching the
+                ; normal directories like AST_DATA_DIR/sounds/<lang>.
+;channel_storage_backend = ao2_legacy ; Select the channel storage backend
+                ; to use for live operation.
+                ;   ao2_legacy:  Original implementation (default)
+                ; Depending on compile options, the following may also be
+                ; available:
+                ;   cpp_map_name_id: Use C++ Maps to index both
+                ;                    channel name and channel uniqueid.
+                ; See http://s.asterisk.net/dc679ec3 for more information.
+;disable_remote_console_shell = no; Prevent remote console CLI sessions
+                ; from executing shell commands with the '!' prefix.
+                ; Default: no
 
 ; Changing the following lines may compromise your security.
 ;[files]

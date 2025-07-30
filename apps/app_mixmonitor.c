@@ -63,6 +63,9 @@
 
 /*** DOCUMENTATION
 	<application name="MixMonitor" language="en_US">
+		<since>
+			<version>1.2.0</version>
+		</since>
 		<synopsis>
 			Record a call and mix the audio during the recording.  Use of StopMixMonitor is required
 			to guarantee the audio file is available for processing during dialplan execution.
@@ -90,6 +93,16 @@
 						<para>Play a periodic beep while this call is being recorded.</para>
 						<argument name="interval"><para>Interval, in seconds. Default is 15.</para></argument>
 					</option>
+					<option name="c">
+						<para>Use the real Caller ID from the channel for the voicemail Caller ID.</para>
+						<para>By default, the Connected Line is used. If you want the channel caller's
+						real number, you may need to specify this option.</para>
+					</option>
+					<option name="d">
+						<para>Delete the recording file as soon as MixMonitor is done with it.</para>
+						<para>For example, if you use the m option to dispatch the recording to a voicemail box,
+						you can specify this option to delete the original copy of it afterwards.</para>
+					</option>
 					<option name="v">
 						<para>Adjust the <emphasis>heard</emphasis> volume by a factor of <replaceable>x</replaceable>
 						(range <literal>-4</literal> to <literal>4</literal>)</para>
@@ -116,6 +129,13 @@
 						<para>Use the specified file to record the <emphasis>transmit</emphasis> audio feed.
 						Like with the basic filename argument, if an absolute path isn't given, it will create
 						the file in the configured monitoring directory.</para>
+					</option>
+					<option name="D">
+						<para>Interleave the audio coming from the channel and the audio
+						going to the channel and output it as a 2 channel (stereo)
+						raw stream rather than mixing it. You must use the
+						<literal>.raw</literal> file extension. Any other extension
+						will produce a corrupted file.</para>
 					</option>
 					<option name="n">
 						<para>When the <replaceable>r</replaceable> or <replaceable>t</replaceable> option is
@@ -153,7 +173,7 @@
 		</syntax>
 		<description>
 			<para>Records the audio on the current channel to the specified file.</para>
-			<para>This application does not automatically answer and should be preceeded by
+			<para>This application does not automatically answer and should be preceded by
 			an application such as Answer or Progress().</para>
 			<note><para>MixMonitor runs as an audiohook.</para></note>
 			<note><para>If a filename passed to MixMonitor ends with
@@ -171,16 +191,18 @@
 			parameters.  You risk a command injection attack executing arbitrary commands
 			if the untrusted strings aren't filtered to remove dangerous characters.  See
 			function <variable>FILTER()</variable>.</para></warning>
+			<warning><para>When using the <literal>D</literal> option to save
+			interleaved audio, you MUST use <literal>.raw</literal> as the
+			file extension.  Any other extension will produce a corrupted file.</para></warning>
 		</description>
 		<see-also>
-			<ref type="application">Monitor</ref>
 			<ref type="application">StopMixMonitor</ref>
-			<ref type="application">PauseMonitor</ref>
-			<ref type="application">UnpauseMonitor</ref>
-			<ref type="function">AUDIOHOOK_INHERIT</ref>
 		</see-also>
 	</application>
 	<application name="StopMixMonitor" language="en_US">
+		<since>
+			<version>1.4.0</version>
+		</since>
 		<synopsis>
 			Stop recording a call through MixMonitor, and free the recording's file handle.
 		</synopsis>
@@ -199,6 +221,9 @@
 		</see-also>
 	</application>
 	<manager name="MixMonitorMute" language="en_US">
+		<since>
+			<version>1.8.0</version>
+		</since>
 		<synopsis>
 			Mute / unMute a Mixmonitor recording.
 		</synopsis>
@@ -219,6 +244,9 @@
 		</description>
 	</manager>
 	<manager name="MixMonitor" language="en_US">
+		<since>
+			<version>11.0.0</version>
+		</since>
 		<synopsis>
 			Record a call and mix the audio during the recording.  Use of StopMixMonitor is required
 			to guarantee the audio file is available for processing during dialplan execution.
@@ -236,7 +264,7 @@
 				neither MIXMONITOR_FILENAME or this parameter is set, the mixed stream won't
 				be recorded.</para>
 			</parameter>
-			<parameter name="options">
+			<parameter name="Options">
 				<para>Options that apply to the MixMonitor in the same way as they
 				would apply if invoked from the MixMonitor application. For a list of
 				available options, see the documentation for the mixmonitor application. </para>
@@ -262,6 +290,9 @@
 		</description>
 	</manager>
 	<manager name="StopMixMonitor" language="en_US">
+		<since>
+			<version>11.0.0</version>
+		</since>
 		<synopsis>
 			Stop recording a call through MixMonitor, and free the recording's file handle.
 		</synopsis>
@@ -281,6 +312,9 @@
 		</description>
 	</manager>
 	<function name="MIXMONITOR" language="en_US">
+		<since>
+			<version>13.0.0</version>
+		</since>
 		<synopsis>
 			Retrieve data pertaining to specific instances of MixMonitor on a channel.
 		</synopsis>
@@ -299,6 +333,10 @@
 	</function>
 	<managerEvent language="en_US" name="MixMonitorStart">
 		<managerEventInstance class="EVENT_FLAG_CALL">
+			<since>
+				<version>16.17.0</version>
+				<version>18.3.0</version>
+			</since>
 			<synopsis>Raised when monitoring has started on a channel.</synopsis>
 			<syntax>
 				<channel_snapshot/>
@@ -312,6 +350,10 @@
 	</managerEvent>
 	<managerEvent language="en_US" name="MixMonitorStop">
 		<managerEventInstance class="EVENT_FLAG_CALL">
+			<since>
+				<version>16.17.0</version>
+				<version>18.3.0</version>
+			</since>
 		<synopsis>Raised when monitoring has stopped on a channel.</synopsis>
 		<syntax>
 			<channel_snapshot/>
@@ -325,6 +367,10 @@
 	</managerEvent>
 	<managerEvent language="en_US" name="MixMonitorMute">
 		<managerEventInstance class="EVENT_FLAG_CALL">
+			<since>
+				<version>16.17.0</version>
+				<version>18.3.0</version>
+			</since>
 		<synopsis>Raised when monitoring is muted or unmuted on a channel.</synopsis>
 		<syntax>
 			<channel_snapshot/>
@@ -379,7 +425,6 @@ struct mixmonitor {
 	/* the below string fields describe data used for creating voicemails from the recording */
 	AST_DECLARE_STRING_FIELDS(
 		AST_STRING_FIELD(call_context);
-		AST_STRING_FIELD(call_macrocontext);
 		AST_STRING_FIELD(call_extension);
 		AST_STRING_FIELD(call_callerchan);
 		AST_STRING_FIELD(call_callerid);
@@ -407,6 +452,9 @@ enum mixmonitor_flags {
 	MUXFLAG_BEEP_STOP = (1 << 13),
 	MUXFLAG_DEPRECATED_RWSYNC = (1 << 14),
 	MUXFLAG_NO_RWSYNC = (1 << 15),
+	MUXFLAG_AUTO_DELETE = (1 << 16),
+	MUXFLAG_REAL_CALLERID = (1 << 17),
+	MUXFLAG_INTERLEAVED = (1 << 18),
 };
 
 enum mixmonitor_args {
@@ -427,6 +475,8 @@ AST_APP_OPTIONS(mixmonitor_opts, {
 	AST_APP_OPTION('a', MUXFLAG_APPEND),
 	AST_APP_OPTION('b', MUXFLAG_BRIDGED),
 	AST_APP_OPTION_ARG('B', MUXFLAG_BEEP, OPT_ARG_BEEP_INTERVAL),
+	AST_APP_OPTION('c', MUXFLAG_REAL_CALLERID),
+	AST_APP_OPTION('d', MUXFLAG_AUTO_DELETE),
 	AST_APP_OPTION('p', MUXFLAG_BEEP_START),
 	AST_APP_OPTION('P', MUXFLAG_BEEP_STOP),
 	AST_APP_OPTION_ARG('v', MUXFLAG_READVOLUME, OPT_ARG_READVOLUME),
@@ -434,6 +484,7 @@ AST_APP_OPTIONS(mixmonitor_opts, {
 	AST_APP_OPTION_ARG('W', MUXFLAG_VOLUME, OPT_ARG_VOLUME),
 	AST_APP_OPTION_ARG('r', MUXFLAG_READ, OPT_ARG_READNAME),
 	AST_APP_OPTION_ARG('t', MUXFLAG_WRITE, OPT_ARG_WRITENAME),
+	AST_APP_OPTION('D', MUXFLAG_INTERLEAVED),
 	AST_APP_OPTION_ARG('i', MUXFLAG_UID, OPT_ARG_UID),
 	AST_APP_OPTION_ARG('m', MUXFLAG_VMRECIPIENTS, OPT_ARG_VMRECIPIENTS),
 	AST_APP_OPTION_ARG('S', MUXFLAG_DEPRECATED_RWSYNC, OPT_ARG_DEPRECATED_RWSYNC),
@@ -646,7 +697,6 @@ static void copy_to_voicemail(struct mixmonitor *mixmonitor, const char *ext, co
 	ast_string_field_set(&recording_data, recording_file, filename);
 	ast_string_field_set(&recording_data, recording_ext, ext);
 	ast_string_field_set(&recording_data, call_context, mixmonitor->call_context);
-	ast_string_field_set(&recording_data, call_macrocontext, mixmonitor->call_macrocontext);
 	ast_string_field_set(&recording_data, call_extension, mixmonitor->call_extension);
 	ast_string_field_set(&recording_data, call_callerchan, mixmonitor->call_callerchan);
 	ast_string_field_set(&recording_data, call_callerid, mixmonitor->call_callerid);
@@ -784,6 +834,46 @@ static void *mixmonitor_thread(void *obj)
 				}
 			}
 
+			if (ast_test_flag(mixmonitor, MUXFLAG_INTERLEAVED)) {
+				/* The 'D' option is set, so mix the frame as an interleaved dual channel frame */
+				int i;
+				short read_buf[SAMPLES_PER_FRAME];
+				short write_buf[SAMPLES_PER_FRAME];
+				short stereo_buf[SAMPLES_PER_FRAME * 2];
+				struct ast_frame stereo_frame = {
+					.frametype = AST_FRAME_VOICE,
+					.datalen = sizeof(stereo_buf),
+					.samples = SAMPLES_PER_FRAME,
+				};
+
+				if (fr) {
+					ast_frame_free(fr, 0);
+					fr = NULL;
+				}
+
+				if (fr_read) {
+					memcpy(read_buf, fr_read->data.ptr, sizeof(read_buf));
+				} else {
+					memset(read_buf, 0, sizeof(read_buf));
+				}
+
+				if (fr_write) {
+					memcpy(write_buf, fr_write->data.ptr, sizeof(write_buf));
+				} else {
+					memset(write_buf, 0, sizeof(write_buf));
+				}
+
+				for (i = 0; i < SAMPLES_PER_FRAME; i++) {
+					stereo_buf[i * 2] = read_buf[i];
+					stereo_buf[i * 2 + 1] = write_buf[i];
+				}
+
+				stereo_frame.data.ptr = stereo_buf;
+				stereo_frame.subclass.format = ast_format_cache_get_slin_by_rate(SAMPLES_PER_FRAME);
+
+				fr = ast_frdup(&stereo_frame);
+			}
+
 			if ((*fs) && (fr)) {
 				struct ast_frame *cur;
 
@@ -858,6 +948,19 @@ static void *mixmonitor_thread(void *obj)
 		}
 	} else {
 		ast_debug(3, "No recipients to forward monitor to, moving on.\n");
+	}
+
+	if (ast_test_flag(mixmonitor, MUXFLAG_AUTO_DELETE)) {
+		ast_debug(3, "Deleting our copies of recording files\n");
+		if (!ast_strlen_zero(fs_ext)) {
+			ast_filedelete(mixmonitor->filename, fs_ext);
+		}
+		if (!ast_strlen_zero(fs_read_ext)) {
+			ast_filedelete(mixmonitor->filename_read, fs_ext);
+		}
+		if (!ast_strlen_zero(fs_write_ext)) {
+			ast_filedelete(mixmonitor->filename_write, fs_ext);
+		}
 	}
 
 	mixmonitor_free(mixmonitor);
@@ -1015,23 +1118,39 @@ static int launch_monitor_thread(struct ast_channel *chan, const char *filename,
 
 	if (!ast_strlen_zero(recipients)) {
 		char callerid[256];
-		struct ast_party_connected_line *connected;
 
 		ast_channel_lock(chan);
 
-		/* We use the connected line of the invoking channel for caller ID. */
+		/* We use the connected line of the invoking channel for caller ID,
+		 * unless we've been told to use the Caller ID.
+		 * The initial use for this relied on Connected Line to get the
+		 * actual number for recording with Digium phones,
+		 * but in generic use the Caller ID is likely what people want.
+		 */
 
-		connected = ast_channel_connected(chan);
-		ast_debug(3, "Connected Line CID = %d - %s : %d - %s\n", connected->id.name.valid,
-			connected->id.name.str, connected->id.number.valid,
-			connected->id.number.str);
-		ast_callerid_merge(callerid, sizeof(callerid),
-			S_COR(connected->id.name.valid, connected->id.name.str, NULL),
-			S_COR(connected->id.number.valid, connected->id.number.str, NULL),
-			"Unknown");
+		if (ast_test_flag(mixmonitor, MUXFLAG_REAL_CALLERID)) {
+			struct ast_party_caller *caller;
+			caller = ast_channel_caller(chan);
+			ast_debug(3, "Caller ID = %d - %s : %d - %s\n", caller->id.name.valid,
+				caller->id.name.str, caller->id.number.valid,
+				caller->id.number.str);
+			ast_callerid_merge(callerid, sizeof(callerid),
+				S_COR(caller->id.name.valid, caller->id.name.str, NULL),
+				S_COR(caller->id.number.valid, caller->id.number.str, NULL),
+				"Unknown");
+		} else {
+			struct ast_party_connected_line *connected;
+			connected = ast_channel_connected(chan);
+			ast_debug(3, "Connected Line CID = %d - %s : %d - %s\n", connected->id.name.valid,
+				connected->id.name.str, connected->id.number.valid,
+				connected->id.number.str);
+			ast_callerid_merge(callerid, sizeof(callerid),
+				S_COR(connected->id.name.valid, connected->id.name.str, NULL),
+				S_COR(connected->id.number.valid, connected->id.number.str, NULL),
+				"Unknown");
+		}
 
 		ast_string_field_set(mixmonitor, call_context, ast_channel_context(chan));
-		ast_string_field_set(mixmonitor, call_macrocontext, ast_channel_macrocontext(chan));
 		ast_string_field_set(mixmonitor, call_extension, ast_channel_exten(chan));
 		ast_string_field_set(mixmonitor, call_callerchan, ast_channel_name(chan));
 		ast_string_field_set(mixmonitor, call_callerid, callerid);
@@ -1403,6 +1522,50 @@ static char *handle_cli_mixmonitor(struct ast_cli_entry *e, int cmd, struct ast_
 	return CLI_SUCCESS;
 }
 
+/*! \brief  Mute / unmute  an individual MixMonitor by id */
+static int mute_mixmonitor_instance(struct ast_channel *chan, const char *data,
+									enum ast_audiohook_flags flag, int clearmute)
+{
+	struct ast_datastore *datastore = NULL;
+	char *parse = "";
+	struct mixmonitor_ds *mixmonitor_ds;
+
+	AST_DECLARE_APP_ARGS(args,
+		AST_APP_ARG(mixmonid);
+	);
+
+	if (!ast_strlen_zero(data)) {
+		parse = ast_strdupa(data);
+	}
+
+	AST_STANDARD_APP_ARGS(args, parse);
+
+	ast_channel_lock(chan);
+
+	datastore = ast_channel_datastore_find(chan, &mixmonitor_ds_info,
+		S_OR(args.mixmonid, NULL));
+	if (!datastore) {
+		ast_channel_unlock(chan);
+		return -1;
+	}
+	mixmonitor_ds = datastore->data;
+
+	ast_mutex_lock(&mixmonitor_ds->lock);
+
+	if (mixmonitor_ds->audiohook) {
+		if (clearmute) {
+			ast_clear_flag(mixmonitor_ds->audiohook, flag);
+		} else {
+			ast_set_flag(mixmonitor_ds->audiohook, flag);
+		}
+	}
+
+	ast_mutex_unlock(&mixmonitor_ds->lock);
+	ast_channel_unlock(chan);
+
+	return 0;
+}
+
 /*! \brief  Mute / unmute  a MixMonitor channel */
 static int manager_mute_mixmonitor(struct mansession *s, const struct message *m)
 {
@@ -1411,7 +1574,8 @@ static int manager_mute_mixmonitor(struct mansession *s, const struct message *m
 	const char *id = astman_get_header(m, "ActionID");
 	const char *state = astman_get_header(m, "State");
 	const char *direction = astman_get_header(m,"Direction");
-	int clearmute = 1;
+	const char *mixmonitor_id = astman_get_header(m, "MixMonitorID");
+	int clearmute = 1, mutedcount = 0;
 	enum ast_audiohook_flags flag;
 	RAII_VAR(struct stasis_message *, stasis_message, NULL, ao2_cleanup);
 	RAII_VAR(struct ast_json *, stasis_message_blob, NULL, ast_json_unref);
@@ -1450,15 +1614,28 @@ static int manager_mute_mixmonitor(struct mansession *s, const struct message *m
 		return AMI_SUCCESS;
 	}
 
-	if (ast_audiohook_set_mute(c, mixmonitor_spy_type, flag, clearmute)) {
-		ast_channel_unref(c);
-		astman_send_error(s, m, "Cannot set mute flag");
-		return AMI_SUCCESS;
+	if (ast_strlen_zero(mixmonitor_id)) {
+		mutedcount = ast_audiohook_set_mute_all(c, mixmonitor_spy_type, flag, clearmute);
+		if (mutedcount < 0) {
+			ast_channel_unref(c);
+			astman_send_error(s, m, "Cannot set mute flag");
+			return AMI_SUCCESS;
+		}
+	} else {
+		if (mute_mixmonitor_instance(c, mixmonitor_id, flag, clearmute)) {
+			ast_channel_unref(c);
+			astman_send_error(s, m, "Cannot set mute flag");
+			return AMI_SUCCESS;
+		}
+		mutedcount = 1;
 	}
 
-	stasis_message_blob = ast_json_pack("{s: s, s: b}",
+
+	stasis_message_blob = ast_json_pack("{s: s, s: b, s: s, s: i}",
 		"direction", direction,
-		"state", ast_true(state));
+		"state", ast_true(state),
+		"mixmonitorid", mixmonitor_id,
+		"count", mutedcount);
 
 	stasis_message = ast_channel_blob_create_from_cache(ast_channel_uniqueid(c),
 		ast_channel_mixmonitor_mute_type(), stasis_message_blob);

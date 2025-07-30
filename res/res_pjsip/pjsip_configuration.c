@@ -21,6 +21,7 @@
 #include <pjsip.h>
 #include <pjsip_ua.h>
 
+#include "asterisk/res_geolocation.h"
 #include "asterisk/res_pjsip.h"
 #include "include/res_pjsip_private.h"
 #include "asterisk/res_pjsip_cli.h"
@@ -36,6 +37,7 @@
 #include "asterisk/stream.h"
 #include "asterisk/stasis.h"
 #include "asterisk/security_events.h"
+#include "asterisk/res_stir_shaken.h"
 
 /*! \brief Number of buckets for persistent endpoint information */
 #define PERSISTENT_BUCKETS 53
@@ -181,9 +183,16 @@ static int prack_handler(const struct aco_option *opt, struct ast_variable *var,
 
 	if (ast_true(var->value)) {
 		endpoint->extensions.flags |= PJSIP_INV_SUPPORT_100REL;
+		endpoint->rel100 = AST_SIP_100REL_SUPPORTED;
+	} else if (!strcasecmp(var->value, "peer_supported")) {
+		endpoint->extensions.flags |= PJSIP_INV_SUPPORT_100REL;
+		endpoint->rel100 = AST_SIP_100REL_PEER_SUPPORTED;
 	} else if (!strcasecmp(var->value, "required")) {
 		endpoint->extensions.flags |= PJSIP_INV_REQUIRE_100REL;
-	} else if (!ast_false(var->value)){
+		endpoint->rel100 = AST_SIP_100REL_REQUIRED;
+	} else if (ast_false(var->value)) {
+		endpoint->rel100 = AST_SIP_100REL_UNSUPPORTED;
+	} else {
 		return -1;
 	}
 
@@ -194,10 +203,12 @@ static int prack_to_str(const void *obj, const intptr_t *args, char **buf)
 {
 	const struct ast_sip_endpoint *endpoint = obj;
 
-	if (endpoint->extensions.flags & PJSIP_INV_REQUIRE_100REL) {
-		*buf = "required";
-	} else if (endpoint->extensions.flags & PJSIP_INV_SUPPORT_100REL) {
+	if (endpoint->rel100 == AST_SIP_100REL_SUPPORTED) {
 		*buf = "yes";
+	} else if (endpoint->rel100 == AST_SIP_100REL_PEER_SUPPORTED) {
+		*buf = "peer_supported";
+	} else if (endpoint->rel100 == AST_SIP_100REL_REQUIRED) {
+		*buf = "required";
 	} else {
 		*buf = "no";
 	}
@@ -220,7 +231,7 @@ static int timers_handler(const struct aco_option *opt, struct ast_variable *var
 	} else if (!strcasecmp(var->value, "required")) {
 		endpoint->extensions.flags |= PJSIP_INV_REQUIRE_TIMER;
 	} else if (!strcasecmp(var->value, "always") || !strcasecmp(var->value, "forced")) {
-		endpoint->extensions.flags |= PJSIP_INV_ALWAYS_USE_TIMER;
+		endpoint->extensions.flags |= (PJSIP_INV_SUPPORT_TIMER | PJSIP_INV_ALWAYS_USE_TIMER);
 	} else if (!ast_false(var->value)) {
 		return -1;
 	}
@@ -244,6 +255,52 @@ static int timers_to_str(const void *obj, const intptr_t *args, char **buf)
 
 	*buf = ast_strdup(*buf);
 	return 0;
+}
+
+static int security_mechanism_to_str(const void *obj, const intptr_t *args, char **buf)
+{
+	const struct ast_sip_endpoint *endpoint = obj;
+
+	return ast_sip_security_mechanisms_to_str(&endpoint->security_mechanisms, 0, buf);
+}
+
+static int security_mechanism_handler(const struct aco_option *opt, struct ast_variable *var, void *obj)
+{
+	struct ast_sip_endpoint *endpoint = obj;
+
+	return ast_sip_security_mechanism_vector_init(&endpoint->security_mechanisms, var->value);
+}
+
+static const char *security_negotiation_map[] = {
+	[AST_SIP_SECURITY_NEG_NONE] = "no",
+	[AST_SIP_SECURITY_NEG_MEDIASEC] = "mediasec",
+};
+
+static int security_negotiation_to_str(const void *obj, const intptr_t *args, char **buf)
+{
+	const struct ast_sip_endpoint *endpoint = obj;
+	if (ARRAY_IN_BOUNDS(endpoint->security_negotiation, security_negotiation_map)) {
+		*buf = ast_strdup(security_negotiation_map[endpoint->security_negotiation]);
+	}
+	return 0;
+}
+
+int ast_sip_set_security_negotiation(enum ast_sip_security_negotiation *security_negotiation, const char *val) {
+	if (!strcasecmp("no", val)) {
+		*security_negotiation = AST_SIP_SECURITY_NEG_NONE;
+	} else if (!strcasecmp("mediasec", val)) {
+		*security_negotiation = AST_SIP_SECURITY_NEG_MEDIASEC;
+	} else {
+		return -1;
+	}
+	return 0;
+}
+
+static int security_negotiation_handler(const struct aco_option *opt, struct ast_variable *var, void *obj)
+{
+	struct ast_sip_endpoint *endpoint = obj;
+
+	return ast_sip_set_security_negotiation(&endpoint->security_negotiation, var->value);
 }
 
 void ast_sip_auth_vector_destroy(struct ast_sip_auth_vector *auths)
@@ -366,6 +423,9 @@ static const char *sip_endpoint_identifier_type2str(enum ast_sip_endpoint_identi
 	case AST_SIP_ENDPOINT_IDENTIFY_BY_HEADER:
 		str = "header";
 		break;
+	case AST_SIP_ENDPOINT_IDENTIFY_BY_REQUEST_URI:
+		str = "request_uri";
+		break;
 	}
 	return str;
 }
@@ -391,6 +451,8 @@ static int sip_endpoint_identifier_str2type(const char *str)
 		method = AST_SIP_ENDPOINT_IDENTIFY_BY_IP;
 	} else if (!strcasecmp(str, "header")) {
 		method = AST_SIP_ENDPOINT_IDENTIFY_BY_HEADER;
+	} else if (!strcasecmp(str, "request_uri")) {
+		method = AST_SIP_ENDPOINT_IDENTIFY_BY_REQUEST_URI;
 	} else {
 		method = -1;
 	}
@@ -482,7 +544,30 @@ static int ident_to_str(const void *obj, const intptr_t *args, char **buf)
 	return 0;
 }
 
-static int redirect_handler(const struct aco_option *opt, struct ast_variable *var, void *obj)
+static int media_address_handler(const struct aco_option *opt, struct ast_variable *var, void *obj)
+{
+	struct ast_sip_endpoint *endpoint = obj;
+	struct ast_sockaddr addr;
+
+	if (ast_sockaddr_parse(&addr, var->value, 0)) {
+		/* If we're able to parse as an IP, ensure it's formatted correctly for later */
+		ast_string_field_set(endpoint, media.address, ast_sockaddr_stringify_addr_remote(&addr));
+	} else {
+		/* If we weren't able to parse it as an IP, just assume it's a hostname */
+		ast_string_field_set(endpoint, media.address, var->value);
+	}
+
+	return 0;
+}
+
+static int media_address_to_str(const void *obj, const intptr_t *args, char **buf)
+{
+	const struct ast_sip_endpoint *endpoint = obj;
+	*buf = ast_strdup(endpoint->media.address);
+	return 0;
+}
+
+static int redirect_method_handler(const struct aco_option *opt, struct ast_variable *var, void *obj)
 {
 	struct ast_sip_endpoint *endpoint = obj;
 
@@ -498,6 +583,21 @@ static int redirect_handler(const struct aco_option *opt, struct ast_variable *v
 		return -1;
 	}
 
+	return 0;
+}
+
+static const char *redirect_method_map[] = {
+	[AST_SIP_REDIRECT_USER] = "user",
+	[AST_SIP_REDIRECT_URI_CORE] = "uri_core",
+	[AST_SIP_REDIRECT_URI_PJSIP] = "uri_pjsip",
+};
+
+static int redirect_method_to_str(const void *obj, const intptr_t *args, char **buf)
+{
+	const struct ast_sip_endpoint *endpoint = obj;
+	if (ARRAY_IN_BOUNDS(endpoint->redirect_method, redirect_method_map)) {
+		*buf = ast_strdup(redirect_method_map[endpoint->redirect_method]);
+	}
 	return 0;
 }
 
@@ -721,37 +821,17 @@ static int stir_shaken_handler(const struct aco_option *opt, struct ast_variable
 {
 	struct ast_sip_endpoint *endpoint = obj;
 
-	if (!strcasecmp("off", var->value)) {
-		endpoint->stir_shaken = AST_SIP_STIR_SHAKEN_OFF;
-	} else if (!strcasecmp("attest", var->value)) {
-		endpoint->stir_shaken = AST_SIP_STIR_SHAKEN_ATTEST;
-	} else if (!strcasecmp("verify", var->value)) {
-		endpoint->stir_shaken = AST_SIP_STIR_SHAKEN_VERIFY;
-	} else if (!strcasecmp("on", var->value)) {
-		endpoint->stir_shaken = AST_SIP_STIR_SHAKEN_ON;
-	} else {
-		ast_log(LOG_WARNING, "'%s' is not a valid value for option "
-			"'stir_shaken' for endpoint %s\n",
-			var->value, ast_sorcery_object_get_id(endpoint));
-		return -1;
-	}
+	ast_log(LOG_WARNING, "Endpoint %s: Option 'stir_shaken' is no longer supported.  Use 'stir_shaken_profile' instead.\n",
+		ast_sorcery_object_get_id(endpoint));
+	endpoint->stir_shaken = 0;
 
 	return 0;
 }
 
-static const char *stir_shaken_map[] = {
-	[AST_SIP_STIR_SHAKEN_OFF] = "off",
-	[AST_SIP_STIR_SHAKEN_ATTEST] = "attest",
-	[AST_SIP_STIR_SHAKEN_VERIFY] = "verify",
-	[AST_SIP_STIR_SHAKEN_ON] = "on",
-};
-
 static int stir_shaken_to_str(const void *obj, const intptr_t *args, char **buf)
 {
-	const struct ast_sip_endpoint *endpoint = obj;
-	if (ARRAY_IN_BOUNDS(endpoint->stir_shaken, stir_shaken_map)) {
-		*buf = ast_strdup(stir_shaken_map[endpoint->stir_shaken]);
-	}
+	*buf = ast_strdup("no");
+
 	return 0;
 }
 
@@ -1533,9 +1613,46 @@ static int sip_endpoint_apply_handler(const struct ast_sorcery *sorcery, void *o
 		endpoint->media.rtp.dtls_cfg.default_setup = AST_RTP_DTLS_SETUP_ACTPASS;
 		endpoint->media.rtp.dtls_cfg.verify = AST_RTP_DTLS_VERIFY_FINGERPRINT;
 
+		/* RFC8827 says: Implementations MUST NOT implement DTLS renegotiation
+		 * and MUST reject it with a "no_renegotiation" alert if offered. */
+		if (endpoint->media.rtp.dtls_cfg.rekey) {
+			ast_log(LOG_WARNING, "DTLS renegotiation is not supported with WebRTC. Disabling dtls_rekey.\n");
+			endpoint->media.rtp.dtls_cfg.rekey = 0;
+		}
+
 		if (ast_strlen_zero(endpoint->media.rtp.dtls_cfg.certfile)) {
 			/* If no certificate has been specified, try to automatically create one */
 			endpoint->media.rtp.dtls_cfg.ephemeral_cert = 1;
+		}
+	}
+
+	if (!ast_strlen_zero(endpoint->geoloc_incoming_call_profile) ||
+		!ast_strlen_zero(endpoint->geoloc_outgoing_call_profile)) {
+
+		if (!ast_geoloc_is_loaded()) {
+			ast_log(LOG_ERROR, "A geoloc incoming and/or outgoing call_profile was specified on endpoint '%s'"
+				" but res_geolocation is not loaded.\n", ast_sorcery_object_get_id(endpoint));
+			return -1;
+		}
+
+		if (!ast_strlen_zero(endpoint->geoloc_incoming_call_profile)) {
+			struct ast_geoloc_profile *profile = ast_geoloc_get_profile(endpoint->geoloc_incoming_call_profile);
+			if (!profile) {
+				ast_log(LOG_ERROR, "geoloc_incoming_call_profile '%s' on endpoint '%s' doesn't exist\n",
+					endpoint->geoloc_incoming_call_profile, ast_sorcery_object_get_id(endpoint));
+				return -1;
+			}
+			ao2_cleanup(profile);
+		}
+
+		if (!ast_strlen_zero(endpoint->geoloc_outgoing_call_profile)) {
+			struct ast_geoloc_profile *profile = ast_geoloc_get_profile(endpoint->geoloc_outgoing_call_profile);
+			if (!profile) {
+				ast_log(LOG_ERROR, "geoloc_outgoing_call_profile '%s' on endpoint '%s' doesn't exist\n",
+					endpoint->geoloc_outgoing_call_profile, ast_sorcery_object_get_id(endpoint));
+				return -1;
+			}
+			ao2_cleanup(profile);
 		}
 	}
 
@@ -1593,14 +1710,6 @@ int ast_sip_for_each_channel(
 	return ast_sip_for_each_channel_snapshot(endpoint_snapshot, on_channel_snapshot, arg);
 }
 
-static int active_channels_to_str_cb(void *object, void *arg, int flags)
-{
-	const struct ast_channel_snapshot *snapshot = object;
-	struct ast_str **buf = arg;
-	ast_str_append(buf, 0, "%s,", snapshot->base->name);
-	return 0;
-}
-
 static void active_channels_to_str(const struct ast_sip_endpoint *endpoint,
 				   struct ast_str **str)
 {
@@ -1608,13 +1717,8 @@ static void active_channels_to_str(const struct ast_sip_endpoint *endpoint,
 	RAII_VAR(struct ast_endpoint_snapshot *, endpoint_snapshot,
 		 ast_sip_get_endpoint_snapshot(endpoint), ao2_cleanup);
 
-	if (endpoint_snapshot) {
-		return;
-	}
-
-	ast_sip_for_each_channel_snapshot(endpoint_snapshot,
-					  active_channels_to_str_cb, str);
-	ast_str_truncate(*str, -1);
+	ast_str_append(str, 0, "%d",
+		endpoint_snapshot ? endpoint_snapshot->num_channels : 0);
 }
 
 #define AMI_DEFAULT_STR_SIZE 512
@@ -2070,7 +2174,7 @@ int ast_res_pjsip_initialize_configuration(void)
 	ast_sorcery_object_field_register_custom(sip_sorcery, "endpoint", "auth", "", inbound_auth_handler, inbound_auths_to_str, NULL, 0, 0);
 	ast_sorcery_object_field_register_custom(sip_sorcery, "endpoint", "outbound_auth", "", outbound_auth_handler, outbound_auths_to_str, NULL, 0, 0);
 	ast_sorcery_object_field_register(sip_sorcery, "endpoint", "aors", "", OPT_STRINGFIELD_T, 0, STRFLDSET(struct ast_sip_endpoint, aors));
-	ast_sorcery_object_field_register(sip_sorcery, "endpoint", "media_address", "", OPT_STRINGFIELD_T, 0, STRFLDSET(struct ast_sip_endpoint, media.address));
+	ast_sorcery_object_field_register_custom(sip_sorcery, "endpoint", "media_address", "", media_address_handler, media_address_to_str, NULL, 0, 0);
 	ast_sorcery_object_field_register(sip_sorcery, "endpoint", "bind_rtp_to_media_address", "no", OPT_BOOL_T, 1, STRFLDSET(struct ast_sip_endpoint, media.bind_rtp_to_media_address));
 	ast_sorcery_object_field_register_custom(sip_sorcery, "endpoint", "identify_by", "username,ip", ident_handler, ident_to_str, NULL, 0, 0);
 	ast_sorcery_object_field_register(sip_sorcery, "endpoint", "direct_media", "yes", OPT_BOOL_T, 1, FLDSET(struct ast_sip_endpoint, media.direct_media.enabled));
@@ -2148,7 +2252,7 @@ int ast_res_pjsip_initialize_configuration(void)
 	ast_sorcery_object_field_register(sip_sorcery, "endpoint", "srtp_tag_32", "no", OPT_BOOL_T, 1, FLDSET(struct ast_sip_endpoint, media.rtp.srtp_tag_32));
 	ast_sorcery_object_field_register(sip_sorcery, "endpoint", "media_encryption_optimistic", "no", OPT_BOOL_T, 1, FLDSET(struct ast_sip_endpoint, media.rtp.encryption_optimistic));
 	ast_sorcery_object_field_register(sip_sorcery, "endpoint", "g726_non_standard", "no", OPT_BOOL_T, 1, FLDSET(struct ast_sip_endpoint, media.g726_non_standard));
-	ast_sorcery_object_field_register_custom(sip_sorcery, "endpoint", "redirect_method", "user", redirect_handler, NULL, NULL, 0, 0);
+	ast_sorcery_object_field_register_custom(sip_sorcery, "endpoint", "redirect_method", "user", redirect_method_handler, redirect_method_to_str, NULL, 0, 0);
 	ast_sorcery_object_field_register_custom(sip_sorcery, "endpoint", "set_var", "", set_var_handler, set_var_to_str, set_var_to_vl, 0, 0);
 	ast_sorcery_object_field_register(sip_sorcery, "endpoint", "message_context", "", OPT_STRINGFIELD_T, 0, STRFLDSET(struct ast_sip_endpoint, message_context));
 	ast_sorcery_object_field_register(sip_sorcery, "endpoint", "accountcode", "", OPT_STRINGFIELD_T, 0, STRFLDSET(struct ast_sip_endpoint, accountcode));
@@ -2164,6 +2268,7 @@ int ast_res_pjsip_initialize_configuration(void)
 	ast_sorcery_object_field_register(sip_sorcery, "endpoint", "asymmetric_rtp_codec", "no", OPT_BOOL_T, 1, FLDSET(struct ast_sip_endpoint, asymmetric_rtp_codec));
 	ast_sorcery_object_field_register(sip_sorcery, "endpoint", "rtcp_mux", "no", OPT_BOOL_T, 1, FLDSET(struct ast_sip_endpoint, media.rtcp_mux));
 	ast_sorcery_object_field_register(sip_sorcery, "endpoint", "allow_overlap", "yes", OPT_BOOL_T, 1, FLDSET(struct ast_sip_endpoint, allow_overlap));
+	ast_sorcery_object_field_register(sip_sorcery, "endpoint", "overlap_context", "", OPT_STRINGFIELD_T, 0, STRFLDSET(struct ast_sip_endpoint, overlap_context));
 	ast_sorcery_object_field_register(sip_sorcery, "endpoint", "refer_blind_progress", "yes", OPT_BOOL_T, 1, FLDSET(struct ast_sip_endpoint, refer_blind_progress));
 	ast_sorcery_object_field_register(sip_sorcery, "endpoint", "notify_early_inuse_ringing", "no", OPT_BOOL_T, 1, FLDSET(struct ast_sip_endpoint, notify_early_inuse_ringing));
 	ast_sorcery_object_field_register(sip_sorcery, "endpoint", "max_audio_streams", "1", OPT_UINT_T, 0, FLDSET(struct ast_sip_endpoint, media.max_audio_streams));
@@ -2191,8 +2296,18 @@ int ast_res_pjsip_initialize_configuration(void)
 	ast_sorcery_object_field_register_custom(sip_sorcery, "endpoint", "codec_prefs_outgoing_answer",
 		"prefer: pending, operation: intersect, keep: all",
 		codec_prefs_handler, outgoing_answer_codec_prefs_to_str, NULL, 0, 0);
-	ast_sorcery_object_field_register_custom(sip_sorcery, "endpoint", "stir_shaken", "off", stir_shaken_handler, stir_shaken_to_str, NULL, 0, 0);
+	ast_sorcery_object_field_register_custom(sip_sorcery, "endpoint",
+		"stir_shaken", 0, stir_shaken_handler, stir_shaken_to_str, NULL, 0, 0);
+	ast_sorcery_object_field_register(sip_sorcery, "endpoint", "stir_shaken_profile", "", OPT_STRINGFIELD_T, 0, STRFLDSET(struct ast_sip_endpoint, stir_shaken_profile));
 	ast_sorcery_object_field_register(sip_sorcery, "endpoint", "allow_unauthenticated_options", "no", OPT_BOOL_T, 1, FLDSET(struct ast_sip_endpoint, allow_unauthenticated_options));
+	ast_sorcery_object_field_register(sip_sorcery, "endpoint", "geoloc_incoming_call_profile", "", OPT_STRINGFIELD_T, 0, STRFLDSET(struct ast_sip_endpoint, geoloc_incoming_call_profile));
+	ast_sorcery_object_field_register(sip_sorcery, "endpoint", "geoloc_outgoing_call_profile", "", OPT_STRINGFIELD_T, 0, STRFLDSET(struct ast_sip_endpoint, geoloc_outgoing_call_profile));
+	ast_sorcery_object_field_register_custom(sip_sorcery, "endpoint", "security_mechanisms", "", security_mechanism_handler, security_mechanism_to_str, NULL, 0, 0);
+	ast_sorcery_object_field_register_custom(sip_sorcery, "endpoint", "security_negotiation", "no", security_negotiation_handler, security_negotiation_to_str, NULL, 0, 0);
+	ast_sorcery_object_field_register(sip_sorcery, "endpoint", "send_aoc", "no", OPT_BOOL_T, 1, FLDSET(struct ast_sip_endpoint, send_aoc));
+	ast_sorcery_object_field_register(sip_sorcery, "endpoint", "tenantid", "", OPT_STRINGFIELD_T, 0, STRFLDSET(struct ast_sip_endpoint, tenantid));
+	ast_sorcery_object_field_register(sip_sorcery, "endpoint", "suppress_moh_on_sendonly",
+		"no", OPT_BOOL_T, 1, FLDSET(struct ast_sip_endpoint, suppress_moh_on_sendonly));
 
 	if (ast_sip_initialize_sorcery_transport()) {
 		ast_log(LOG_ERROR, "Failed to register SIP transport support with sorcery\n");
@@ -2245,8 +2360,6 @@ int ast_res_pjsip_initialize_configuration(void)
 	ast_sorcery_load(sip_sorcery);
 
 	load_all_endpoints();
-
-	ast_sip_location_prune_boot_contacts();
 
 	acl_change_sub = stasis_subscribe(ast_security_topic(), acl_change_stasis_cb, NULL);
 	stasis_subscription_accept_message_type(acl_change_sub, ast_named_acl_change_type());
@@ -2325,6 +2438,7 @@ static void endpoint_destructor(void* obj)
 	ast_free(endpoint->contact_user);
 	ast_free_acl_list(endpoint->contact_acl);
 	ast_free_acl_list(endpoint->acl);
+	ast_sip_security_mechanisms_vector_destroy(&endpoint->security_mechanisms);
 }
 
 static int init_subscription_configuration(struct ast_sip_endpoint_subscription_configuration *subscription)
@@ -2348,7 +2462,21 @@ void *ast_sip_endpoint_alloc(const char *name)
 	if (!endpoint) {
 		return NULL;
 	}
-	if (ast_string_field_init(endpoint, 64)) {
+	if (ast_string_field_init(endpoint, 128)) {
+		ao2_cleanup(endpoint);
+		return NULL;
+	}
+
+	if (ast_string_field_init_extended(endpoint, geoloc_incoming_call_profile) ||
+		ast_string_field_init_extended(endpoint, geoloc_outgoing_call_profile)) {
+		ao2_cleanup(endpoint);
+		return NULL;
+	}
+	if (ast_string_field_init_extended(endpoint, overlap_context)) {
+		ao2_cleanup(endpoint);
+		return NULL;
+	}
+	if (ast_string_field_init_extended(endpoint, tenantid)) {
 		ao2_cleanup(endpoint);
 		return NULL;
 	}

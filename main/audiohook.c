@@ -34,12 +34,12 @@
 #include "asterisk/channel.h"
 #include "asterisk/utils.h"
 #include "asterisk/lock.h"
-#include "asterisk/linkedlists.h"
 #include "asterisk/audiohook.h"
 #include "asterisk/slinfactory.h"
 #include "asterisk/frame.h"
 #include "asterisk/translate.h"
 #include "asterisk/format_cache.h"
+#include "asterisk/test.h"
 
 #define AST_AUDIOHOOK_SYNC_TOLERANCE 100 /*!< Tolerance in milliseconds for audiohooks synchronization */
 #define AST_AUDIOHOOK_SMALL_QUEUE_TOLERANCE 100 /*!< When small queue is enabled, this is the maximum amount of audio that can remain queued at a time. */
@@ -109,6 +109,9 @@ int ast_audiohook_init(struct ast_audiohook *audiohook, enum ast_audiohook_type 
 
 	audiohook->init_flags = init_flags;
 
+	/* Set direction to BOTH so that we feed frames in both directions */
+	audiohook->direction = AST_AUDIOHOOK_DIRECTION_BOTH;
+
 	/* initialize internal rate at 8khz, this will adjust if necessary */
 	audiohook_set_internal_rate(audiohook, DEFAULT_INTERNAL_SAMPLE_RATE, 0);
 
@@ -144,6 +147,18 @@ int ast_audiohook_destroy(struct ast_audiohook *audiohook)
 	return 0;
 }
 
+int ast_audiohook_set_frame_feed_direction(struct ast_audiohook *audiohook, enum ast_audiohook_direction direction)
+{
+	/* Only set the direction on new audiohooks */
+	if (audiohook->status != AST_AUDIOHOOK_STATUS_NEW) {
+		ast_debug(3, "Can not set direction on attached Audiohook %p\n", audiohook);
+		return -1;
+	}
+
+	audiohook->direction = direction;
+	return 0;
+}
+
 #define SHOULD_MUTE(hook, dir) \
 	((ast_test_flag(hook, AST_AUDIOHOOK_MUTE_READ) && (dir == AST_AUDIOHOOK_DIRECTION_READ)) || \
 	(ast_test_flag(hook, AST_AUDIOHOOK_MUTE_WRITE) && (dir == AST_AUDIOHOOK_DIRECTION_WRITE)) || \
@@ -158,6 +173,13 @@ int ast_audiohook_write_frame(struct ast_audiohook *audiohook, enum ast_audiohoo
 	int our_factory_ms;
 	int other_factory_samples;
 	int other_factory_ms;
+
+	/* Don't feed the frame if we are set to read and this is a write frame or if set to
+	   write and this is a read frame as we don't want it. Plus, it can cause mis-resampling
+	   if the READ and WRITE frames have different bitrates */
+	if (audiohook->direction != AST_AUDIOHOOK_DIRECTION_BOTH && audiohook->direction != direction) {
+		return 0;
+	}
 
 	/* Update last feeding time to be current */
 	*rwtime = ast_tvnow();
@@ -258,14 +280,51 @@ static struct ast_frame *audiohook_read_frame_both(struct ast_audiohook *audioho
 		return NULL;
 	}
 
-	/* If we want to provide only a read factory make sure we aren't waiting for other audio */
-	if (usable_read && !usable_write && (ast_tvdiff_ms(ast_tvnow(), audiohook->write_time) < (samples/8)*2)) {
+	/* usable_read=1: indicates that read factory have the required samples
+	 * usable_write=0: indicates that write factory have not the required samples
+	 * usable_write, follows:
+	 * 1. Due to RTT issues, the direction write frame has not been received,
+	 *    and it may take more than (samples/8)*2ms to receive it.
+	 * 2. Due to packet loss, the direction write frame could not been received.
+	 *
+	 * (ast_tvdiff_ms(ast_tvnow(), audiohook->write_time) < (samples/8)*2)(Expression A): This ensures that
+	 *    packets on both sides can be read correctly even with RTT; however, if the RTT exceeds
+	 *    (samples/8)*2ms, it may result in the number of packets reading on both sides being greater than the
+	 *    actual number of packets. for example, this may cause the recording length of mixmonitor to be greater
+	 *    than the actual duration. Additionally, when RTT = 0 and packet loss is 50%, some packets in the
+	 *    write direction will never arrive. In this case, continuously waiting will only cause the read
+	 *    factory to exceed the safe length limit, resulting in both the read factory and write factory
+	 *    being cleared, thus same packets received in the read direction cannot be read.
+	 *
+	 * (ast_slinfactory_available(&audiohook->read_factory) < 2 * samples)(Expression B): This ensures that
+	 *    packets on both sides can be read correctly, even in the presence of packet loss; regardless of
+	 *    the amount of packet loss.
+	 *
+	 * (Expression A)&&(Expression B): This combination can comprehensively solve both RTT and packet loss
+	 *    issues; however when RTT exceeds (samples/8)*2ms, it may result in the number of packets read
+	 *    on both sides being greater than the actual number of packets, causing the recording length of
+	 *    mixmonitor to be longer than the actual duration. We can adjust (ast_tvdiff_ms(ast_tvnow(),
+	 *    audiohook->write_time)<(samples/8)*2) && (ast_slinfactory_available(&audiohook->read_factory) <
+	 *    2 * samples) according to actual needs, for example, setting it to (ast_tvdiff_ms(ast_tvnow(),
+	 *    audiohook->write_time) < (samples/8)*4) && (ast_slinfactory_available(&audiohook->read_factory)
+	 *    < 4 * samples).
+	 *
+	 *    Update:
+	 *       Increased time and sample thresholds allow for better handling of asymmetric streams
+	 *       (e.g., mixed codecs like alaw and G.722) and high RTT conditions.
+	 *       This avoids premature frame reads when one direction is delayed, which can cause
+	 *       audio tearing or broken recordings.
+	 *       Specifically addresses issues with MixMonitor when recording directly on a channel
+	 *       that is part of a bridge with different sample rates or codecs.
+	 *       A slight overrun in recording duration is acceptable in exchange for audio stability.
+	 */
+	if (usable_read && !usable_write && (ast_tvdiff_ms(ast_tvnow(), audiohook->write_time) < (samples/8)*4) && (ast_slinfactory_available(&audiohook->read_factory) < 4 * samples)) {
 		ast_debug(3, "Write factory %p was pretty quick last time, waiting for them.\n", &audiohook->write_factory);
 		return NULL;
 	}
 
-	/* If we want to provide only a write factory make sure we aren't waiting for other audio */
-	if (usable_write && !usable_read && (ast_tvdiff_ms(ast_tvnow(), audiohook->read_time) < (samples/8)*2)) {
+	/* As shown in the above comment. */
+	if (usable_write && !usable_read && (ast_tvdiff_ms(ast_tvnow(), audiohook->read_time) < (samples/8)*4) && (ast_slinfactory_available(&audiohook->write_factory) < 4 * samples)) {
 		ast_debug(3, "Read factory %p was pretty quick last time, waiting for them.\n", &audiohook->read_factory);
 		return NULL;
 	}
@@ -446,7 +505,7 @@ static void audiohook_list_set_samplerate_compatibility(struct ast_audiohook_lis
 	 * at that level when it should be lower, and with no way to lower it since any
 	 * rate compared against it would be lower.
 	 *
-	 * By setting it back to the lowest rate it can recalulate the new highest rate.
+	 * By setting it back to the lowest rate it can recalculate the new highest rate.
 	 */
 	audiohook_list->list_internal_samp_rate = DEFAULT_INTERNAL_SAMPLE_RATE;
 
@@ -1160,8 +1219,8 @@ int ast_channel_audiohook_count_by_source_running(struct ast_channel *chan, cons
 /*! \brief Audiohook volume adjustment structure */
 struct audiohook_volume {
 	struct ast_audiohook audiohook; /*!< Audiohook attached to the channel */
-	int read_adjustment;            /*!< Value to adjust frames read from the channel by */
-	int write_adjustment;           /*!< Value to adjust frames written to the channel by */
+	float read_adjustment;            /*!< Value to adjust frames read from the channel by */
+	float write_adjustment;           /*!< Value to adjust frames written to the channel by */
 };
 
 /*! \brief Callback used to destroy the audiohook volume datastore
@@ -1198,14 +1257,14 @@ static int audiohook_volume_callback(struct ast_audiohook *audiohook, struct ast
 {
 	struct ast_datastore *datastore = NULL;
 	struct audiohook_volume *audiohook_volume = NULL;
-	int *gain = NULL;
+	float *gain = NULL;
 
 	/* If the audiohook is shutting down don't even bother */
 	if (audiohook->status == AST_AUDIOHOOK_STATUS_DONE) {
 		return 0;
 	}
 
-	/* Try to find the datastore containg adjustment information, if we can't just bail out */
+	/* Try to find the datastore containing adjustment information, if we can't just bail out */
 	if (!(datastore = ast_channel_datastore_find(chan, &audiohook_volume_datastore, NULL))) {
 		return 0;
 	}
@@ -1221,7 +1280,7 @@ static int audiohook_volume_callback(struct ast_audiohook *audiohook, struct ast
 
 	/* If an adjustment value is present modify the frame */
 	if (gain && *gain) {
-		ast_frame_adjust_volume(frame, *gain);
+		ast_frame_adjust_volume_float(frame, *gain);
 	}
 
 	return 0;
@@ -1270,6 +1329,11 @@ static struct audiohook_volume *audiohook_volume_get(struct ast_channel *chan, i
 
 int ast_audiohook_volume_set(struct ast_channel *chan, enum ast_audiohook_direction direction, int volume)
 {
+	return ast_audiohook_volume_adjust_float(chan, direction, (float) volume);
+}
+
+int ast_audiohook_volume_set_float(struct ast_channel *chan, enum ast_audiohook_direction direction, float volume)
+{
 	struct audiohook_volume *audiohook_volume = NULL;
 
 	/* Attempt to find the audiohook volume information, but only create it if we are not setting the adjustment value to zero */
@@ -1290,8 +1354,13 @@ int ast_audiohook_volume_set(struct ast_channel *chan, enum ast_audiohook_direct
 
 int ast_audiohook_volume_get(struct ast_channel *chan, enum ast_audiohook_direction direction)
 {
+	return (int) ast_audiohook_volume_get_float(chan, direction);
+}
+
+float ast_audiohook_volume_get_float(struct ast_channel *chan, enum ast_audiohook_direction direction)
+{
 	struct audiohook_volume *audiohook_volume = NULL;
-	int adjustment = 0;
+	float adjustment = 0;
 
 	/* Attempt to find the audiohook volume information, but do not create it as we only want to look at the values */
 	if (!(audiohook_volume = audiohook_volume_get(chan, 0))) {
@@ -1309,6 +1378,11 @@ int ast_audiohook_volume_get(struct ast_channel *chan, enum ast_audiohook_direct
 }
 
 int ast_audiohook_volume_adjust(struct ast_channel *chan, enum ast_audiohook_direction direction, int volume)
+{
+	return ast_audiohook_volume_adjust_float(chan, direction, (float) volume);
+}
+
+int ast_audiohook_volume_adjust_float(struct ast_channel *chan, enum ast_audiohook_direction direction, float volume)
 {
 	struct audiohook_volume *audiohook_volume = NULL;
 
@@ -1353,4 +1427,35 @@ int ast_audiohook_set_mute(struct ast_channel *chan, const char *source, enum as
 	ast_channel_unlock(chan);
 
 	return (audiohook ? 0 : -1);
+}
+
+int ast_audiohook_set_mute_all(struct ast_channel *chan, const char *source, enum ast_audiohook_flags flag, int clearmute)
+{
+	struct ast_audiohook *audiohook = NULL;
+	int count = 0;
+
+	ast_channel_lock(chan);
+
+	if (!ast_channel_audiohooks(chan)) {
+		ast_channel_unlock(chan);
+		return -1;
+	}
+
+	AST_LIST_TRAVERSE(&ast_channel_audiohooks(chan)->spy_list, audiohook, list) {
+		if (!strcasecmp(audiohook->source, source)) {
+			count++;
+			if (clearmute) {
+				ast_clear_flag(audiohook, flag);
+			} else {
+				ast_set_flag(audiohook, flag);
+			}
+		}
+	}
+
+	ast_test_suite_event_notify("AUDIOHOOK_GROUP_MUTE_TOGGLE", "Channel: %s\r\nSource: %s\r\nCount: %d\r\n",
+									ast_channel_name(chan), source, count);
+
+	ast_channel_unlock(chan);
+
+	return count;
 }

@@ -142,7 +142,7 @@ static char *show_codecs(struct ast_cli_entry *e, int cmd, struct ast_cli_args *
 				"\tIt does not indicate anything about your configuration.\n");
 	}
 
-	ast_cli(a->fd, "%8s %-5s %-12s %-16s %s\n","ID","TYPE","NAME","FORMAT","DESCRIPTION");
+	ast_cli(a->fd, "%8s %-5s %-12s %-16s %7s %s\n","ID","TYPE","NAME","FORMAT","QUALITY", "DESCRIPTION");
 	ast_cli(a->fd, "------------------------------------------------------------------------------------------------\n");
 
 	ao2_rdlock(codecs);
@@ -171,11 +171,12 @@ static char *show_codecs(struct ast_cli_entry *e, int cmd, struct ast_cli_args *
 			}
 		}
 
-		ast_cli(a->fd, "%8u %-5s %-12s %-16s (%s)\n",
+		ast_cli(a->fd, "%8u %-5s %-12s %-16s %7d (%s)\n",
 			codec->external.id,
 			ast_codec_media_type2str(codec->external.type),
 			codec->external.name,
 			S_OR(codec->format_name, "no cached format"),
+			codec->external.quality,
 			codec->external.description);
 	}
 
@@ -315,7 +316,7 @@ int __ast_codec_register_with_format(struct ast_codec *codec, const char *format
 	/* Once registered a codec can not be unregistered, and the module must persist until shutdown */
 	ast_module_shutdown_ref(mod);
 
-	ast_verb(2, "Registered '%s' codec '%s' at sample rate '%u' with id '%u'\n",
+	ast_verb(5, "Registered '%s' codec '%s' at sample rate '%u' with id '%u'\n",
 		ast_codec_media_type2str(codec->type), codec->name, codec->sample_rate, codec_new->external.id);
 
 	ao2_ref(codec_new, -1);

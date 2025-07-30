@@ -46,6 +46,9 @@
 
 /*** DOCUMENTATION
 	<function name="LOCK" language="en_US">
+		<since>
+			<version>1.6.0</version>
+		</since>
 		<synopsis>
 			Attempt to obtain a named mutex.
 		</synopsis>
@@ -64,8 +67,15 @@
 				dialplan, and not directly from external protocols.</para>
 			</note>
 		</description>
+		<see-also>
+			<ref type="function">TRYLOCK</ref>
+			<ref type="function">UNLOCK</ref>
+		</see-also>
 	</function>
 	<function name="TRYLOCK" language="en_US">
+		<since>
+			<version>1.6.0</version>
+		</since>
 		<synopsis>
 			Attempt to obtain a named mutex.
 		</synopsis>
@@ -82,8 +92,15 @@
 				dialplan, and not directly from external protocols.</para>
 			</note>
 		</description>
+		<see-also>
+			<ref type="function">LOCK</ref>
+			<ref type="function">UNLOCK</ref>
+		</see-also>
 	</function>
 	<function name="UNLOCK" language="en_US">
+		<since>
+			<version>1.6.0</version>
+		</since>
 		<synopsis>
 			Unlocks a named mutex.
 		</synopsis>
@@ -101,6 +118,10 @@
 				dialplan, and not directly from external protocols.</para>
 			</note>
 		</description>
+		<see-also>
+			<ref type="function">LOCK</ref>
+			<ref type="function">TRYLOCK</ref>
+		</see-also>
 	</function>
  ***/
 

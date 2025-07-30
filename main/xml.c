@@ -68,6 +68,29 @@ int ast_xml_finish(void)
 	return 0;
 }
 
+/*!
+ * \internal
+ * \brief Process XML Inclusions (XInclude).
+ *
+ * XIncludes can result in new includes being inserted, so we need to reprocess
+ * until no changes are made or we encounter an error.
+ *
+ * \param doc the document to process
+ *
+ * \retval 0 if XInclude processing concluded successfully
+ * \retval -1 if an error occurred during XInclude processing
+ */
+static int process_xincludes(xmlDoc *doc)
+{
+	int res;
+
+	do {
+		res = xmlXIncludeProcess(doc);
+	} while (res > 0);
+
+	return res;
+}
+
 struct ast_xml_doc *ast_xml_open(char *filename)
 {
 	xmlDoc *doc;
@@ -76,15 +99,13 @@ struct ast_xml_doc *ast_xml_open(char *filename)
 		return NULL;
 	}
 
-	xmlSubstituteEntitiesDefault(1);
-
-	doc = xmlReadFile(filename, NULL, XML_PARSE_RECOVER);
+	doc = xmlReadFile(filename, NULL, XML_PARSE_RECOVER | XML_PARSE_NOENT);
 	if (!doc) {
 		return NULL;
 	}
 
 	/* process xinclude elements. */
-	if (xmlXIncludeProcess(doc) < 0) {
+	if (process_xincludes(doc) < 0) {
 		xmlFreeDoc(doc);
 		return NULL;
 	}
@@ -178,7 +199,7 @@ struct ast_xml_doc *ast_xml_read_memory(char *buffer, size_t size)
 
 	if (!(doc = xmlParseMemory(buffer, (int) size))) {
 		/* process xinclude elements. */
-		if (xmlXIncludeProcess(doc) < 0) {
+		if (process_xincludes(doc) < 0) {
 			xmlFreeDoc(doc);
 			return NULL;
 		}
@@ -283,7 +304,7 @@ struct ast_xml_node *ast_xml_find_element(struct ast_xml_node *root_node, const 
 	}
 
 	for (cur = root_node; cur; cur = ast_xml_node_get_next(cur)) {
-		/* Check if the name matchs */
+		/* Check if the name matches */
 		if (strcmp(ast_xml_node_get_name(cur), name)) {
 			continue;
 		}
@@ -359,6 +380,11 @@ void ast_xml_set_name(struct ast_xml_node *node, const char *name)
 int ast_xml_doc_dump_file(FILE *output, struct ast_xml_doc *doc)
 {
 	return xmlDocDump(output, (xmlDocPtr)doc);
+}
+
+void ast_xml_doc_dump_memory(struct ast_xml_doc *doc, char **buffer, int *length)
+{
+	xmlDocDumpFormatMemory((xmlDocPtr)doc, (xmlChar **)buffer, length, 1);
 }
 
 const char *ast_xml_node_get_name(struct ast_xml_node *node)
@@ -477,14 +503,12 @@ struct ast_xslt_doc *ast_xslt_open(char *filename)
 	xsltStylesheet *xslt;
 	xmlDoc *xml;
 
-	xmlSubstituteEntitiesDefault(1);
-
-	xml = xmlReadFile(filename, NULL, XML_PARSE_RECOVER);
+	xml = xmlReadFile(filename, NULL, XML_PARSE_RECOVER | XML_PARSE_NOENT);
 	if (!xml) {
 		return NULL;
 	}
 
-	if (xmlXIncludeProcess(xml) < 0) {
+	if (process_xincludes(xml) < 0) {
 		xmlFreeDoc(xml);
 		return NULL;
 	}
@@ -507,13 +531,12 @@ struct ast_xslt_doc *ast_xslt_read_memory(char *buffer, size_t size)
 		return NULL;
 	}
 
-	xmlSubstituteEntitiesDefault(1);
-
-	if (!(doc = xmlParseMemory(buffer, (int) size))) {
+	doc = xmlReadMemory(buffer, (int) size, NULL, NULL, XML_PARSE_RECOVER | XML_PARSE_NOENT);
+	if (!doc) {
 		return NULL;
 	}
 
-	if (xmlXIncludeProcess(doc) < 0) {
+	if (process_xincludes(doc) < 0) {
 		xmlFreeDoc(doc);
 		return NULL;
 	}
@@ -539,35 +562,45 @@ struct ast_xml_doc *ast_xslt_apply(struct ast_xslt_doc *axslt, struct ast_xml_do
 {
 	xsltStylesheet *xslt = (xsltStylesheet *)axslt;
 	xmlDoc *xml = (xmlDoc *)axml;
+	xmlDoc *res;
 	xsltTransformContextPtr ctxt;
 	xmlNs *ns;
-	xmlDoc *res;
 	int options = XSLT_PARSE_OPTIONS;
 
 	/*
 	 * Normally we could just call xsltApplyStylesheet() without creating
-	 * our own transform context but we need to pass parameters to it
-	 * that have namespace prefixes and that's not supported.  Instead
-	 * we have to create a transform context, iterate over the namespace
-	 * declarations in the stylesheet (not the incoming xml document),
-	 * and add them to the transform context's xpath context.
+	 * our own transform context but passing parameters to it that have
+	 * namespace prefixes isn't supported. Instead we have to create a
+	 * transform context, iterate over the namespace declarations in the
+	 * stylesheet (not the incoming xml document), add them to the
+	 * transform context's xpath context, and call xsltApplyStylesheetUser.
 	 *
-	 * The alternative would be to pass the parameters with namespaces
-	 * as text strings but that's not intuitive and results in much
-	 * slower performance than adding the namespaces here.
+	 * Since this is a bit involved and libxslt apparently doesn't completely
+	 * clean up after itself in this situation,  we'll only do that dance
+	 * if there are parameters passed in.  Otherwise we just call the simpler
+	 * xsltApplyStylesheet.
+	 *
 	 */
+
+	if (!params) {
+		res = xsltApplyStylesheet(xslt, xml, params);
+		return (struct ast_xml_doc *)res;
+	}
+
 	ctxt = xsltNewTransformContext(xslt, xml);
 	xsltSetCtxtParseOptions(ctxt, options);
 
 	for (ns = xslt->doc->children->nsDef; ns; ns = ns->next) {
 		if (xmlXPathRegisterNs(ctxt->xpathCtxt, ns->prefix, ns->href) != 0) {
-			xmlXPathFreeContext(ctxt->xpathCtxt);
 			xsltFreeTransformContext(ctxt);
 			return NULL;
 		}
 	}
 
 	res = xsltApplyStylesheetUser(xslt, xml, params, NULL, NULL, ctxt);
+	xmlXPathFreeContext(ctxt->xpathCtxt);
+	ctxt->xpathCtxt = NULL;
+	xsltFreeTransformContext(ctxt);
 
 	return (struct ast_xml_doc *)res;
 }

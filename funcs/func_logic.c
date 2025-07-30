@@ -38,6 +38,9 @@
 
 /*** DOCUMENTATION
 	<function name="ISNULL" language="en_US">
+		<since>
+			<version>1.2.0</version>
+		</since>
 		<synopsis>
 			Check if a value is NULL.
 		</synopsis>
@@ -49,6 +52,9 @@
 		</description>
 	</function>
 	<function name="SET" language="en_US">
+		<since>
+			<version>1.2.0</version>
+		</since>
 		<synopsis>
 			SET assigns a value to a channel variable.
 		</synopsis>
@@ -60,6 +66,9 @@
 		</description>
 	</function>
 	<function name="EXISTS" language="en_US">
+		<since>
+			<version>1.2.0</version>
+		</since>
 		<synopsis>
 			Test the existence of a value.
 		</synopsis>
@@ -71,11 +80,14 @@
 		</description>
 	</function>
 	<function name="IF" language="en_US">
+		<since>
+			<version>1.2.0</version>
+		</since>
 		<synopsis>
-			Check for an expresion.
+			Check for an expression.
 		</synopsis>
 		<syntax argsep="?">
-			<parameter name="expresion" required="true" />
+			<parameter name="expression" required="true" />
 			<parameter name="retvalue" argsep=":" required="true">
 				<argument name="true" />
 				<argument name="false" />
@@ -86,6 +98,9 @@
 		</description>
 	</function>
 	<function name="IFTIME" language="en_US">
+		<since>
+			<version>1.2.0</version>
+		</since>
 		<synopsis>
 			Temporal Conditional.
 		</synopsis>
@@ -101,6 +116,9 @@
 		</description>
 	</function>
 	<function name="IMPORT" language="en_US">
+		<since>
+			<version>1.6.0</version>
+		</since>
 		<synopsis>
 			Retrieve the value of a variable from another channel.
 		</synopsis>
@@ -110,6 +128,49 @@
 		</syntax>
 		<description>
 		</description>
+	</function>
+	<function name="DELETE" language="en_US">
+		<since>
+			<version>18.21.0</version>
+			<version>20.6.0</version>
+			<version>21.1.0</version>
+		</since>
+		<synopsis>
+			Deletes a specified channel variable.
+		</synopsis>
+		<syntax>
+			<parameter name="varname" required="true">
+				<para>Channel variable name</para>
+			</parameter>
+		</syntax>
+		<description>
+			<para>Delete the channel variable specified in <replaceable>varname</replaceable>.
+			Will succeed if the channel variable exists or not.</para>
+		</description>
+		<see-also>
+			<ref type="function">GLOBAL_DELETE</ref>
+		</see-also>
+	</function>
+	<function name="VARIABLE_EXISTS" language="en_US">
+		<since>
+			<version>18.21.0</version>
+			<version>20.6.0</version>
+			<version>21.1.0</version>
+		</since>
+		<synopsis>
+			Check if a dialplan variable exists or not.
+		</synopsis>
+		<syntax>
+			<parameter name="varname" required="true">
+				<para>Channel variable name</para>
+			</parameter>
+		</syntax>
+		<description>
+			<para>Returns <literal>1</literal> if channel variable exists or <literal>0</literal> otherwise.</para>
+		</description>
+		<see-also>
+			<ref type="function">GLOBAL_EXISTS</ref>
+		</see-also>
 	</function>
  ***/
 
@@ -187,8 +248,7 @@ static int acf_if(struct ast_channel *chan, const char *cmd, char *data, char *b
 	AST_NONSTANDARD_APP_ARGS(args2, args1.remainder, ':');
 
 	if (ast_strlen_zero(args1.expr) || !(args2.iftrue || args2.iffalse)) {
-		ast_log(LOG_WARNING, "Syntax IF(<expr>?[<true>][:<false>])  (expr must be non-null, and either <true> or <false> must be non-null)\n");
-		ast_log(LOG_WARNING, "      In this case, <expr>='%s', <true>='%s', and <false>='%s'\n", args1.expr, args2.iftrue, args2.iffalse);
+		ast_debug(1, "<expr>='%s', <true>='%s', and <false>='%s'\n", args1.expr, args2.iftrue, args2.iffalse);
 		return -1;
 	}
 
@@ -274,6 +334,23 @@ static int import_read2(struct ast_channel *chan, const char *cmd, char *data, s
 	return import_helper(chan, cmd, data, NULL, str, len);
 }
 
+static int delete_write(struct ast_channel *chan, const char *cmd, char *data, const char *value)
+{
+	pbx_builtin_setvar_helper(chan, data, NULL);
+
+	return 0;
+}
+
+static int variable_exists_read(struct ast_channel *chan, const char *cmd, char *data,
+		  char *buf, size_t len)
+{
+	const char *var = pbx_builtin_getvar_helper(chan, data);
+
+	strcpy(buf, var ? "1" : "0");
+
+	return 0;
+}
+
 static struct ast_custom_function isnull_function = {
 	.name = "ISNULL",
 	.read = isnull,
@@ -308,6 +385,16 @@ static struct ast_custom_function import_function = {
 	.read2 = import_read2,
 };
 
+static struct ast_custom_function delete_function = {
+	.name = "DELETE",
+	.write = delete_write,
+};
+
+static struct ast_custom_function variable_exists_function = {
+	.name = "VARIABLE_EXISTS",
+	.read = variable_exists_read,
+};
+
 static int unload_module(void)
 {
 	int res = 0;
@@ -318,6 +405,8 @@ static int unload_module(void)
 	res |= ast_custom_function_unregister(&if_function);
 	res |= ast_custom_function_unregister(&if_time_function);
 	res |= ast_custom_function_unregister(&import_function);
+	res |= ast_custom_function_unregister(&delete_function);
+	res |= ast_custom_function_unregister(&variable_exists_function);
 
 	return res;
 }
@@ -332,6 +421,8 @@ static int load_module(void)
 	res |= ast_custom_function_register(&if_function);
 	res |= ast_custom_function_register(&if_time_function);
 	res |= ast_custom_function_register(&import_function);
+	res |= ast_custom_function_register(&delete_function);
+	res |= ast_custom_function_register(&variable_exists_function);
 
 	return res;
 }

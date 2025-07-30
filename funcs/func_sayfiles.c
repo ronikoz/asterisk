@@ -42,6 +42,10 @@
 
 /*** DOCUMENTATION
 	<function name="SAYFILES" language="en_US">
+		<since>
+			<version>16.21.0</version>
+			<version>18.7.0</version>
+		</since>
 		<synopsis>
 			Returns the ampersand-delimited file names that would be played by the Say applications (e.g. SayAlpha, SayDigits).
 		</synopsis>
@@ -206,6 +210,15 @@ AST_TEST_DEFINE(test_SAYFILES_function)
 		res = AST_TEST_FAIL;
 	}
 
+	/* + should be ignored and there should not be a leading & */
+	ast_str_set(&expr, 0, "${SAYFILES(+18005551212,digits)}");
+	ast_str_substitute_variables(&result, 0, NULL, ast_str_buffer(expr));
+	if (strcmp(ast_str_buffer(result), "digits/1&digits/8&digits/0&digits/0&digits/5&digits/5&digits/5&digits/1&digits/2&digits/1&digits/2") != 0) {
+		ast_test_status_update(test, "SAYFILES(+18005551212,digits) test failed ('%s')\n",
+				ast_str_buffer(result));
+		res = AST_TEST_FAIL;
+	}
+
 	ast_str_set(&expr, 0, "${SAYFILES(35,number)}");
 	ast_str_substitute_variables(&result, 0, NULL, ast_str_buffer(expr));
 	if (strcmp(ast_str_buffer(result), "digits/30&digits/5") != 0) {
@@ -342,6 +355,14 @@ AST_TEST_DEFINE(test_SAYFILES_function)
 		res = AST_TEST_FAIL;
 	}
 
+	ast_str_set(&expr, 0, "${SAYFILES(.42,money)}");
+	ast_str_substitute_variables(&result, 0, NULL, ast_str_buffer(expr));
+	if (strcmp(ast_str_buffer(result), "digits/40&digits/2&cents") != 0) {
+		ast_test_status_update(test, "SAYFILES(.42,money) test failed ('%s')\n",
+				ast_str_buffer(result));
+		res = AST_TEST_FAIL;
+	}
+
 	ast_str_set(&expr, 0, "${SAYFILES(1.00,money)}");
 	ast_str_substitute_variables(&result, 0, NULL, ast_str_buffer(expr));
 	if (strcmp(ast_str_buffer(result), "digits/1&letters/dollar") != 0) {
@@ -366,10 +387,75 @@ AST_TEST_DEFINE(test_SAYFILES_function)
 		res = AST_TEST_FAIL;
 	}
 
+	ast_str_set(&expr, 0, "${SAYFILES(2,money)}");
+	ast_str_substitute_variables(&result, 0, NULL, ast_str_buffer(expr));
+	if (strcmp(ast_str_buffer(result), "digits/2&dollars") != 0) {
+		ast_test_status_update(test, "SAYFILES(2,money) test failed ('%s')\n",
+				ast_str_buffer(result));
+		res = AST_TEST_FAIL;
+	}
+
 	ast_str_set(&expr, 0, "${SAYFILES(2.42,money)}");
 	ast_str_substitute_variables(&result, 0, NULL, ast_str_buffer(expr));
 	if (strcmp(ast_str_buffer(result), "digits/2&dollars&and&digits/40&digits/2&cents") != 0) {
 		ast_test_status_update(test, "SAYFILES(2.42,money) test failed ('%s')\n",
+				ast_str_buffer(result));
+		res = AST_TEST_FAIL;
+	}
+
+	ast_str_set(&expr, 0, "${SAYFILES(2.05,money)}");
+	ast_str_substitute_variables(&result, 0, NULL, ast_str_buffer(expr));
+	if (strcmp(ast_str_buffer(result), "digits/2&dollars&and&digits/5&cents") != 0) {
+		ast_test_status_update(test, "SAYFILES(2.05,money) test failed ('%s')\n",
+				ast_str_buffer(result));
+		res = AST_TEST_FAIL;
+	}
+
+	ast_str_set(&expr, 0, "${SAYFILES(2.051,money)}");
+	ast_str_substitute_variables(&result, 0, NULL, ast_str_buffer(expr));
+	if (strcmp(ast_str_buffer(result), "digits/2&dollars&and&digits/5&cents") != 0) {
+		ast_test_status_update(test, "SAYFILES(2.051,money) test failed ('%s')\n",
+				ast_str_buffer(result));
+		res = AST_TEST_FAIL;
+	}
+
+	/* Invalid amounts */
+	ast_str_set(&expr, 0, "${SAYFILES(blah,money)}");
+	ast_str_substitute_variables(&result, 0, NULL, ast_str_buffer(expr));
+	if (strcmp(ast_str_buffer(result), "digits/0&cents") != 0) {
+		ast_test_status_update(test, "SAYFILES(blah,money) test failed ('%s')\n",
+				ast_str_buffer(result));
+		res = AST_TEST_FAIL;
+	}
+
+	ast_str_set(&expr, 0, "${SAYFILES(2blah.05,money)}");
+	ast_str_substitute_variables(&result, 0, NULL, ast_str_buffer(expr));
+	if (strcmp(ast_str_buffer(result), "digits/2&dollars") != 0) {
+		ast_test_status_update(test, "SAYFILES(2blah.05,money) test failed ('%s')\n",
+				ast_str_buffer(result));
+		res = AST_TEST_FAIL;
+	}
+
+	ast_str_set(&expr, 0, "${SAYFILES(2.-05,money)}");
+	ast_str_substitute_variables(&result, 0, NULL, ast_str_buffer(expr));
+	if (strcmp(ast_str_buffer(result), "digits/2&dollars") != 0) {
+		ast_test_status_update(test, "SAYFILES(2.-05,money) test failed ('%s')\n",
+				ast_str_buffer(result));
+		res = AST_TEST_FAIL;
+	}
+
+	ast_str_set(&expr, 0, "${SAYFILES(2. 05,money)}");
+	ast_str_substitute_variables(&result, 0, NULL, ast_str_buffer(expr));
+	if (strcmp(ast_str_buffer(result), "digits/2&dollars") != 0) {
+		ast_test_status_update(test, "SAYFILES(2. 05,money) test failed ('%s')\n",
+				ast_str_buffer(result));
+		res = AST_TEST_FAIL;
+	}
+
+	ast_str_set(&expr, 0, "${SAYFILES(. 05,money)}");
+	ast_str_substitute_variables(&result, 0, NULL, ast_str_buffer(expr));
+	if (strcmp(ast_str_buffer(result), "digits/0&cents") != 0) {
+		ast_test_status_update(test, "SAYFILES(. 05,money) test failed ('%s')\n",
 				ast_str_buffer(result));
 		res = AST_TEST_FAIL;
 	}

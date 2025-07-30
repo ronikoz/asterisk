@@ -14,9 +14,6 @@
  * This program is free software, distributed under the terms of
  * the GNU General Public License Version 2. See the LICENSE file
  * at the top of the source tree.
- *
- * Please follow coding guidelines
- * http://svn.digium.com/view/asterisk/trunk/doc/CODING-GUIDELINES
  */
 
 /*! \file
@@ -25,7 +22,7 @@
  *
  * \author\verbatim Terry Wilson <twilson@digium.com> \endverbatim
  *
- * See https://wiki.asterisk.org/wiki/display/AST/Confbridge+state+changes for
+ * See https://docs.asterisk.org/Development/Reference-Information/Other-Reference-Information/Confbridge-state-changes/ for
  * a more complete description of how conference states work.
  */
 

@@ -91,6 +91,9 @@
 
 /*** DOCUMENTATION
 	<application name="ReceiveFAX" language="en_US" module="res_fax">
+		<since>
+			<version>11.0.0</version>
+		</since>
 		<synopsis>
 			Receive a FAX and save as a TIFF/F file.
 		</synopsis>
@@ -116,13 +119,16 @@
 		<description>
  			<para>This application is provided by res_fax, which is a FAX technology agnostic module
  			that utilizes FAX technology resource modules to complete a FAX transmission.</para>
- 			<para>Session arguments can be set by the FAXOPT function and to check results of the ReceiveFax() application.</para>
+ 			<para>Session arguments can be set by the FAXOPT function and to check results of the ReceiveFAX() application.</para>
 		</description>
 		<see-also>
 			<ref type="function">FAXOPT</ref>
 		</see-also>
 	</application>
 	<application name="SendFAX" language="en_US" module="res_fax">
+		<since>
+			<version>11.0.0</version>
+		</since>
 		<synopsis>
 			Sends a specified TIFF/F file as a FAX.
 		</synopsis>
@@ -155,13 +161,16 @@
 		<description>
  			<para>This application is provided by res_fax, which is a FAX technology agnostic module
  			that utilizes FAX technology resource modules to complete a FAX transmission.</para>
- 			<para>Session arguments can be set by the FAXOPT function and to check results of the SendFax() application.</para>
+ 			<para>Session arguments can be set by the FAXOPT function and to check results of the SendFAX() application.</para>
 		</description>
 		<see-also>
 			<ref type="function">FAXOPT</ref>
 		</see-also>
 	</application>
 	<function name="FAXOPT" language="en_US" module="res_fax">
+		<since>
+			<version>11.0.0</version>
+		</since>
 		<synopsis>
 			Gets/sets various pieces of information about a fax session.
 		</synopsis>
@@ -236,11 +245,14 @@
 		   	it can also be used to retrieve information about a FAX session that has finished eg. pages/status.</para>
 		</description>
 		<see-also>
-			<ref type="application">ReceiveFax</ref>
-			<ref type="application">SendFax</ref>
+			<ref type="application">ReceiveFAX</ref>
+			<ref type="application">SendFAX</ref>
 		</see-also>
 	</function>
 	<manager name="FAXSessions" language="en_US">
+		<since>
+			<version>13.0.0</version>
+		</since>
 		<synopsis>
 			Lists active FAX sessions
 		</synopsis>
@@ -255,6 +267,9 @@
 	</manager>
 	<managerEvent language="en_US" name="FAXSessionsEntry">
 		<managerEventInstance class="EVENT_FLAG_REPORTING">
+			<since>
+				<version>13.0.0</version>
+			</since>
 			<synopsis>A single list item for the FAXSessions AMI command</synopsis>
 			<syntax>
 				<parameter name="ActionID" required="false"/>
@@ -305,6 +320,9 @@
 	</managerEvent>
 	<managerEvent language="en_US" name="FAXSessionsComplete">
 		<managerEventInstance class="EVENT_FLAG_CALL">
+			<since>
+				<version>13.0.0</version>
+			</since>
 			<synopsis>Raised when all FAXSession events are completed for a FAXSessions command</synopsis>
 			<syntax>
 				<parameter name="ActionID" required="false"/>
@@ -315,6 +333,9 @@
 		</managerEventInstance>
 	</managerEvent>
 	<manager name="FAXSession" language="en_US">
+		<since>
+			<version>13.0.0</version>
+		</since>
 		<synopsis>
 			Responds with a detailed description of a single FAX session
 		</synopsis>
@@ -333,6 +354,9 @@
 	</manager>
 	<managerEvent language="en_US" name="FAXSession">
 		<managerEventInstance class="EVENT_FLAG_REPORTING">
+			<since>
+				<version>13.0.0</version>
+			</since>
 			<synopsis>Raised in response to FAXSession manager command</synopsis>
 			<syntax>
 				<parameter name="ActionID" required="false"/>
@@ -384,6 +408,9 @@
 		</managerEventInstance>
 	</managerEvent>
 	<manager name="FAXStats" language="en_US">
+		<since>
+			<version>13.0.0</version>
+		</since>
 		<synopsis>
 			Responds with fax statistics
 		</synopsis>
@@ -398,6 +425,9 @@
 	</manager>
 	<managerEvent language="en_US" name="FAXStats">
 		<managerEventInstance class="EVENT_FLAG_REPORTING">
+			<since>
+				<version>13.0.0</version>
+			</since>
 			<synopsis>Raised in response to FAXStats manager command</synopsis>
 			<syntax>
 				<parameter name="ActionID" required="false"/>
@@ -2272,7 +2302,7 @@ static int receivefax_exec(struct ast_channel *chan, const char *data)
 	}
 
 	if (report_receive_fax_status(chan, args.filename)) {
-		ast_log(AST_LOG_ERROR, "Error publishing ReceiveFax status message\n");
+		ast_log(AST_LOG_ERROR, "Error publishing ReceiveFAX status message\n");
 	}
 
 	/* If the channel hungup return -1; otherwise, return 0 to continue in the dialplan */
@@ -3848,7 +3878,7 @@ static struct ast_frame *fax_detect_framehook(struct ast_channel *chan, struct a
 		switch (result) {
 		case 'f':
 		case 't':
-			target_context = S_OR(ast_channel_macrocontext(chan), ast_channel_context(chan));
+			target_context = ast_channel_context(chan);
 
 			ast_channel_unlock(chan);
 			ast_frfree(f);

@@ -70,6 +70,9 @@
  */
 /*** DOCUMENTATION
 	<function name="CALLERID" language="en_US">
+		<since>
+			<version>1.2.0</version>
+		</since>
 		<synopsis>
 			Gets or sets Caller*ID data on the channel.
 		</synopsis>
@@ -182,9 +185,29 @@
 					<para>Number Unavailable.</para>
 				</enum>
 			</enumlist>
+			<variablelist>
+				<variable name="CALL_QUALIFIER">
+					<para>This is a special Caller ID-related variable
+					that can be used to enable sending the Call Qualifier
+					parameter in MDMF (Multiple Data Message Format)
+					Caller ID spills.</para>
+					<para>This variable is not automatically set by Asterisk.
+					You are responsible for setting it if/when needed.</para>
+					<para>Supporting Caller ID units will display the LDC
+					(Long Distance Call) indicator when they receive this parameter.</para>
+					<para>For incoming calls on FXO ports, if the Call Qualifier parameter is received,
+					this variable will also be set to 1.</para>
+					<para>This option must be used with a channel driver
+					that allows Asterisk to generate the Caller ID spill,
+					which currently only includes <literal>chan_dahdi</literal>.</para>
+				</variable>
+			</variablelist>
 		</description>
 	</function>
 	<function name="CONNECTEDLINE" language="en_US">
+		<since>
+			<version>1.8.0</version>
+		</since>
 		<synopsis>
 			Gets or sets Connected Line data on the channel.
 		</synopsis>
@@ -282,6 +305,9 @@
 		</description>
 	</function>
 	<function name="REDIRECTING" language="en_US">
+		<since>
+			<version>1.8.0</version>
+		</since>
 		<synopsis>
 			Gets or sets Redirecting data on the channel.
 		</synopsis>
@@ -1022,7 +1048,9 @@ static int callerid_read(struct ast_channel *chan, const char *cmd, char *data, 
 				ast_log(LOG_ERROR, "Unknown callerid data type '%s'.\n", data);
 			}
 		} else if (member.argc == 1 && !strcasecmp("ani2", member.subnames[0])) {
-			snprintf(buf, len, "%d", ast_channel_caller(chan)->ani2);
+			/* ANI2 is always formatted as two digits:
+			 * https://nanpa.com/numbering/ani-ii-digits */
+			snprintf(buf, len, "%02d", ast_channel_caller(chan)->ani2);
 		} else if (!strcasecmp("ani", member.subnames[0])) {
 			if (member.argc == 1) {
 				/* Setup as if user had given ani-num instead. */
@@ -1611,6 +1639,7 @@ static int redirecting_write(struct ast_channel *chan, const char *cmd, char *da
 			 * reason, so we can just set the reason string to what was given and set the
 			 * code to be unknown
 			 */
+				ast_log(LOG_WARNING, "Unknown redirecting reason '%s', defaulting to unknown\n", val);
 				redirecting.orig_reason.code = AST_REDIRECTING_REASON_UNKNOWN;
 				redirecting.orig_reason.str = val;
 				set_it(chan, &redirecting, NULL);
@@ -1700,6 +1729,7 @@ static int redirecting_write(struct ast_channel *chan, const char *cmd, char *da
 			 * reason, so we can just set the reason string to what was given and set the
 			 * code to be unknown
 			 */
+			ast_log(LOG_WARNING, "Unknown redirecting reason '%s', defaulting to unknown\n", val);
 			redirecting.reason.code = AST_REDIRECTING_REASON_UNKNOWN;
 			redirecting.reason.str = val;
 			set_it(chan, &redirecting, NULL);

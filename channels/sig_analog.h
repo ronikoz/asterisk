@@ -116,6 +116,13 @@ enum analog_dsp_digitmode {
 	ANALOG_DIGITMODE_MF,
 };
 
+enum analog_dialmode {
+	ANALOG_DIALMODE_BOTH = 0,
+	ANALOG_DIALMODE_PULSE,
+	ANALOG_DIALMODE_DTMF,
+	ANALOG_DIALMODE_NONE,
+};
+
 enum analog_cid_start {
 	ANALOG_CID_START_POLARITY = 1,
 	ANALOG_CID_START_POLARITY_IN,
@@ -266,7 +273,7 @@ struct analog_pvt {
 	enum analog_sigtype sig;
 	/* To contain the private structure passed into the channel callbacks */
 	void *chan_pvt;
-	/* All members after this are giong to be transient, and most will probably change */
+	/* All members after this are going to be transient, and most will probably change */
 	struct ast_channel *owner;			/*!< Our current active owner (if applicable) */
 
 	struct analog_subchannel subs[3];		/*!< Sub-channels */
@@ -282,16 +289,21 @@ struct analog_pvt {
 	unsigned int ani_wink_time:16;			/* Safe wait time before we wink to start ANI spill */
 
 	unsigned int answeronpolarityswitch:1;
+	unsigned int calledsubscriberheld:1;	/*!< TRUE if a single incoming call can hold an FXS channel */
 	unsigned int callreturn:1;
 	unsigned int cancallforward:1;
 	unsigned int canpark:1;
 	unsigned int dahditrcallerid:1;			/*!< should we use the callerid from incoming call on dahdi transfer or not */
 	unsigned int hanguponpolarityswitch:1;
 	unsigned int immediate:1;
+	unsigned int immediatering:1;			/*!< TRUE if ringing should be provided for immediate execution */
+	unsigned int lastnumredial:1;			/*!< TRUE if last number redial allowed */
 	unsigned int permcallwaiting:1;			/*!< TRUE if call waiting is enabled. (Configured option) */
+	unsigned int callwaitingdeluxe:1;		/*!< TRUE if Call Waiting Deluxe options are available */
 	unsigned int permhidecallerid:1;		/*!< Whether to hide our outgoing caller ID or not */
 	unsigned int pulse:1;
 	unsigned int threewaycalling:1;
+	unsigned int threewaysilenthold:1;		/*!< Whether to time out a three-way dial tone to silence */
 	unsigned int transfer:1;
 	unsigned int transfertobusy:1;			/*!< allow flash-transfers to busy channels */
 	unsigned int use_callerid:1;			/*!< Whether or not to use caller id on this channel */
@@ -308,6 +320,7 @@ struct analog_pvt {
 	int channel;					/*!< Channel Number */
 
 	enum analog_sigtype outsigmod;
+	enum analog_dialmode dialmode;	/*!< Which of pulse and/or tone dialing to support */
 	int echotraining;
 	int cid_signalling;				/*!< Asterisk callerid type we're using */
 	int polarityonanswerdelay;
@@ -320,6 +333,7 @@ struct analog_pvt {
 
 	/* XXX: All variables after this are internal */
 	unsigned int callwaiting:1;		/*!< TRUE if call waiting is enabled. (Active option) */
+	unsigned int cshactive:1;		/*!< TRUE if FXS channel is currently held by an incoming call */
 	unsigned int dialednone:1;
 	unsigned int dialing:1;			/*!< TRUE if in the process of dialing digits or sending something */
 	unsigned int dnd:1;				/*!< TRUE if Do-Not-Disturb is enabled. */
@@ -335,11 +349,21 @@ struct analog_pvt {
 	 */
 	unsigned int callwaitcas:1;
 
+	/*!
+	 * \brief TRUE if a Call Waiting Deluxe action is currently pending.
+	 */
+	unsigned int callwaitingdeluxepending:1;
+
+	unsigned int call_qualifier:1;	/*!< Call qualifier delivery */
+
 	char callwait_num[AST_MAX_EXTENSION];
 	char callwait_name[AST_MAX_EXTENSION];
 	char lastcid_num[AST_MAX_EXTENSION];
 	char lastcid_name[AST_MAX_EXTENSION];
+	char lastexten[AST_MAX_EXTENSION];	/*!< Last number dialed */
 	struct ast_party_caller caller;
+	int redirecting_reason;			/*!< Redirecting reason */
+
 	int cidrings;					/*!< Which ring to deliver CID on */
 	char echorest[20];
 	int polarity;
@@ -381,6 +405,8 @@ int analog_available(struct analog_pvt *p);
 void *analog_handle_init_event(struct analog_pvt *i, int event);
 
 int analog_config_complete(struct analog_pvt *p);
+
+int analog_callwaiting_deluxe(struct analog_pvt *p, int option);
 
 void analog_handle_dtmf(struct analog_pvt *p, struct ast_channel *ast, enum analog_sub index, struct ast_frame **dest);
 

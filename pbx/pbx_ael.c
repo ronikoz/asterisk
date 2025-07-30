@@ -49,6 +49,9 @@
 
 /*** DOCUMENTATION
 	<application name="AELSub" language="en_US">
+		<since>
+			<version>10.0.0</version>
+		</since>
 		<synopsis>
 			Launch subroutine built with AEL
 		</synopsis>
@@ -98,10 +101,8 @@ void check_pval_item(pval *item, struct argapp *apps, int in_globals);
 void check_switch_expr(pval *item, struct argapp *apps);
 void ast_expr_register_extra_error_info(char *errmsg);
 void ast_expr_clear_extra_error_info(void);
-struct pval *find_macro(char *name);
 struct pval *find_context(char *name);
 struct pval *find_context(char *name);
-struct pval *find_macro(char *name);
 struct ael_priority *new_prio(void);
 struct ael_extension *new_exten(void);
 void destroy_extensions(struct ael_extension *exten);
@@ -199,10 +200,10 @@ static char *handle_cli_ael_set_debug(struct ast_cli_entry *e, int cmd, struct a
 {
 	switch (cmd) {
 	case CLI_INIT:
-		e->command = "ael set debug {read|tokens|macros|contexts|off}";
+		e->command = "ael set debug {read|tokens|contexts|off}";
 		e->usage =
-			"Usage: ael set debug {read|tokens|macros|contexts|off}\n"
-			"       Enable AEL read, token, macro, or context debugging,\n"
+			"Usage: ael set debug {read|tokens|contexts|off}\n"
+			"       Enable AEL read, token, or context debugging,\n"
 			"       or disable all AEL debugging messages.  Note: this\n"
 			"       currently does nothing.\n";
 		return NULL;
@@ -217,8 +218,6 @@ static char *handle_cli_ael_set_debug(struct ast_cli_entry *e, int cmd, struct a
 		aeldebug |= DEBUG_READ;
 	else if (!strcasecmp(a->argv[3], "tokens"))
 		aeldebug |= DEBUG_TOKENS;
-	else if (!strcasecmp(a->argv[3], "macros"))
-		aeldebug |= DEBUG_MACROS;
 	else if (!strcasecmp(a->argv[3], "contexts"))
 		aeldebug |= DEBUG_CONTEXTS;
 	else if (!strcasecmp(a->argv[3], "off"))
@@ -271,11 +270,21 @@ static int unload_module(void)
 
 static int load_module(void)
 {
+	int pbx_load_res = AST_MODULE_LOAD_SUCCESS;
+
 	ast_cli_register_multiple(cli_ael, ARRAY_LEN(cli_ael));
 #ifndef STANDALONE
 	ast_register_application_xml(aelsub, aelsub_exec);
 #endif
-	return (pbx_load_module());
+	pbx_load_res = pbx_load_module();
+	if (AST_MODULE_LOAD_SUCCESS != pbx_load_res) {
+#ifndef STANDALONE
+		ast_unregister_application(aelsub);
+#endif
+		ast_cli_unregister_multiple(cli_ael, ARRAY_LEN(cli_ael));
+	}
+
+	return pbx_load_res;
 }
 
 static int reload(void)

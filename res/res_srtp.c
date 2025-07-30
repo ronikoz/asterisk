@@ -35,7 +35,7 @@
 	<support_level>core</support_level>
 ***/
 
-/* See https://wiki.asterisk.org/wiki/display/AST/Secure+Calling */
+/* See https://docs.asterisk.org/Deployment/Secure-Calling/ */
 
 #include "asterisk.h"                   /* for NULL, size_t, memcpy, etc */
 
@@ -957,7 +957,7 @@ static int res_sdp_crypto_parse_offer(struct ast_rtp_instance *rtp, struct ast_s
 		key_len_expected = AES_256_GCM_KEYSIZE_WSALT;
 #endif
 	} else {
-		ast_verb(1, "Unsupported crypto suite: %s\n", suite);
+		ast_debug(3, "Unsupported crypto suite: %s\n", suite);
 		return -1;
 	}
 

@@ -39,6 +39,9 @@
 
 /*** DOCUMENTATION
 	<function name="AES_ENCRYPT" language="en_US">
+		<since>
+			<version>1.6.1.0</version>
+		</since>
 		<synopsis>
 			Encrypt a string with AES given a 16 character key.
 		</synopsis>
@@ -60,6 +63,9 @@
 		</see-also>
 	</function>
 	<function name="AES_DECRYPT" language="en_US">
+		<since>
+			<version>1.6.1.0</version>
+		</since>
 		<synopsis>
 			Decrypt a string encoded in base64 with AES given a 16 character key.
 		</synopsis>

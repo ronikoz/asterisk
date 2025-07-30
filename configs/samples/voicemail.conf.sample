@@ -4,10 +4,14 @@
 
 ; ********* NOTICE ************************************************************
 ;
-; NOTE: Asterisk has to edit this file to change a user's password.  This does
-; not currently work with the "#include <file>" directive for Asterisk
-; configuration files, nor when using realtime static configuration.
-; Do not use them with this configuration file.
+; NOTE: Asterisk has to edit this file to change a user's password, so
+; do not use realtime static configuration with this file.
+; To avoid requiring config updates on password updates, you could use the
+; passwordlocation option to store passwords separately.
+;
+; If your "source of truth" for voicemail passwords is elsewhere, you should
+; use the externpassnotify option to notify whatever stores the passwords
+; (e.g. external database) when there are changes, to keep it synchronized.
 ;
 ; NOTE: Mailboxes defined by app_voicemail MUST be referenced by the rest
 ; of the system as mailbox@context.  The rest of the system cannot add
@@ -67,11 +71,6 @@ maxlogins=3
 ; Forward an urgent message as an urgent message.  Defaults to no so
 ; sender can set the urgency on the envelope of the forwarded message.
 ;forward_urgent_auto=no
-;
-; User context is where entries from users.conf are registered.  The
-; default value is 'default'
-;
-;userscontext=default
 ;
 ; Aliases allow a mailbox to be referenced by an alias.  The aliases are
 ; specified in the special context named here.  There is no default.
@@ -134,12 +133,93 @@ maxlogins=3
 ;fromstring=The Asterisk PBX
 ; Permit finding entries for forward/compose from the directory
 ;usedirectory=yes
+
+; -----------------------------------------------------------------------------
+; ODBC storage configuration
+; -----------------------------------------------------------------------------
 ; Voicemail can be stored in a database using the ODBC driver.
-; The value of odbcstorage is the database connection configured
-; in res_odbc.conf.
-;odbcstorage=asterisk
-; The default table for ODBC voicemail storage is voicemessages.
-;odbctable=voicemessages
+;
+; Storage database:
+; The value of odbcstorage is the database connection configured in
+; res_odbc.conf.  This may be different from the name of the ODBC DSN
+; in /etc/odbc.ini which, in turn, may be different from the name of the
+; actual database.  If you used the voicemail.ini.sample alembic script
+; located in contrib/ast-db-manage to create the database, the database
+; name is 'voicemail' and the table name is 'voicemail_messages' so you'd
+; need to ensure that /etc/odbc.ini has a DSN entry that points to that
+; database and res_odbc.conf has an entry that points to that ODBC DSN.
+; For historical compatibility, the default value of odbcstorage is
+; actually 'asterisk' because originally voicemail messages were stored
+; in the same database as the rest of the Asterisk configuration.
+
+;odbcstorage = voicemail
+
+; Storage table:
+; The name of the table in which voicemail messages are stored.
+; If you used the voicemail.ini.sample alembic script located in
+; contrib/ast-db-manage to create the database, the table name
+; is 'voicemail_messages'.  For historical compatibility however,
+; the default value of odbctable is 'voicemessages' because originally
+; voicemail messages were stored in that table in the same database
+; as the rest of the Asterisk configuration.
+
+;odbctable = voicemail_messages
+
+; Audio storage location:
+; By default, voicemail and prompt audio files are stored as BLOBs
+; in the database along with the message metadata. If you would
+; prefer to store the audio files on disk and only store the message
+; metadata in the database, set the following option to 'yes'.
+; This can be advantageous in some scenarios, such as when the
+; database is on a separate server from the Asterisk server and
+; network latency and size is a concern or when the database is
+; not well-suited for storing large binary objects.  It can also
+; be useful when you want to use the same voicemail storage
+; configuration for multiple Asterisk servers.  In this situation
+; you can have all the servers use a single shared network file
+; system to store the audio files and use the same database for fast
+; access to the message metadata.
+
+; If you set this option to "yes", new messages and greetings will
+; have their audio kept on disk but the audio for existing messages
+; and greetings will remain in the database until the next time
+; they are played.  At that time, the audio will be moved to disk
+; and erased from the database.
+
+; If you set this option to "no" after you've already stored messages
+; or greetings with it set to "yes", new messages and greetings will
+; have their audio stored in the database but the audio for existing
+; messages and greetings will remain on disk until the next time they
+; are played.  At that time, the audio will be moved to the database
+; and erased from the disk.
+
+; WARNING: Before changing this option from "yes" to "no" or vice
+; versa make sure you have complete backups of your voicemail
+; database and audio files.
+
+; WARNING: If you set this option to "yes" and then later set it
+; to "no", you must ensure that the audio files are not deleted
+; from the disk until you are certain that they have been moved
+; to the database.  If you delete the audio files before they are
+; moved to the database, the messages will be lost.
+
+; WARNING: YOU MUST NOT DOWNGRADE ASTERISK TO A VERSION THAT DOESN'T
+; UNDERSTAND THIS OPTION if you've set this option to "yes" previously
+; and there are audio files stored on disk.  If those files are
+; accessed by a version of Asterisk that doesn't understand this
+; option, the files will be corrupted and the messages will be lost.
+; If you do need to downgrade in this situation, you'll have to write
+; your own script to move the audio files back into the 'recording'
+; column of the database table.  If you record multiple formats,
+; the file to write to the 'recording' column will be the first format
+; listed in the 'format' option in this config file.  If the first
+; format is 'wav49', the file to add to the database will be the one
+; with the 'WAV' extension.
+
+; odbc_audio_on_disk = no
+
+; -----------------------------------------------------------------------------
+
 ;
 ; Change the from, body and/or subject, variables:
 ;     VM_NAME, VM_DUR, VM_MSGNUM, VM_MAILBOX, VM_CALLERID, VM_CIDNUM,
@@ -262,6 +342,8 @@ pagerdateformat=%A, %B %d, %Y at %r
 			; option lets you customize the format sent to particular mailboxes.
 			; Useful if Windows users want wav49, but Linux users want gsm.
 			; [per-mailbox only]
+; attachextrecs=no	; Whether to attach recordings that are externally added to mailboxes,
+			; such as through MixMonitor. Default is no.
 ; saycid=yes 		; Say the caller id information before the message. If not described,
 			;     or set to no, it will be in the envelope. When enabled, if a recorded file
 			;     with the same name as the caller id exists in
@@ -287,7 +369,8 @@ sendvoicemail=yes ; Allow the user to compose and send a voicemail while inside
 			;     if not listed, calling the sender back will not be permitted
 ; exitcontext=fromvm    ; Context to go to on user exit such as * or 0
                         ;     The default is the current context.
-; review=yes 		; Allow sender to review/rerecord their message before saving it [OFF by default
+; review=yes 		; Allow sender to review/rerecord their message before saving it [OFF by default]
+; leaveurgent=yes   ; Allow senders to leave messages that are marked as 'Urgent' [ON by default]
 ; operator=yes      ; Allow sender to hit 0 before/after/during leaving a voicemail to
                     ; reach an operator.  This option REQUIRES an 'o' extension in the
                     ; same context (or in exitcontext, if set), as that is where the
@@ -323,7 +406,7 @@ sendvoicemail=yes ; Allow the user to compose and send a voicemail while inside
                     ; Supported options:
                     ;   voicemail.conf:
                     ;     This is the default option.  The secret is read from
-                    ;     and written to voicemail.conf (or users.conf).
+                    ;     and written to voicemail.conf.
                     ;   spooldir:
                     ;     The secret is stored in a separate file in the user's
                     ;     voicemail spool directory in a file named secret.conf.
@@ -331,7 +414,7 @@ sendvoicemail=yes ; Allow the user to compose and send a voicemail while inside
                     ;     permitted to access Asterisk's spool directory as the
                     ;     secret is stored in plain text.  If a secret is not
                     ;     found in this directory, the password in
-                    ;     voicemail.conf (or users.conf) will be used.
+                    ;     voicemail.conf will be used.
                     ; Note that this option does not affect password storage for
                     ; realtime users, which are still stored in the realtime
                     ; backend.

@@ -41,6 +41,9 @@
 
 /*** DOCUMENTATION
 	<application name="Morsecode" language="en_US">
+		<since>
+			<version>1.4.0</version>
+		</since>
 		<synopsis>
 			Plays morse code.
 		</synopsis>
@@ -51,7 +54,7 @@
 		</syntax>
 		<description>
 			<para>Plays the Morse code equivalent of the passed string.</para>
-			<para>This application does not automatically answer and should be preceeded by
+			<para>This application does not automatically answer and should be preceded by
 			an application such as Answer() or Progress().</para>
 			<para>This application uses the following variables:</para>
 			<variablelist>

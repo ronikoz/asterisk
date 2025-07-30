@@ -41,6 +41,9 @@
 
 /*** DOCUMENTATION
 	<manager name="PJSIPShowRegistrationsInbound" language="en_US">
+		<since>
+			<version>12.0.0</version>
+		</since>
 		<synopsis>
 			Lists PJSIP inbound registrations.
 		</synopsis>
@@ -63,6 +66,10 @@
 		</see-also>
 	</manager>
 	<manager name="PJSIPShowRegistrationInboundContactStatuses" language="en_US">
+		<since>
+			<version>14.3.0</version>
+			<version>13.14.0</version>
+		</since>
 		<synopsis>
 			Lists ContactStatuses for PJSIP inbound registrations.
 		</synopsis>
@@ -75,6 +82,71 @@
 			</para>
 		</description>
 	</manager>
+	<managerEvent language="en_US" name="InboundRegistrationDetail">
+		<managerEventInstance class="EVENT_FLAG_COMMAND">
+			<since>
+				<version>12.0.0</version>
+			</since>
+			<synopsis>Provide details about the Address of Record (AoR) associated
+			with a registration.</synopsis>
+			<syntax>
+				<parameter name="ObjectType">
+					<para>The object's type. This will always be 'aor'.</para>
+				</parameter>
+				<parameter name="ObjectName">
+					<para>The name of this object.</para>
+				</parameter>
+				<parameter name="MinimumExpiration">
+					<para><xi:include xpointer="xpointer(/docs/configInfo[@name='res_pjsip']/configFile[@name='pjsip.conf']/configObject[@name='aor']/configOption[@name='minimum_expiration']/synopsis/node())"/></para>
+				</parameter>
+				<parameter name="DefaultExpiration">
+					<para><xi:include xpointer="xpointer(/docs/configInfo[@name='res_pjsip']/configFile[@name='pjsip.conf']/configObject[@name='aor']/configOption[@name='default_expiration']/synopsis/node())"/></para>
+				</parameter>
+				<parameter name="QualifyTimeout">
+					<para><xi:include xpointer="xpointer(/docs/configInfo[@name='res_pjsip']/configFile[@name='pjsip.conf']/configObject[@name='aor']/configOption[@name='qualify_timeout']/synopsis/node())"/></para>
+				</parameter>
+				<parameter name="Qualify2xxOnly">
+					<para><xi:include xpointer="xpointer(/docs/configInfo[@name='res_pjsip']/configFile[@name='pjsip.conf']/configObject[@name='aor']/configOption[@name='qualify_2xx_only']/synopsis/node())"/></para>
+				</parameter>
+				<parameter name="Mailboxes">
+					<para><xi:include xpointer="xpointer(/docs/configInfo[@name='res_pjsip']/configFile[@name='pjsip.conf']/configObject[@name='aor']/configOption[@name='mailboxes']/synopsis/node())"/></para>
+				</parameter>
+				<parameter name="SupportPath">
+					<para><xi:include xpointer="xpointer(/docs/configInfo[@name='res_pjsip']/configFile[@name='pjsip.conf']/configObject[@name='aor']/configOption[@name='support_path']/synopsis/node())"/></para>
+				</parameter>
+				<parameter name="RemoveUnavailable">
+					<para><xi:include xpointer="xpointer(/docs/configInfo[@name='res_pjsip']/configFile[@name='pjsip.conf']/configObject[@name='aor']/configOption[@name='remove_unavailable']/synopsis/node())"/></para>
+				</parameter>
+				<parameter name="VoicemailExtension">
+					<para><xi:include xpointer="xpointer(/docs/configInfo[@name='res_pjsip']/configFile[@name='pjsip.conf']/configObject[@name='aor']/configOption[@name='voicemail_extension']/synopsis/node())"/></para>
+				</parameter>
+				<parameter name="MaxContacts">
+					<para><xi:include xpointer="xpointer(/docs/configInfo[@name='res_pjsip']/configFile[@name='pjsip.conf']/configObject[@name='aor']/configOption[@name='max_contacts']/synopsis/node())"/></para>
+				</parameter>
+				<parameter name="AuthenticateQualify">
+					<para><xi:include xpointer="xpointer(/docs/configInfo[@name='res_pjsip']/configFile[@name='pjsip.conf']/configObject[@name='aor']/configOption[@name='authenticate_qualify']/synopsis/node())"/></para>
+				</parameter>
+				<parameter name="MaximumExpiration">
+					<para><xi:include xpointer="xpointer(/docs/configInfo[@name='res_pjsip']/configFile[@name='pjsip.conf']/configObject[@name='aor']/configOption[@name='maximum_expiration']/synopsis/node())"/></para>
+				</parameter>
+				<parameter name="QualifyFrequency">
+					<para><xi:include xpointer="xpointer(/docs/configInfo[@name='res_pjsip']/configFile[@name='pjsip.conf']/configObject[@name='aor']/configOption[@name='qualify_frequency']/synopsis/node())"/></para>
+				</parameter>
+				<parameter name="RemoveExisting">
+					<para><xi:include xpointer="xpointer(/docs/configInfo[@name='res_pjsip']/configFile[@name='pjsip.conf']/configObject[@name='aor']/configOption[@name='remove_existing']/synopsis/node())"/></para>
+				</parameter>
+				<parameter name="OutboundProxy">
+					<para><xi:include xpointer="xpointer(/docs/configInfo[@name='res_pjsip']/configFile[@name='pjsip.conf']/configObject[@name='aor']/configOption[@name='outbound_proxy']/synopsis/node())"/></para>
+				</parameter>
+				<parameter name="Contacts">
+					<para>A comma-separated list of contacts associated with this AoR.</para>
+				</parameter>
+				<parameter name="Contact">
+					<para>The specific contact associated with this registration.</para>
+				</parameter>
+			</syntax>
+		</managerEventInstance>
+	</managerEvent>
  ***/
 
 static int pj_max_hostname = PJ_MAX_HOSTNAME;
@@ -913,6 +985,7 @@ static void register_aor_core(pjsip_rx_data *rdata,
 			contact_update->expiration_time = ast_tvadd(ast_tvnow(), ast_samp2tv(expiration, 1));
 			contact_update->qualify_frequency = aor->qualify_frequency;
 			contact_update->authenticate_qualify = aor->authenticate_qualify;
+			contact_update->qualify_2xx_only = aor->qualify_2xx_only;
 			if (path_str) {
 				ast_string_field_set(contact_update, path, ast_str_buffer(path_str));
 			}

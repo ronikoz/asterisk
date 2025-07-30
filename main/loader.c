@@ -58,6 +58,9 @@
 /*** DOCUMENTATION
 	<managerEvent language="en_US" name="Reload">
 		<managerEventInstance class="EVENT_FLAG_SYSTEM">
+			<since>
+				<version>12.0.0</version>
+			</since>
 			<synopsis>Raised when a module has been reloaded in Asterisk.</synopsis>
 			<syntax>
 				<parameter name="Module">
@@ -82,6 +85,9 @@
 	</managerEvent>
 	<managerEvent language="en_US" name="Load">
 		<managerEventInstance class="EVENT_FLAG_SYSTEM">
+			<since>
+				<version>16.0.0</version>
+			</since>
 			<synopsis>Raised when a module has been loaded in Asterisk.</synopsis>
 			<syntax>
 				<parameter name="Module">
@@ -100,6 +106,9 @@
 	</managerEvent>
 	<managerEvent language="en_US" name="Unload">
 		<managerEventInstance class="EVENT_FLAG_SYSTEM">
+			<since>
+				<version>16.0.0</version>
+			</since>
 			<synopsis>Raised when a module has been unloaded in Asterisk.</synopsis>
 			<syntax>
 				<parameter name="Module">
@@ -885,17 +894,7 @@ static int printdigest(const unsigned char *d)
 	return 0;
 }
 
-static int key_matches(const unsigned char *key1, const unsigned char *key2)
-{
-	int x;
-
-	for (x = 0; x < 16; x++) {
-		if (key1[x] != key2[x])
-			return 0;
-	}
-
-	return 1;
-}
+#define key_matches(a, b) (memcmp((a), (b), 16) == 0)
 
 static int verify_key(const unsigned char *key)
 {
@@ -1202,7 +1201,7 @@ int modules_shutdown(void)
 			}
 			AST_DLLIST_REMOVE_CURRENT(entry);
 			if (mod->flags.running && !mod->flags.declined && mod->info->unload) {
-				ast_verb(1, "Unloading %s\n", mod->resource);
+				ast_verb(4, "Unloading %s\n", mod->resource);
 				mod->info->unload();
 			}
 			module_destroy(mod);
@@ -1226,7 +1225,73 @@ int modules_shutdown(void)
 	return !res;
 }
 
-int ast_unload_resource(const char *resource_name, enum ast_module_unload_mode force)
+/*!
+ * \brief Whether or not this module should be able to be unloaded successfully,
+ *        if we recursively unload any modules that are dependent on it.
+ * \note module_list should be locked when calling this
+ * \retval 0 if not, 1 if likely possible
+ */
+static int graceful_unload_possible(struct ast_module *target, struct ast_vector_const_string *dependents)
+{
+	struct ast_module *mod;
+	int usecount = target->usecount;
+
+	/* Check the reffed_deps of each module to see if we're one of them. */
+	AST_DLLIST_TRAVERSE(&module_list, mod, entry) {
+		if (AST_VECTOR_GET_CMP(&mod->reffed_deps, target, AST_VECTOR_ELEM_DEFAULT_CMP)) {
+			const char *name;
+			/* This module is dependent on the target.
+			 * If we can unload this module gracefully,
+			 * then that would decrement our use count.
+			 * If any single module could not be unloaded gracefully,
+			 * then we don't proceed. */
+			int unloadable;
+			if (AST_VECTOR_GET_CMP(dependents, ast_module_name(mod), !strcasecmp)) {
+				/* Already in our list, we already checked this module,
+				 * and we gave it the green light. */
+				ast_debug(3, "Skipping duplicate dependent %s\n", ast_module_name(mod));
+				if (!--usecount) {
+					break;
+				}
+				continue;
+			}
+			unloadable = graceful_unload_possible(mod, dependents);
+			if (!unloadable) {
+				ast_log(LOG_NOTICE, "Can't unload %s right now because %s is dependent on it\n", ast_module_name(target), ast_module_name(mod));
+				return 0;
+			}
+			/* Insert at beginning, so later if we're loading modules again automatically, we can do so in the same order. */
+			name = ast_strdup(ast_module_name(mod));
+			if (!name) {
+				return 0;
+			}
+			ast_debug(3, "Found new dependent %s\n", ast_module_name(mod));
+			if (AST_VECTOR_INSERT_AT(dependents, 0, name)) {
+				ast_log(LOG_ERROR, "Failed to add module '%s' to vector\n", ast_module_name(mod));
+				return 0;
+			}
+			if (!--usecount) {
+				break;
+			}
+		}
+	}
+
+	if (usecount) {
+		ast_log(LOG_NOTICE, "Module %s cannot be unloaded (would still have use count %d/%d after unloading dependents)\n", ast_module_name(target), usecount, target->usecount);
+		return 0;
+	}
+	return 1;
+}
+
+/*!
+ * \brief Unload a resource
+ * \param resource_name Module name
+ * \param force
+ * \param recursive Whether to attempt to recursively unload dependents of this module and load them again afterwards
+ * \param dependents. Can be NULL if autounload is 0.
+ * \retval 0 on success, -1 on failure
+ */
+static int auto_unload_resource(const char *resource_name, enum ast_module_unload_mode force, int recursive, struct ast_vector_const_string *dependents)
 {
 	struct ast_module *mod;
 	int res = -1;
@@ -1241,17 +1306,68 @@ int ast_unload_resource(const char *resource_name, enum ast_module_unload_mode f
 	}
 
 	if (!mod->flags.running || mod->flags.declined) {
-		ast_log(LOG_WARNING, "Unload failed, '%s' is not loaded.\n", resource_name);
-		error = 1;
+		/* If the user asks to unload a module that didn't load, obey.
+		 * Otherwise, we never dlclose() modules that fail to load,
+		 * which means if the module (shared object) is updated,
+		 * we can't load the updated module since we never dlclose()'d it.
+		 * Accordingly, obey the unload request so we can load the module
+		 * from scratch next time.
+		 */
+		ast_log(LOG_NOTICE, "Unloading module '%s' that previously declined to load\n", resource_name);
+		error = 0;
+		res = 0;
+		goto exit; /* Skip all the intervening !error checks, only the last one is relevant. */
+	}
+
+	if (!error && mod->usecount > 0 && recursive) {
+		/* Try automatically unloading all modules dependent on the module we're trying to unload,
+		 * and then, optionally, load them back again if we end up loading this module again.
+		 * If any modules that have us as a dependency can't be unloaded, for whatever reason,
+		 * then the entire unload operation will fail, so to try to make this an atomic operation
+		 * and avoid leaving modules in a partial unload state, first check if we think we're going
+		 * to be able to pull this off, and if not, abort.
+		 *
+		 * A race condition is technically still possible, if some depending module suddenly goes in use
+		 * between this check and trying to unload it, but this takes care of the majority of
+		 * easy-to-avoid cases that would fail eventually anyways.
+		 *
+		 * Note that we can encounter false negatives (e.g. unloading all the dependents would allow
+		 * a module to unload, but graceful_unload_possible returns 0). This is because it's only
+		 * checking direct module dependencies; other dependencies caused by a module registering
+		 * a resource that cause its ref count to get bumped aren't accounted for here.
+		 */
+		if (graceful_unload_possible(mod, dependents)) {
+			int i, res = 0;
+			size_t num_deps = AST_VECTOR_SIZE(dependents);
+			ast_debug(1, "%lu module%s will need to be unloaded\n", AST_VECTOR_SIZE(dependents), ESS(AST_VECTOR_SIZE(dependents)));
+			/* Unload from the end, since the last module was the first one added, which means it isn't a dependency of anything else. */
+			for (i = AST_VECTOR_SIZE(dependents) - 1; i >= 0; i--) {
+				const char *depname = AST_VECTOR_GET(dependents, i);
+				res = ast_unload_resource(depname, force);
+				if (res) {
+					ast_log(LOG_WARNING, "Failed to unload %lu module%s automatically (%s could not be unloaded)\n", num_deps, ESS(num_deps), depname);
+					/* To be polite, load modules that we already unloaded,
+					 * to try to leave things the way they were when we started. */
+					for (i++; i < num_deps; i++) {
+						const char *depname = AST_VECTOR_GET(dependents, i);
+						res = ast_load_resource(depname);
+						if (res) {
+							ast_log(LOG_WARNING, "Could not load module '%s' again automatically\n", depname);
+						}
+					}
+					break;
+				}
+			}
+			/* Either we failed, or we successfully unloaded everything.
+			 * If we succeeded, we can now proceed and unload ourselves. */
+		}
 	}
 
 	if (!error && (mod->usecount > 0)) {
-		if (force)
-			ast_log(LOG_WARNING, "Warning:  Forcing removal of module '%s' with use count %d\n",
-				resource_name, mod->usecount);
-		else {
-			ast_log(LOG_WARNING, "Soft unload failed, '%s' has use count %d\n", resource_name,
-				mod->usecount);
+		if (force) {
+			ast_log(LOG_WARNING, "Warning:  Forcing removal of module '%s' with use count %d\n", resource_name, mod->usecount);
+		} else {
+			ast_log(LOG_WARNING, "%s unload failed, '%s' has use count %d\n", recursive ? "Recursive soft" : "Soft", resource_name, mod->usecount);
 			error = 1;
 		}
 	}
@@ -1260,7 +1376,7 @@ int ast_unload_resource(const char *resource_name, enum ast_module_unload_mode f
 		/* Request any channels attached to the module to hangup. */
 		__ast_module_user_hangup_all(mod);
 
-		ast_verb(1, "Unloading %s\n", mod->resource);
+		ast_verb(4, "Unloading %s\n", mod->resource);
 		res = mod->info->unload();
 		if (res) {
 			ast_log(LOG_WARNING, "Firm unload failed for %s\n", resource_name);
@@ -1284,6 +1400,7 @@ int ast_unload_resource(const char *resource_name, enum ast_module_unload_mode f
 	if (!error)
 		mod->flags.running = mod->flags.declined = 0;
 
+exit:
 	AST_DLLIST_UNLOCK(&module_list);
 
 	if (!error) {
@@ -1294,6 +1411,52 @@ int ast_unload_resource(const char *resource_name, enum ast_module_unload_mode f
 	}
 
 	return res;
+}
+
+int ast_refresh_resource(const char *resource_name, enum ast_module_unload_mode force, int recursive)
+{
+	if (recursive) {
+		/* Recursively unload dependents of this module and then load them back again */
+		int res, i;
+		struct ast_vector_const_string dependents;
+		AST_VECTOR_INIT(&dependents, 0);
+		res = auto_unload_resource(resource_name, force, recursive, &dependents);
+		if (res) {
+			AST_VECTOR_FREE(&dependents);
+			return 1;
+		}
+		/* Start by loading the target again. */
+		if (ast_load_resource(resource_name)) {
+			ast_log(LOG_WARNING, "Failed to load module '%s' again automatically\n", resource_name);
+			AST_VECTOR_FREE(&dependents);
+			return -1;
+		}
+		res = 0;
+		/* Finally, load again any modules we had to unload in order to refresh the target.
+		 * We must load modules in the reverse order that we unloaded them,
+		 * to preserve dependency requirements. */
+		for (i = 0; i < AST_VECTOR_SIZE(&dependents); i++) {
+			const char *depname = AST_VECTOR_GET(&dependents, i);
+			int mres = ast_load_resource(depname);
+			if (mres) {
+				ast_log(LOG_WARNING, "Could not load module '%s' again automatically\n", depname);
+			}
+			res |= mres;
+		}
+		AST_VECTOR_FREE(&dependents);
+		return res ? -1 : 0;
+	}
+
+	/* Simple case: just unload and load the module again */
+	if (ast_unload_resource(resource_name, force)) {
+		return 1;
+	}
+	return ast_load_resource(resource_name);
+}
+
+int ast_unload_resource(const char *resource_name, enum ast_module_unload_mode force)
+{
+	return auto_unload_resource(resource_name, force, 0, NULL);
 }
 
 static int module_matches_helper_type(struct ast_module *mod, enum ast_module_helper_type type)
@@ -1379,6 +1542,11 @@ char *ast_module_helper(const char *line, const char *word, int pos, int state, 
 	char *ret = NULL;
 
 	if (pos != rpos) {
+		return NULL;
+	}
+
+	/* Tab completion can't be used during startup, or CLI and loader will deadlock. */
+	if (!ast_test_flag(&ast_options, AST_OPT_FLAG_FULLY_BOOTED)) {
 		return NULL;
 	}
 
@@ -1578,7 +1746,7 @@ enum ast_module_reload_result ast_module_reload(const char *name)
 		res = AST_MODULE_RELOAD_IN_PROGRESS;
 		goto module_reload_exit;
 	}
-	ast_sd_notify("RELOAD=1");
+	ast_sd_notify("RELOADING=1");
 	ast_lastreloadtime = ast_tvnow();
 
 	if (ast_opt_lock_confdir) {
@@ -1708,16 +1876,16 @@ static enum ast_module_load_result start_resource(struct ast_module *mod)
 	}
 
 	if (!ast_fully_booted) {
-		ast_verb(1, "Loading %s.\n", mod->resource);
+		ast_verb(4, "Loading %s.\n", mod->resource);
 	}
 	res = mod->info->load();
 
 	switch (res) {
 	case AST_MODULE_LOAD_SUCCESS:
 		if (!ast_fully_booted) {
-			ast_verb(2, "%s => (%s)\n", mod->resource, term_color(tmp, mod->info->description, COLOR_BROWN, COLOR_BLACK, sizeof(tmp)));
+			ast_verb(5, "%s => (%s)\n", mod->resource, term_color(tmp, mod->info->description, COLOR_BROWN, COLOR_BLACK, sizeof(tmp)));
 		} else {
-			ast_verb(1, "Loaded %s => (%s)\n", mod->resource, mod->info->description);
+			ast_verb(4, "Loaded %s => (%s)\n", mod->resource, mod->info->description);
 		}
 
 		mod->flags.running = 1;
@@ -1816,9 +1984,20 @@ prestart_error:
 	return res;
 }
 
-int ast_load_resource(const char *resource_name)
+enum ast_module_load_result ast_load_resource(const char *resource_name)
 {
-	int res;
+	struct ast_module *mod;
+	enum ast_module_load_result res;
+
+	/* If we're trying to load a module that previously declined to load,
+	 * transparently unload it first so we dlclose, then dlopen it afresh.
+	 * Otherwise, we won't actually load a (potentially) updated module. */
+	mod = find_resource(resource_name, 0);
+	if (mod && mod->flags.declined) {
+		ast_debug(1, "Module %s previously declined to load, unloading it first before loading again\n", resource_name);
+		ast_unload_resource(resource_name, 0);
+	}
+
 	AST_DLLIST_LOCK(&module_list);
 	res = load_resource(resource_name, 0, NULL, 0, 0);
 	if (!res) {
@@ -2197,7 +2376,7 @@ static int loader_builtin_init(struct load_order *load_order)
 			continue;
 		}
 
-		/* Parse dependendencies from mod->info. */
+		/* Parse dependencies from mod->info. */
 		if (module_post_register(mod)) {
 			return -1;
 		}
@@ -2517,9 +2696,9 @@ done:
 	usElapsed = ast_tvdiff_us(end_time, start_time);
 
 #ifdef AST_XML_DOCS
-	ast_debug(1, "Loader time with AST_XML_DOCS: %ld.%06ld\n", usElapsed / 1000000, usElapsed % 1000000);
+	ast_debug(1, "Loader time with AST_XML_DOCS: %" PRId64 ".%06" PRId64 "\n", usElapsed / 1000000, usElapsed % 1000000);
 #else
-	ast_debug(1, "Loader time without AST_XML_DOCS: %ld.%06ld\n", usElapsed / 1000000, usElapsed % 1000000);
+	ast_debug(1, "Loader time without AST_XML_DOCS: %" PRId64 ".%06" PRId64 "\n", usElapsed / 1000000, usElapsed % 1000000);
 #endif
 
 	return res;

@@ -50,6 +50,9 @@
 
 /*** DOCUMENTATION
 	<function name="ENUMQUERY" language="en_US">
+		<since>
+			<version>1.6.0</version>
+		</since>
 		<synopsis>
 			Initiate an ENUM query.
 		</synopsis>
@@ -57,7 +60,7 @@
 			<parameter name="number" required="true" />
 			<parameter name="method-type">
 				<para>If no <replaceable>method-type</replaceable> is given, the default will be
-				<literal>sip</literal>.</para>
+				<literal>pjsip</literal>.</para>
 			</parameter>
 			<parameter name="zone-suffix">
 				<para>If no <replaceable>zone-suffix</replaceable> is given, the default will be
@@ -69,6 +72,9 @@
 		</description>
 	</function>
 	<function name="ENUMRESULT" language="en_US">
+		<since>
+			<version>1.6.0</version>
+		</since>
 		<synopsis>
 			Retrieve results from a ENUMQUERY.
 		</synopsis>
@@ -89,6 +95,9 @@
 		</description>
 	</function>
 	<function name="ENUMLOOKUP" language="en_US">
+		<since>
+			<version>1.2.0</version>
+		</since>
 		<synopsis>
 			General or specific querying of NAPTR records for ENUM or ENUM-like DNS pointers.
 		</synopsis>
@@ -96,7 +105,7 @@
 			<parameter name="number" required="true" />
 			<parameter name="method-type">
 				<para>If no <replaceable>method-type</replaceable> is given, the default will be
-                                <literal>sip</literal>.</para>
+                                <literal>pjsip</literal>.</para>
 			</parameter>
 			<parameter name="options">
 				<optionlist>
@@ -133,6 +142,9 @@
 		</description>
 	</function>
 	<function name="TXTCIDNAME" language="en_US">
+		<since>
+			<version>1.2.0</version>
+		</since>
 		<synopsis>
 			TXTCIDNAME looks up a caller name via DNS.
 		</synopsis>
@@ -185,7 +197,7 @@ static int function_enum(struct ast_channel *chan, const char *cmd, char *data,
 	if (args.tech && !ast_strlen_zero(args.tech)) {
 		ast_copy_string(tech,args.tech, sizeof(tech));
 	} else {
-		ast_copy_string(tech,"sip",sizeof(tech));
+		ast_copy_string(tech,"pjsip",sizeof(tech));
 	}
 
 	if (!args.zone) {
@@ -279,7 +291,7 @@ static int enum_query_read(struct ast_channel *chan, const char *cmd, char *data
 	if (!args.zone)
 		args.zone = "e164.zone";
 
-	ast_copy_string(tech, args.tech ? args.tech : "sip", sizeof(tech));
+	ast_copy_string(tech, args.tech ? args.tech : "pjsip", sizeof(tech));
 
 	if (!(erds = ast_calloc(1, sizeof(*erds))))
 		goto finish;

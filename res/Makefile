@@ -40,13 +40,10 @@ else
 ael/ael_lex.c:
 endif
 	$(ECHO_PREFIX) echo "   [FLEX] $< -> $@"
-	$(CMD_PREFIX) (cd ael; $(FLEX) ael.flex)
-	$(CMD_PREFIX) sed 's@#if __STDC_VERSION__ >= 199901L@#if !defined __STDC_VERSION__ || __STDC_VERSION__ >= 199901L@' $@ > $@.fix
 	$(CMD_PREFIX) echo "#define ASTMM_LIBC ASTMM_REDIRECT" > $@
 	$(CMD_PREFIX) echo "#include \"asterisk.h\"" >> $@
 	$(CMD_PREFIX) echo >> $@
-	$(CMD_PREFIX) cat $@.fix >> $@
-	$(CMD_PREFIX) rm $@.fix
+	$(CMD_PREFIX) $(FLEX) -t ael/ael.flex >> $@
 
 ifneq ($(findstring REBUILD_PARSERS,$(MENUSELECT_CFLAGS)),)
 ael/ael.tab.c ael/ael.tab.h: ael/ael.y
@@ -65,10 +62,15 @@ $(call MOD_ADD_C,res_parking,$(wildcard parking/*.c))
 $(call MOD_ADD_C,res_pjsip,$(wildcard res_pjsip/*.c))
 $(call MOD_ADD_C,res_pjsip_session,$(wildcard res_pjsip_session/*.c))
 $(call MOD_ADD_C,res_prometheus,$(wildcard prometheus/*.c))
-$(call MOD_ADD_C,res_ari,ari/cli.c ari/config.c ari/ari_websockets.c)
+$(call MOD_ADD_C,res_ari,ari/cli.c ari/config.c ari/ari_websockets.c ari/ari_websocket_requests.c)
 $(call MOD_ADD_C,res_ari_model,ari/ari_model_validators.c)
 $(call MOD_ADD_C,res_stasis_recording,stasis_recording/stored.c)
 $(call MOD_ADD_C,res_stir_shaken,$(wildcard res_stir_shaken/*.c))
+$(call MOD_ADD_C,res_aeap,$(wildcard res_aeap/*.c))
+$(call MOD_ADD_C,res_geolocation,$(wildcard res_geolocation/*.c))
+
+# These are the xml and xslt files to be embedded
+res_geolocation.so: res_geolocation/pidf_lo_test.o res_geolocation/pidf_to_eprofile.o res_geolocation/eprofile_to_pidf.o
 
 res_parking.o: _ASTCFLAGS+=$(AST_NO_FORMAT_TRUNCATION)
 snmp/agent.o: _ASTCFLAGS+=-fPIC
@@ -76,3 +78,4 @@ res_snmp.o: _ASTCFLAGS+=-fPIC
 
 # Dependencies for res_ari_*.so are generated, so they're in this file
 include ari.make
+

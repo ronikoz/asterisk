@@ -16,7 +16,7 @@
  * at the top of the source tree.
  *
  * Please follow coding guidelines
- * https://wiki.asterisk.org/wiki/display/AST/Coding+Guidelines
+ * https://docs.asterisk.org/Development/Policies-and-Procedures/Coding-Guidelines/
  */
 
 /*! \file
@@ -63,6 +63,9 @@
 
 /*** DOCUMENTATION
 	<application name="SkelGuessNumber" language="en_US">
+		<since>
+			<version>11.0.0</version>
+		</since>
 		<synopsis>
 			An example number guessing game
 		</synopsis>
@@ -88,42 +91,82 @@
 	<configInfo name="app_skel" language="en_US">
 		<configFile name="app_skel.conf">
 			<configObject name="globals">
+				<since>
+					<version>12.0.0</version>
+				</since>
 				<synopsis>Options that apply globally to app_skel</synopsis>
 				<configOption name="games">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>The number of games a single execution of SkelGuessNumber will play</synopsis>
 				</configOption>
 				<configOption name="cheat">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>Should the computer cheat?</synopsis>
 					<description><para>If enabled, the computer will ignore winning guesses.</para></description>
 				</configOption>
 			</configObject>
 			<configObject name="sounds">
+				<since>
+					<version>12.0.0</version>
+				</since>
 				<synopsis>Prompts for SkelGuessNumber to play</synopsis>
 				<configOption name="prompt" default="please-enter-your&amp;number&amp;queue-less-than">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>A prompt directing the user to enter a number less than the max number</synopsis>
 				</configOption>
 				<configOption name="wrong_guess" default="vm-pls-try-again">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>The sound file to play when a wrong guess is made</synopsis>
 				</configOption>
 				<configOption name="right_guess" default="auth-thankyou">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>The sound file to play when a correct guess is made</synopsis>
 				</configOption>
 				<configOption name="too_low">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>The sound file to play when a guess is too low</synopsis>
 				</configOption>
 				<configOption name="too_high">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>The sound file to play when a guess is too high</synopsis>
 				</configOption>
 				<configOption name="lose" default="vm-goodbye">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>The sound file to play when a player loses</synopsis>
 				</configOption>
 			</configObject>
 			<configObject name="level">
+				<since>
+					<version>12.0.0</version>
+				</since>
 				<synopsis>Defined levels for the SkelGuessNumber game</synopsis>
 				<configOption name="max_number">
+					<since>
+						<version>11.0.0</version>
+					</since>
 					<synopsis>The maximum in the range of numbers to guess (1 is the implied minimum)</synopsis>
 				</configOption>
 				<configOption name="max_guesses">
+					<since>
+						<version>11.22.0</version>
+						<version>13.9.0</version>
+					</since>
 					<synopsis>The maximum number of guesses before a game is considered lost</synopsis>
 				</configOption>
 			</configObject>
@@ -228,7 +271,7 @@ static void *skel_level_alloc(const char *cat);
 /*! \brief Find a skel level in the specified container
  * \note This function *does not* look for a skel_level in the active container. It is used
  * internally by the Config Options code to check if an level has already been added to the
- * container that will be swapped for the live container on a successul reload.
+ * container that will be swapped for the live container on a successful reload.
  *
  * \param tmp_container A non-active container to search for a level
  * \param category The category associated with the level to check for
@@ -349,7 +392,7 @@ static int skel_level_cmp(void *obj, void *arg, int flags)
  * bitfields in the config struct will have to use a custom handler
  * \param opt The opaque config option
  * \param var The ast_variable containing the option name and value
- * \param obj The object registerd for this option type
+ * \param obj The object registered for this option type
  * \retval 0 Success
  * \retval non-zero Failure
  */
@@ -371,7 +414,8 @@ static void play_files_helper(struct ast_channel *chan, const char *prompts)
 	char *prompt, *rest = ast_strdupa(prompts);
 
 	ast_stopstream(chan);
-	while ((prompt = strsep(&rest, "&")) && !ast_stream_and_wait(chan, prompt, "")) {
+	while ((prompt = ast_strsep(&rest, '&', AST_STRSEP_STRIP | AST_STRSEP_TRIM))
+		&& !ast_stream_and_wait(chan, prompt, "")) {
 		ast_stopstream(chan);
 	}
 }
@@ -391,7 +435,7 @@ static int app_exec(struct ast_channel *chan, const char *data)
 	);
 
 	if (!cfg) {
-		ast_log(LOG_ERROR, "Couldn't access configuratino data!\n");
+		ast_log(LOG_ERROR, "Couldn't access configuration data!\n");
 		return -1;
 	}
 

@@ -46,6 +46,9 @@
 /*** DOCUMENTATION
 	<managerEvent language="en_US" name="BlindTransfer">
 		<managerEventInstance class="EVENT_FLAG_CALL">
+			<since>
+				<version>12.0.0</version>
+			</since>
 			<synopsis>Raised when a blind transfer is complete.</synopsis>
 			<syntax>
 				<parameter name="Result">
@@ -56,8 +59,8 @@
 						<enum name="Not Permitted"><para>Bridge does not permit transfers</para></enum>
 						<enum name="Success"><para>Transfer completed successfully</para></enum>
 					</enumlist>
-					<note><para>A result of <literal>Success</literal> does not necessarily mean that a target was succesfully
-					contacted. It means that a party was succesfully placed into the dialplan at the expected location.</para></note>
+					<note><para>A result of <literal>Success</literal> does not necessarily mean that a target was successfully
+					contacted. It means that a party was successfully placed into the dialplan at the expected location.</para></note>
 				</parameter>
 				<channel_snapshot prefix="Transferer"/>
 				<channel_snapshot prefix="Transferee"/>
@@ -84,6 +87,9 @@
 	</managerEvent>
 	<managerEvent language="en_US" name="AttendedTransfer">
 		<managerEventInstance class="EVENT_FLAG_CALL">
+			<since>
+				<version>12.0.0</version>
+			</since>
 			<synopsis>Raised when an attended transfer is complete.</synopsis>
 			<syntax>
 				<xi:include xpointer="xpointer(docs/managerEvent[@name='BlindTransfer']/managerEventInstance/syntax/parameter[@name='Result'])" />
@@ -116,6 +122,7 @@
 					<note><para>This header is only present when <replaceable>DestType</replaceable> is <literal>Threeway</literal></para></note>
 				</parameter>
 				<channel_snapshot prefix="Transferee" />
+				<channel_snapshot prefix="TransferTarget" />
 			</syntax>
 			<description>
 				<para>The headers in this event attempt to describe all the major details of the attended transfer. The two transferer channels
@@ -189,6 +196,26 @@ struct stasis_topic *ast_bridge_topic(struct ast_bridge *bridge)
 
 	return bridge->topic;
 }
+
+int ast_bridge_topic_exists(const char *uniqueid)
+{
+	char *topic_name;
+	int ret;
+
+	if (ast_strlen_zero(uniqueid)) {
+		return 0;
+	}
+
+	ret = ast_asprintf(&topic_name, "bridge:%s", uniqueid);
+	if (ret < 0) {
+		return 0;
+	}
+	ret = stasis_topic_pool_topic_exists(bridge_topic_pool, topic_name);
+	ast_free(topic_name);
+
+	return ret;
+}
+
 
 /*! \brief Destructor for bridge snapshots */
 static void bridge_snapshot_dtor(void *obj)
@@ -312,6 +339,7 @@ int bridge_topics_init(struct ast_bridge *bridge)
 	if (!bridge->topic) {
 		return -1;
 	}
+	ao2_bump(bridge->topic);
 
 	return 0;
 }
@@ -322,6 +350,14 @@ void bridge_topics_destroy(struct ast_bridge *bridge)
 	struct stasis_message *msg;
 
 	ast_assert(bridge != NULL);
+	ast_debug(1, "Bridge " BRIDGE_PRINTF_SPEC ": destroying topics\n",
+		BRIDGE_PRINTF_VARS(bridge));
+
+	if (!bridge->topic) {
+		ast_log(LOG_WARNING, "Bridge " BRIDGE_PRINTF_SPEC " topic is NULL\n",
+			BRIDGE_PRINTF_VARS(bridge));
+		return;
+	}
 
 	if (!bridge->current_snapshot) {
 		bridge->current_snapshot = ast_bridge_snapshot_create(bridge);
@@ -345,6 +381,8 @@ void bridge_topics_destroy(struct ast_bridge *bridge)
 	ao2_ref(msg, -1);
 
 	stasis_topic_pool_delete_topic(bridge_topic_pool, stasis_topic_name(ast_bridge_topic(bridge)));
+	ao2_cleanup(bridge->topic);
+	bridge->topic = NULL;
 }
 
 void ast_bridge_publish_state(struct ast_bridge *bridge)

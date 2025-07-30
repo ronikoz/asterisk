@@ -36,10 +36,10 @@
 #include <unistd.h>
 #if defined(__APPLE__)
 #include <mach/mach.h>
+#elif defined(__FreeBSD__)
+#include <sys/thr.h>
 #elif defined(__NetBSD__)
 #include <lwp.h>
-#elif defined(HAVE_SYS_THR_H)
-#include <sys/thr.h>
 #endif
 
 #include "asterisk/network.h"
@@ -971,6 +971,9 @@ struct thr_lock_info {
 		const char *lock_name;
 		void *lock_addr;
 		int times_locked;
+		int times_lock_attempted;
+		struct timeval last_locked;
+		struct timeval last_unlocked;
 		int line_num;
 		enum ast_lock_type type;
 		/*! This thread is waiting on this lock */
@@ -1063,6 +1066,8 @@ void ast_store_lock_info(enum ast_lock_type type, const char *filename,
 	for (i = 0; i < lock_info->num_locks; i++) {
 		if (lock_info->locks[i].lock_addr == lock_addr) {
 			lock_info->locks[i].times_locked++;
+			lock_info->locks[i].times_lock_attempted++;
+			lock_info->locks[i].last_locked = ast_tvnow();
 #ifdef HAVE_BKTR
 			lock_info->locks[i].backtrace = bt;
 #endif
@@ -1094,6 +1099,8 @@ void ast_store_lock_info(enum ast_lock_type type, const char *filename,
 	lock_info->locks[i].lock_name = lock_name;
 	lock_info->locks[i].lock_addr = lock_addr;
 	lock_info->locks[i].times_locked = 1;
+	lock_info->locks[i].times_lock_attempted = 1;
+	lock_info->locks[i].last_locked = ast_tvnow();
 	lock_info->locks[i].type = type;
 	lock_info->locks[i].pending = 1;
 #ifdef HAVE_BKTR
@@ -1133,6 +1140,7 @@ void ast_mark_lock_failed(void *lock_addr)
 	if (lock_info->locks[lock_info->num_locks - 1].lock_addr == lock_addr) {
 		lock_info->locks[lock_info->num_locks - 1].pending = -1;
 		lock_info->locks[lock_info->num_locks - 1].times_locked--;
+		lock_info->locks[lock_info->num_locks - 1].last_unlocked = ast_tvnow();
 	}
 	pthread_mutex_unlock(&lock_info->lock);
 #endif /* ! LOW_MEMORY */
@@ -1255,6 +1263,7 @@ void ast_remove_lock_info(void *lock_addr, struct ast_bt *bt)
 
 	if (lock_info->locks[i].times_locked > 1) {
 		lock_info->locks[i].times_locked--;
+		lock_info->locks[i].last_unlocked = ast_tvnow();
 #ifdef HAVE_BKTR
 		lock_info->locks[i].backtrace = bt;
 #endif
@@ -1322,16 +1331,36 @@ static void append_lock_information(struct ast_str **str, struct thr_lock_info *
 	int j;
 	ast_mutex_t *lock;
 	struct ast_lock_track *lt;
+	struct timeval held_for;
+	struct timeval now = ast_tvnow();
+	char lock_time[32], unlock_time[32], held_time[32];
 
-	ast_str_append(str, 0, "=== ---> %sLock #%d (%s): %s %d %s %s %p (%d%s)\n",
+	held_for = ast_tvsub(now, lock_info->locks[i].last_locked);
+	/* format time duration strings */
+	ast_format_duration_hh_mm_ss(lock_info->locks[i].last_locked.tv_sec,
+									lock_time, sizeof(lock_time));
+	ast_format_duration_hh_mm_ss(lock_info->locks[i].last_unlocked.tv_sec,
+									unlock_time, sizeof(unlock_time));
+	ast_format_duration_hh_mm_ss(held_for.tv_sec, held_time, sizeof(held_time));
+
+	ast_str_append(str, 0, "=== ---> %sLock #%d (%s): %s %d %s %s %p\n"
+						"===      %s.%06ld, %s.%06ld, %s.%06ld (%d, %d%s)\n",
 				   lock_info->locks[i].pending > 0 ? "Waiting for " :
 				   lock_info->locks[i].pending < 0 ? "Tried and failed to get " : "", i,
 				   lock_info->locks[i].file,
 				   locktype2str(lock_info->locks[i].type),
 				   lock_info->locks[i].line_num,
-				   lock_info->locks[i].func, lock_info->locks[i].lock_name,
+				   lock_info->locks[i].func,
+				   lock_info->locks[i].lock_name,
 				   lock_info->locks[i].lock_addr,
+				   lock_time,
+				   lock_info->locks[i].last_locked.tv_usec,
+				   unlock_time,
+				   lock_info->locks[i].last_unlocked.tv_usec,
+				   held_time,
+				   held_for.tv_usec,
 				   lock_info->locks[i].times_locked,
+				   lock_info->locks[i].times_lock_attempted,
 				   lock_info->locks[i].suspended ? " - suspended" : "");
 #ifdef HAVE_BKTR
 	append_backtrace_information(str, lock_info->locks[i].backtrace);
@@ -1412,20 +1441,24 @@ struct ast_str *ast_dump_locks(void)
 #if !defined(LOW_MEMORY)
 	struct thr_lock_info *lock_info;
 	struct ast_str *str;
+	char print_time[32];
+	struct timeval now = ast_tvnow();
 
 	if (!(str = ast_str_create(4096))) {
 		return NULL;
 	}
 
+	ast_format_duration_hh_mm_ss(now.tv_sec, print_time, sizeof(print_time));
+
 	ast_str_append(&str, 0, "\n"
 	               "=======================================================================\n"
 	               "=== %s\n"
-	               "=== Currently Held Locks\n"
+	               "=== Currently Held Locks at Time: %s.%06ld =================\n"
 	               "=======================================================================\n"
 	               "===\n"
-	               "=== <pending> <lock#> (<file>): <lock type> <line num> <function> <lock name> <lock addr> (times locked)\n"
-	               "===\n", ast_get_version());
-
+	               "=== <pending> <lock#> (<file>): <lock type> <line num> <function> <lock name> <lock addr>\n"
+	               "=== <locked at>, <failed at>, <held for> (attempts, times locked)\n"
+	               "===\n", ast_get_version(), print_time, now.tv_usec);
 	if (!str) {
 		return NULL;
 	}
@@ -1808,7 +1841,8 @@ char *ast_strsep(char **iss, const char sep, uint32_t flags)
 	char stack[8];
 
 	if (ast_strlen_zero(st)) {
-		return NULL;
+		*iss = NULL;
+		return st;
 	}
 
 	memset(stack, 0, sizeof(stack));
@@ -1849,7 +1883,75 @@ char *ast_strsep(char **iss, const char sep, uint32_t flags)
 	}
 
 	if (flags & AST_STRSEP_TRIM) {
-		st = ast_strip(st);
+		char *trimmed = ast_strip(st);
+		if (!ast_strlen_zero(trimmed)) {
+			st = trimmed;
+		}
+	}
+
+	if (flags & AST_STRSEP_UNESCAPE) {
+		ast_unescape_quoted(st);
+	}
+
+	return st;
+}
+
+char *ast_strsep_quoted(char **iss, const char sep, const char quote, uint32_t flags)
+{
+	char *st = *iss;
+	char *is;
+	int inquote = 0;
+	int found = 0;
+	char stack[8];
+	const char qstr[] = { quote };
+
+	if (ast_strlen_zero(st)) {
+		*iss = NULL;
+		return st;
+	}
+
+	memset(stack, 0, sizeof(stack));
+
+	for(is = st; *is; is++) {
+		if (*is == '\\') {
+			if (*++is != '\0') {
+				is++;
+			} else {
+				break;
+			}
+		}
+
+		if (*is == quote) {
+			if (*is == stack[inquote]) {
+				stack[inquote--] = '\0';
+			} else {
+				if (++inquote >= sizeof(stack)) {
+					return NULL;
+				}
+				stack[inquote] = *is;
+			}
+		}
+
+		if (*is == sep && !inquote) {
+			*is = '\0';
+			found = 1;
+			*iss = is + 1;
+			break;
+		}
+	}
+	if (!found) {
+		*iss = NULL;
+	}
+
+	if (flags & AST_STRSEP_STRIP) {
+		st = ast_strip_quoted(st, qstr, qstr);
+	}
+
+	if (flags & AST_STRSEP_TRIM) {
+		char *trimmed = ast_strip(st);
+		if (!ast_strlen_zero(trimmed)) {
+			st = trimmed;
+		}
 	}
 
 	if (flags & AST_STRSEP_UNESCAPE) {
@@ -2529,7 +2631,7 @@ int ast_utils_init(void)
 /*!
  *\brief Parse digest authorization header.
  *\return Returns -1 if we have no auth or something wrong with digest.
- *\note	This function may be used for Digest request and responce header.
+ *\note	This function may be used for Digest request and response header.
  * request arg is set to nonzero, if we parse Digest Request.
  * pedantic arg can be set to nonzero if we need to do addition Digest check.
  */
@@ -2657,12 +2759,14 @@ int ast_get_tid(void)
 #elif defined(__APPLE__)
 	ret = mach_thread_self();
 	mach_port_deallocate(mach_task_self(), ret);
-#elif defined(__FreeBSD__) && defined(HAVE_SYS_THR_H)
+#elif defined(__FreeBSD__)
 	long lwpid;
-	thr_self(&lwpid); /* available since sys/thr.h creation 2003 */
+	thr_self(&lwpid);
 	ret = lwpid;
 #elif defined(__NetBSD__)
 	ret = _lwp_self();
+#elif defined(__OpenBSD__)
+	ret = getthrid();
 #endif
 	return ret;
 }
@@ -3155,3 +3259,38 @@ int ast_thread_is_user_interface(void)
 
 	return *thread_user_interface;
 }
+
+int ast_check_command_in_path(const char *cmd)
+{
+	char *token, *saveptr, *path = getenv("PATH");
+	char filename[PATH_MAX];
+	int len;
+
+	if (path == NULL) {
+		return 0;
+	}
+
+	path = ast_strdup(path);
+	if (path == NULL) {
+		return 0;
+	}
+
+	token = strtok_r(path, ":", &saveptr);
+	while (token != NULL) {
+		len = snprintf(filename, sizeof(filename), "%s/%s", token, cmd);
+		if (len < 0 || len >= sizeof(filename)) {
+			ast_log(LOG_WARNING, "Path constructed with '%s' too long; skipping\n", token);
+			continue;
+		}
+
+		if (access(filename, X_OK) == 0) {
+			ast_free(path);
+			return 1;
+		}
+
+		token = strtok_r(NULL, ":", &saveptr);
+	}
+	ast_free(path);
+	return 0;
+}
+

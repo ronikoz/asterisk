@@ -295,10 +295,12 @@ static void bridge_stasis_pull(struct ast_bridge *self, struct ast_bridge_channe
 	ast_bridge_base_v_table.pull(self, bridge_channel);
 }
 
-struct ast_bridge *bridge_stasis_new(uint32_t capabilities, unsigned int flags, const char *name, const char *id, enum ast_bridge_video_mode_type video_mode)
+struct ast_bridge *bridge_stasis_new(uint32_t capabilities, unsigned int flags, const char *name, const char *id, enum ast_bridge_video_mode_type video_mode, unsigned int send_sdp_label)
 {
-	void *bridge;
+	struct ast_bridge *bridge;
 
+	ast_debug(1, "Creating Stasis bridge '%s' with id '%s'\n",
+		S_OR(name, "<unknown>"), S_OR(id, "<unknown>"));
 	bridge = bridge_alloc(sizeof(struct ast_bridge), &bridge_stasis_v_table);
 	bridge = bridge_base_init(bridge, capabilities, flags, "Stasis", name, id);
 	if (!bridge) {
@@ -317,7 +319,18 @@ struct ast_bridge *bridge_stasis_new(uint32_t capabilities, unsigned int flags, 
 		ast_bridge_set_talker_src_video_mode(bridge);
 	}
 
+	if (send_sdp_label) {
+		ast_bridge_set_send_sdp_label(bridge, 1);
+	}
+
 	bridge = bridge_register(bridge);
+	if (!bridge) {
+		ast_log(LOG_ERROR, "Failed to register Stasis bridge %s(%s)\n",
+			S_OR(id, "<unknown>"), S_OR(name, "<unknown>"));
+		return NULL;
+	}
+	ast_debug(1, "Created Stasis bridge " BRIDGE_PRINTF_SPEC  "\n",
+		BRIDGE_PRINTF_VARS(bridge));
 
 	return bridge;
 }

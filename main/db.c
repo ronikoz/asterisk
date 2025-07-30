@@ -54,6 +54,9 @@
 
 /*** DOCUMENTATION
 	<manager name="DBGet" language="en_US">
+		<since>
+			<version>1.2.0</version>
+		</since>
 		<synopsis>
 			Get DB Entry.
 		</synopsis>
@@ -65,7 +68,27 @@
 		<description>
 		</description>
 	</manager>
+	<manager name="DBGetTree" language="en_US">
+		<since>
+			<version>19.6.0</version>
+			<version>18.14.0</version>
+			<version>16.28.0</version>
+		</since>
+		<synopsis>
+			Get DB entries, optionally at a particular family/key
+		</synopsis>
+		<syntax>
+			<xi:include xpointer="xpointer(/docs/manager[@name='Login']/syntax/parameter[@name='ActionID'])" />
+			<parameter name="Family" required="false" />
+			<parameter name="Key" required="false" />
+		</syntax>
+		<description>
+		</description>
+	</manager>
 	<manager name="DBPut" language="en_US">
+		<since>
+			<version>1.2.0</version>
+		</since>
 		<synopsis>
 			Put DB entry.
 		</synopsis>
@@ -79,6 +102,9 @@
 		</description>
 	</manager>
 	<manager name="DBDel" language="en_US">
+		<since>
+			<version>1.6.0</version>
+		</since>
 		<synopsis>
 			Delete DB entry.
 		</synopsis>
@@ -91,6 +117,9 @@
 		</description>
 	</manager>
 	<manager name="DBDelTree" language="en_US">
+		<since>
+			<version>1.6.0</version>
+		</since>
 		<synopsis>
 			Delete DB Tree.
 		</synopsis>
@@ -104,7 +133,6 @@
 	</manager>
  ***/
 
-#define MAX_DB_FIELD 256
 AST_MUTEX_DEFINE_STATIC(dblock);
 static ast_cond_t dbcond;
 static sqlite3 *astdb;
@@ -119,13 +147,14 @@ static void db_sync(void);
 
 DEFINE_SQL_STATEMENT(put_stmt, "INSERT OR REPLACE INTO astdb (key, value) VALUES (?, ?)")
 DEFINE_SQL_STATEMENT(get_stmt, "SELECT value FROM astdb WHERE key=?")
+DEFINE_SQL_STATEMENT(exists_stmt, "SELECT CAST(COUNT(1) AS INTEGER) AS 'exists' FROM astdb WHERE key=?")
 DEFINE_SQL_STATEMENT(del_stmt, "DELETE FROM astdb WHERE key=?")
 DEFINE_SQL_STATEMENT(deltree_stmt, "DELETE FROM astdb WHERE key || '/' LIKE ? || '/' || '%'")
 DEFINE_SQL_STATEMENT(deltree_all_stmt, "DELETE FROM astdb")
 DEFINE_SQL_STATEMENT(gettree_stmt, "SELECT key, value FROM astdb WHERE key || '/' LIKE ? || '/' || '%' ORDER BY key")
 DEFINE_SQL_STATEMENT(gettree_all_stmt, "SELECT key, value FROM astdb ORDER BY key")
 DEFINE_SQL_STATEMENT(showkey_stmt, "SELECT key, value FROM astdb WHERE key LIKE '%' || '/' || ? ORDER BY key")
-DEFINE_SQL_STATEMENT(create_astdb_stmt, "CREATE TABLE IF NOT EXISTS astdb(key VARCHAR(256), value VARCHAR(256), PRIMARY KEY(key))")
+DEFINE_SQL_STATEMENT(create_astdb_stmt, "CREATE TABLE IF NOT EXISTS astdb(key TEXT, value TEXT, PRIMARY KEY(key))")
 
 /* This query begs an explanation:
  *
@@ -176,6 +205,7 @@ static int clean_stmt(sqlite3_stmt **stmt, const char *sql)
 static void clean_statements(void)
 {
 	clean_stmt(&get_stmt, get_stmt_sql);
+	clean_stmt(&exists_stmt, exists_stmt_sql);
 	clean_stmt(&del_stmt, del_stmt_sql);
 	clean_stmt(&deltree_stmt, deltree_stmt_sql);
 	clean_stmt(&deltree_all_stmt, deltree_all_stmt_sql);
@@ -190,8 +220,9 @@ static void clean_statements(void)
 static int init_statements(void)
 {
 	/* Don't initialize create_astdb_statement here as the astdb table needs to exist
-	 * brefore these statements can be initialized */
+	 * before these statements can be initialized */
 	return init_stmt(&get_stmt, get_stmt_sql, sizeof(get_stmt_sql))
+	|| init_stmt(&exists_stmt, exists_stmt_sql, sizeof(exists_stmt_sql))
 	|| init_stmt(&del_stmt, del_stmt_sql, sizeof(del_stmt_sql))
 	|| init_stmt(&deltree_stmt, deltree_stmt_sql, sizeof(deltree_stmt_sql))
 	|| init_stmt(&deltree_all_stmt, deltree_all_stmt_sql, sizeof(deltree_all_stmt_sql))
@@ -200,20 +231,6 @@ static int init_statements(void)
 	|| init_stmt(&gettree_prefix_stmt, gettree_prefix_stmt_sql, sizeof(gettree_prefix_stmt_sql))
 	|| init_stmt(&showkey_stmt, showkey_stmt_sql, sizeof(showkey_stmt_sql))
 	|| init_stmt(&put_stmt, put_stmt_sql, sizeof(put_stmt_sql));
-}
-
-static int convert_bdb_to_sqlite3(void)
-{
-	char *cmd;
-	int res;
-
-	res = ast_asprintf(&cmd, "%s/astdb2sqlite3 '%s'\n", ast_config_AST_SBIN_DIR, ast_config_AST_DB);
-	if (0 <= res) {
-		res = ast_safe_system(cmd);
-		ast_free(cmd);
-	}
-
-	return res;
 }
 
 static int db_create_astdb(void)
@@ -238,32 +255,23 @@ static int db_create_astdb(void)
 
 static int db_open(void)
 {
-	char *dbname;
 	struct stat dont_care;
+	char dbname[strlen(ast_config_AST_DB) + sizeof(".sqlite3")];
 
-	if (!(dbname = ast_alloca(strlen(ast_config_AST_DB) + sizeof(".sqlite3")))) {
-		return -1;
-	}
 	strcpy(dbname, ast_config_AST_DB);
 	strcat(dbname, ".sqlite3");
 
 	if (stat(dbname, &dont_care) && !stat(ast_config_AST_DB, &dont_care)) {
-		if (convert_bdb_to_sqlite3()) {
-			ast_log(LOG_ERROR, "*** Database conversion failed!\n");
-			ast_log(LOG_ERROR, "*** Asterisk now uses SQLite3 for its internal\n");
-			ast_log(LOG_ERROR, "*** database. Conversion from the old astdb\n");
-			ast_log(LOG_ERROR, "*** failed. Most likely the astdb2sqlite3 utility\n");
-			ast_log(LOG_ERROR, "*** was not selected for build. To convert the\n");
-			ast_log(LOG_ERROR, "*** old astdb, please delete '%s'\n", dbname);
-			ast_log(LOG_ERROR, "*** and re-run 'make menuselect' and select astdb2sqlite3\n");
-			ast_log(LOG_ERROR, "*** in the Utilities section, then 'make && make install'.\n");
-			ast_log(LOG_ERROR, "*** It is also imperative that the user under which\n");
-			ast_log(LOG_ERROR, "*** Asterisk runs have write permission to the directory\n");
-			ast_log(LOG_ERROR, "*** where the database resides.\n");
-			sleep(5);
-		} else {
-			ast_log(LOG_NOTICE, "Database conversion succeeded!\n");
-		}
+		ast_log(LOG_ERROR, "When Asterisk 10.0.0 was released, the format of Asterisk's internal\n");
+		ast_log(LOG_ERROR, "database was changed from Berkeley DB to SQLite3. Part of that change\n");
+		ast_log(LOG_ERROR, "involved the creation of a conversion utility - astdb2sqlite3 - that\n");
+		ast_log(LOG_ERROR, "was shipped with Asterisk. This conversion utility performed a\n");
+		ast_log(LOG_ERROR, "one-time migration from the old format to the new one.\n");
+		ast_log(LOG_ERROR, "\n");
+		ast_log(LOG_ERROR, "Starting with Asterisk 23.0.0, astdb2sqlite3 no longer ships as part\n");
+		ast_log(LOG_ERROR, "of the Asterisk distribution. If you are upgrading from a version of\n");
+		ast_log(LOG_ERROR, "Asterisk that still uses the Berkeley DB implementation, you will need\n");
+		ast_log(LOG_ERROR, "to acquire astdb2sqlite3 from an earlier release of Asterisk.\n");
 	}
 
 	ast_mutex_lock(&dblock);
@@ -326,16 +334,16 @@ static int ast_db_rollback_transaction(void)
 
 int ast_db_put(const char *family, const char *key, const char *value)
 {
-	char fullkey[MAX_DB_FIELD];
-	size_t fullkey_len;
+	char *fullkey;
+	int fullkey_len;
 	int res = 0;
 
-	if (strlen(family) + strlen(key) + 2 > sizeof(fullkey) - 1) {
-		ast_log(LOG_WARNING, "Family and key length must be less than %zu bytes\n", sizeof(fullkey) - 3);
+	fullkey_len = ast_asprintf(&fullkey, "/%s/%s", family, key);
+	if (fullkey_len < 0) {
+		ast_log(LOG_WARNING, "Unable to allocate memory for family/key '/%s/%s'\n",
+			family, key);
 		return -1;
 	}
-
-	fullkey_len = snprintf(fullkey, sizeof(fullkey), "/%s/%s", family, key);
 
 	ast_mutex_lock(&dblock);
 	if (sqlite3_bind_text(put_stmt, 1, fullkey, fullkey_len, SQLITE_STATIC) != SQLITE_OK) {
@@ -348,10 +356,10 @@ int ast_db_put(const char *family, const char *key, const char *value)
 		ast_log(LOG_WARNING, "Couldn't execute statement: %s\n", sqlite3_errmsg(astdb));
 		res = -1;
 	}
-
 	sqlite3_reset(put_stmt);
 	db_sync();
 	ast_mutex_unlock(&dblock);
+	ast_free(fullkey);
 
 	return res;
 }
@@ -373,16 +381,16 @@ int ast_db_put(const char *family, const char *key, const char *value)
 static int db_get_common(const char *family, const char *key, char **buffer, int bufferlen)
 {
 	const unsigned char *result;
-	char fullkey[MAX_DB_FIELD];
-	size_t fullkey_len;
+	char *fullkey;
+	int fullkey_len;
 	int res = 0;
 
-	if (strlen(family) + strlen(key) + 2 > sizeof(fullkey) - 1) {
-		ast_log(LOG_WARNING, "Family and key length must be less than %zu bytes\n", sizeof(fullkey) - 3);
+	fullkey_len = ast_asprintf(&fullkey, "/%s/%s", family, key);
+	if (fullkey_len < 0) {
+		ast_log(LOG_WARNING, "Unable to allocate memory for family/key '/%s/%s'\n",
+			family, key);
 		return -1;
 	}
-
-	fullkey_len = snprintf(fullkey, sizeof(fullkey), "/%s/%s", family, key);
 
 	ast_mutex_lock(&dblock);
 	if (sqlite3_bind_text(get_stmt, 1, fullkey, fullkey_len, SQLITE_STATIC) != SQLITE_OK) {
@@ -405,6 +413,7 @@ static int db_get_common(const char *family, const char *key, char **buffer, int
 	}
 	sqlite3_reset(get_stmt);
 	ast_mutex_unlock(&dblock);
+	ast_free(fullkey);
 
 	return res;
 }
@@ -426,18 +435,52 @@ int ast_db_get_allocated(const char *family, const char *key, char **out)
 	return db_get_common(family, key, out, -1);
 }
 
-int ast_db_del(const char *family, const char *key)
+int ast_db_exists(const char *family, const char *key)
 {
-	char fullkey[MAX_DB_FIELD];
-	size_t fullkey_len;
+	int result;
+	char *fullkey;
+	int fullkey_len;
 	int res = 0;
 
-	if (strlen(family) + strlen(key) + 2 > sizeof(fullkey) - 1) {
-		ast_log(LOG_WARNING, "Family and key length must be less than %zu bytes\n", sizeof(fullkey) - 3);
+	fullkey_len = ast_asprintf(&fullkey, "/%s/%s", family, key);
+	if (fullkey_len < 0) {
+		ast_log(LOG_WARNING, "Unable to allocate memory for family/key '/%s/%s'\n",
+			family, key);
 		return -1;
 	}
 
-	fullkey_len = snprintf(fullkey, sizeof(fullkey), "/%s/%s", family, key);
+	ast_mutex_lock(&dblock);
+	res = sqlite3_bind_text(exists_stmt, 1, fullkey, fullkey_len, SQLITE_STATIC);
+	if (res != SQLITE_OK) {
+		ast_log(LOG_WARNING, "Couldn't bind key to stmt: %d:%s\n", res, sqlite3_errmsg(astdb));
+		res = 0;
+	} else if (sqlite3_step(exists_stmt) != SQLITE_ROW) {
+		res = 0;
+	} else if (!(result = sqlite3_column_int(exists_stmt, 0))) {
+		res = 0;
+	} else {
+		res = result;
+	}
+	sqlite3_reset(exists_stmt);
+	ast_mutex_unlock(&dblock);
+	ast_free(fullkey);
+
+	return res;
+}
+
+
+int ast_db_del(const char *family, const char *key)
+{
+	char *fullkey;
+	int fullkey_len;
+	int res = 0;
+
+	fullkey_len = ast_asprintf(&fullkey, "/%s/%s", family, key);
+	if (fullkey_len < 0) {
+		ast_log(LOG_WARNING, "Unable to allocate memory for family/key '/%s/%s'\n",
+			family, key);
+		return -1;
+	}
 
 	ast_mutex_lock(&dblock);
 	if (sqlite3_bind_text(del_stmt, 1, fullkey, fullkey_len, SQLITE_STATIC) != SQLITE_OK) {
@@ -450,32 +493,92 @@ int ast_db_del(const char *family, const char *key)
 	sqlite3_reset(del_stmt);
 	db_sync();
 	ast_mutex_unlock(&dblock);
+	ast_free(fullkey);
 
 	return res;
+}
+
+int ast_db_del2(const char *family, const char *key)
+{
+	char *fullkey;
+	char tmp[1];
+	int fullkey_len;
+	int mres, res = 0;
+
+	fullkey_len = ast_asprintf(&fullkey, "/%s/%s", family, key);
+	if (fullkey_len < 0) {
+		ast_log(LOG_WARNING, "Unable to allocate memory for family/key '/%s/%s'\n",
+			family, key);
+		return -1;
+	}
+
+	ast_mutex_lock(&dblock);
+	if (ast_db_get(family, key, tmp, sizeof(tmp))) {
+		ast_log(LOG_WARNING, "AstDB key %s does not exist\n", fullkey);
+		res = -1;
+	} else if (sqlite3_bind_text(del_stmt, 1, fullkey, fullkey_len, SQLITE_STATIC) != SQLITE_OK) {
+		ast_log(LOG_WARNING, "Couldn't bind key to stmt: %s\n", sqlite3_errmsg(astdb));
+		res = -1;
+	} else if ((mres = sqlite3_step(del_stmt) != SQLITE_DONE)) {
+		ast_log(LOG_WARNING, "AstDB error (%s): %s\n", fullkey, sqlite3_errstr(mres));
+		res = -1;
+	}
+	sqlite3_reset(del_stmt);
+	db_sync();
+	ast_mutex_unlock(&dblock);
+	ast_free(fullkey);
+
+	return res;
+}
+
+static char *create_prefix(const char *family, const char *keytree,
+	int *prefix_len)
+{
+	char *prefix = NULL;
+	*prefix_len = 0;
+
+	if (!ast_strlen_zero(family)) {
+		if (!ast_strlen_zero(keytree)) {
+			/* Family and key tree */
+			*prefix_len = ast_asprintf(&prefix, "/%s/%s", family, keytree);
+		} else {
+			/* Family only */
+			*prefix_len = ast_asprintf(&prefix, "/%s", family);
+		}
+		if (*prefix_len < 0) {
+			ast_log(LOG_WARNING, "Unable to allocate memory for family/keytree '/%s%s%s'\n",
+				S_OR(family, ""), S_COR(keytree, "/", ""), S_OR(keytree, ""));
+			return NULL;
+		}
+	} else {
+		prefix = ast_strdup("");
+	}
+	return prefix;
 }
 
 int ast_db_deltree(const char *family, const char *keytree)
 {
 	sqlite3_stmt *stmt = deltree_stmt;
-	char prefix[MAX_DB_FIELD];
+	char *prefix = NULL;
+	int prefix_len = 0;
 	int res = 0;
 
-	if (!ast_strlen_zero(family)) {
-		if (!ast_strlen_zero(keytree)) {
-			/* Family and key tree */
-			snprintf(prefix, sizeof(prefix), "/%s/%s", family, keytree);
-		} else {
-			/* Family only */
-			snprintf(prefix, sizeof(prefix), "/%s", family);
-		}
-	} else {
-		prefix[0] = '\0';
+	if (ast_strlen_zero(family) && !ast_strlen_zero(keytree)) {
+		ast_log(LOG_WARNING, "Key tree '%s' specified without family\n", keytree);
+		return -1;
+	}
+
+	prefix = create_prefix(family, keytree, &prefix_len);
+	if (!prefix) {
+		return -1;
+	}
+	if (prefix_len == 0) {
 		stmt = deltree_all_stmt;
 	}
 
 	ast_mutex_lock(&dblock);
-	if (!ast_strlen_zero(prefix) && (sqlite3_bind_text(stmt, 1, prefix, -1, SQLITE_STATIC) != SQLITE_OK)) {
-		ast_log(LOG_WARNING, "Could bind %s to stmt: %s\n", prefix, sqlite3_errmsg(astdb));
+	if (prefix_len && (sqlite3_bind_text(stmt, 1, prefix, prefix_len, SQLITE_STATIC) != SQLITE_OK)) {
+		ast_log(LOG_WARNING, "Couldn't bind %s to stmt: %s\n", prefix, sqlite3_errmsg(astdb));
 		res = -1;
 	} else if (sqlite3_step(stmt) != SQLITE_DONE) {
 		ast_log(LOG_WARNING, "Couldn't execute stmt: %s\n", sqlite3_errmsg(astdb));
@@ -485,6 +588,7 @@ int ast_db_deltree(const char *family, const char *keytree)
 	sqlite3_reset(stmt);
 	db_sync();
 	ast_mutex_unlock(&dblock);
+	ast_free(prefix);
 
 	return res;
 }
@@ -530,67 +634,60 @@ static struct ast_db_entry *db_gettree_common(sqlite3_stmt *stmt)
 
 struct ast_db_entry *ast_db_gettree(const char *family, const char *keytree)
 {
-	char prefix[MAX_DB_FIELD];
+	char *prefix = NULL;
+	int prefix_len = 0;
 	sqlite3_stmt *stmt = gettree_stmt;
-	size_t res = 0;
 	struct ast_db_entry *ret;
 
-	if (!ast_strlen_zero(family)) {
-		if (!ast_strlen_zero(keytree)) {
-			/* Family and key tree */
-			res = snprintf(prefix, sizeof(prefix), "/%s/%s", family, keytree);
-		} else {
-			/* Family only */
-			res = snprintf(prefix, sizeof(prefix), "/%s", family);
-		}
-
-		if (res >= sizeof(prefix)) {
-			ast_log(LOG_WARNING, "Requested prefix is too long: %s\n", keytree);
-			return NULL;
-		}
-	} else {
-		prefix[0] = '\0';
+	prefix = create_prefix(family, keytree, &prefix_len);
+	if (!prefix) {
+		return NULL;
+	}
+	if (prefix_len == 0) {
 		stmt = gettree_all_stmt;
 	}
 
 	ast_mutex_lock(&dblock);
-	if (res && (sqlite3_bind_text(stmt, 1, prefix, res, SQLITE_STATIC) != SQLITE_OK)) {
+	if (prefix_len && (sqlite3_bind_text(stmt, 1, prefix, prefix_len, SQLITE_STATIC) != SQLITE_OK)) {
 		ast_log(LOG_WARNING, "Could not bind %s to stmt: %s\n", prefix, sqlite3_errmsg(astdb));
 		sqlite3_reset(stmt);
 		ast_mutex_unlock(&dblock);
+		ast_free(prefix);
 		return NULL;
 	}
 
 	ret = db_gettree_common(stmt);
 	sqlite3_reset(stmt);
 	ast_mutex_unlock(&dblock);
+	ast_free(prefix);
 
 	return ret;
 }
 
 struct ast_db_entry *ast_db_gettree_by_prefix(const char *family, const char *key_prefix)
 {
-	char prefix[MAX_DB_FIELD];
-	size_t res;
+	char *prefix = NULL;
+	int prefix_len = 0;
 	struct ast_db_entry *ret;
 
-	res = snprintf(prefix, sizeof(prefix), "/%s/%s", family, key_prefix);
-	if (res >= sizeof(prefix)) {
-		ast_log(LOG_WARNING, "Requested key prefix is too long: %s\n", key_prefix);
+	prefix = create_prefix(family, key_prefix, &prefix_len);
+	if (!prefix) {
 		return NULL;
 	}
 
 	ast_mutex_lock(&dblock);
-	if (sqlite3_bind_text(gettree_prefix_stmt, 1, prefix, res, SQLITE_STATIC) != SQLITE_OK) {
+	if (sqlite3_bind_text(gettree_prefix_stmt, 1, prefix, prefix_len, SQLITE_STATIC) != SQLITE_OK) {
 		ast_log(LOG_WARNING, "Could not bind %s to stmt: %s\n", prefix, sqlite3_errmsg(astdb));
 		sqlite3_reset(gettree_prefix_stmt);
 		ast_mutex_unlock(&dblock);
+		ast_free(prefix);
 		return NULL;
 	}
 
 	ret = db_gettree_common(gettree_prefix_stmt);
 	sqlite3_reset(gettree_prefix_stmt);
 	ast_mutex_unlock(&dblock);
+	ast_free(prefix);
 
 	return ret;
 }
@@ -635,7 +732,7 @@ static char *handle_cli_database_put(struct ast_cli_entry *e, int cmd, struct as
 static char *handle_cli_database_get(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
 {
 	int res;
-	char tmp[MAX_DB_FIELD];
+	char *tmp = NULL;
 
 	switch (cmd) {
 	case CLI_INIT:
@@ -651,12 +748,14 @@ static char *handle_cli_database_get(struct ast_cli_entry *e, int cmd, struct as
 
 	if (a->argc != 4)
 		return CLI_SHOWUSAGE;
-	res = ast_db_get(a->argv[2], a->argv[3], tmp, sizeof(tmp));
+	res = ast_db_get_allocated(a->argv[2], a->argv[3], &tmp);
 	if (res) {
 		ast_cli(a->fd, "Database entry not found.\n");
 	} else {
 		ast_cli(a->fd, "Value: %s\n", tmp);
+		ast_free(tmp);
 	}
+
 	return CLI_SUCCESS;
 }
 
@@ -678,9 +777,9 @@ static char *handle_cli_database_del(struct ast_cli_entry *e, int cmd, struct as
 
 	if (a->argc != 4)
 		return CLI_SHOWUSAGE;
-	res = ast_db_del(a->argv[2], a->argv[3]);
+	res = ast_db_del2(a->argv[2], a->argv[3]);
 	if (res) {
-		ast_cli(a->fd, "Database entry does not exist.\n");
+		ast_cli(a->fd, "Database entry could not be removed.\n");
 	} else {
 		ast_cli(a->fd, "Database entry removed.\n");
 	}
@@ -724,7 +823,10 @@ static char *handle_cli_database_deltree(struct ast_cli_entry *e, int cmd, struc
 
 static char *handle_cli_database_show(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
 {
-	char prefix[MAX_DB_FIELD];
+	char *prefix = NULL;
+	int prefix_len = 0;
+	const char *family = a->argc > 2 ? a->argv[2] : "";
+	const char *keytree = a->argc > 3 ? a->argv[3] : "";
 	int counter = 0;
 	sqlite3_stmt *stmt = gettree_stmt;
 
@@ -742,26 +844,24 @@ static char *handle_cli_database_show(struct ast_cli_entry *e, int cmd, struct a
 		return NULL;
 	}
 
-	if (a->argc == 4) {
-		/* Family and key tree */
-		snprintf(prefix, sizeof(prefix), "/%s/%s", a->argv[2], a->argv[3]);
-	} else if (a->argc == 3) {
-		/* Family only */
-		snprintf(prefix, sizeof(prefix), "/%s", a->argv[2]);
-	} else if (a->argc == 2) {
-		/* Neither */
-		prefix[0] = '\0';
-		stmt = gettree_all_stmt;
-
-	} else {
+	if (a->argc > 4) {
 		return CLI_SHOWUSAGE;
 	}
 
+	prefix = create_prefix(family, keytree, &prefix_len);
+	if (!prefix) {
+		return NULL;
+	}
+	if (prefix_len == 0) {
+		stmt = gettree_all_stmt;
+	}
+
 	ast_mutex_lock(&dblock);
-	if (!ast_strlen_zero(prefix) && (sqlite3_bind_text(stmt, 1, prefix, -1, SQLITE_STATIC) != SQLITE_OK)) {
-		ast_log(LOG_WARNING, "Could bind %s to stmt: %s\n", prefix, sqlite3_errmsg(astdb));
+	if (prefix_len && (sqlite3_bind_text(stmt, 1, prefix, prefix_len, SQLITE_STATIC) != SQLITE_OK)) {
+		ast_log(LOG_WARNING, "Couldn't bind %s to stmt: %s\n", prefix, sqlite3_errmsg(astdb));
 		sqlite3_reset(stmt);
 		ast_mutex_unlock(&dblock);
+		ast_free(prefix);
 		return NULL;
 	}
 
@@ -781,6 +881,7 @@ static char *handle_cli_database_show(struct ast_cli_entry *e, int cmd, struct a
 
 	sqlite3_reset(stmt);
 	ast_mutex_unlock(&dblock);
+	ast_free(prefix);
 
 	ast_cli(a->fd, "%d results found.\n", counter);
 	return CLI_SUCCESS;
@@ -807,7 +908,7 @@ static char *handle_cli_database_showkey(struct ast_cli_entry *e, int cmd, struc
 
 	ast_mutex_lock(&dblock);
 	if (!ast_strlen_zero(a->argv[2]) && (sqlite3_bind_text(showkey_stmt, 1, a->argv[2], -1, SQLITE_STATIC) != SQLITE_OK)) {
-		ast_log(LOG_WARNING, "Could bind %s to stmt: %s\n", a->argv[2], sqlite3_errmsg(astdb));
+		ast_log(LOG_WARNING, "Couldn't bind %s to stmt: %s\n", a->argv[2], sqlite3_errmsg(astdb));
 		sqlite3_reset(showkey_stmt);
 		ast_mutex_unlock(&dblock);
 		return NULL;
@@ -911,7 +1012,7 @@ static int manager_dbget(struct mansession *s, const struct message *m)
 	char idText[256];
 	const char *family = astman_get_header(m, "Family");
 	const char *key = astman_get_header(m, "Key");
-	char tmp[MAX_DB_FIELD];
+	char *tmp = NULL;
 	int res;
 
 	if (ast_strlen_zero(family)) {
@@ -927,7 +1028,7 @@ static int manager_dbget(struct mansession *s, const struct message *m)
 	if (!ast_strlen_zero(id))
 		snprintf(idText, sizeof(idText) ,"ActionID: %s\r\n", id);
 
-	res = ast_db_get(family, key, tmp, sizeof(tmp));
+	res = ast_db_get_allocated(family, key, &tmp);
 	if (res) {
 		astman_send_error(s, m, "Database entry not found");
 	} else {
@@ -940,10 +1041,76 @@ static int manager_dbget(struct mansession *s, const struct message *m)
 				"%s"
 				"\r\n",
 				family, key, tmp, idText);
-
+		ast_free(tmp);
 		astman_send_list_complete_start(s, m, "DBGetComplete", 1);
 		astman_send_list_complete_end(s);
 	}
+	return 0;
+}
+
+static int manager_db_tree_get(struct mansession *s, const struct message *m)
+{
+	char *prefix;
+	int prefix_len = 0;
+	char idText[256];
+	const char *id = astman_get_header(m,"ActionID");
+	const char *family = astman_get_header(m, "Family");
+	const char *key = astman_get_header(m, "Key");
+	sqlite3_stmt *stmt = gettree_stmt;
+	int count = 0;
+
+	prefix = create_prefix(family, key, &prefix_len);
+	if (!prefix) {
+		astman_send_error(s, m, "Unable to allocate memory for Family/Key");
+		return 0;
+	}
+	if (prefix_len == 0) {
+		stmt = gettree_all_stmt;
+	}
+
+	idText[0] = '\0';
+	if (!ast_strlen_zero(id)) {
+		snprintf(idText, sizeof(idText) ,"ActionID: %s\r\n", id);
+	}
+
+	ast_mutex_lock(&dblock);
+	if (!ast_strlen_zero(prefix) && (sqlite3_bind_text(stmt, 1, prefix, prefix_len, SQLITE_STATIC) != SQLITE_OK)) {
+		ast_log(LOG_WARNING, "Couldn't bind %s to stmt: %s\n", prefix, sqlite3_errmsg(astdb));
+		sqlite3_reset(stmt);
+		ast_mutex_unlock(&dblock);
+		ast_free(prefix);
+		astman_send_error(s, m, "Unable to search database");
+		return 0;
+	}
+
+	astman_send_listack(s, m, "Result will follow", "start");
+
+	while (sqlite3_step(stmt) == SQLITE_ROW) {
+		const char *key_s, *value_s;
+		if (!(key_s = (const char *) sqlite3_column_text(stmt, 0))) {
+			ast_log(LOG_WARNING, "Skipping invalid key!\n");
+			continue;
+		}
+		if (!(value_s = (const char *) sqlite3_column_text(stmt, 1))) {
+			ast_log(LOG_WARNING, "Skipping invalid value!\n");
+			continue;
+		}
+		astman_append(s, "Event: DBGetTreeResponse\r\n"
+			"Key: %s\r\n"
+			"Val: %s\r\n"
+			"%s"
+			"\r\n",
+			key_s, value_s, idText);
+		count++;
+	}
+
+	sqlite3_reset(stmt);
+	ast_mutex_unlock(&dblock);
+	ast_free(prefix);
+
+	astman_send_list_complete_start(s, m, "DBGetTreeComplete", count);
+	astman_send_list_complete_end(s);
+
 	return 0;
 }
 
@@ -963,9 +1130,9 @@ static int manager_dbdel(struct mansession *s, const struct message *m)
 		return 0;
 	}
 
-	res = ast_db_del(family, key);
+	res = ast_db_del2(family, key);
 	if (res)
-		astman_send_error(s, m, "Database entry not found");
+		astman_send_error(s, m, "Database entry could not be deleted");
 	else
 		astman_send_ack(s, m, "Key deleted successfully");
 
@@ -1059,6 +1226,7 @@ static void astdb_atexit(void)
 {
 	ast_cli_unregister_multiple(cli_database, ARRAY_LEN(cli_database));
 	ast_manager_unregister("DBGet");
+	ast_manager_unregister("DBGetTree");
 	ast_manager_unregister("DBPut");
 	ast_manager_unregister("DBDel");
 	ast_manager_unregister("DBDelTree");
@@ -1094,6 +1262,7 @@ int astdb_init(void)
 	ast_register_atexit(astdb_atexit);
 	ast_cli_register_multiple(cli_database, ARRAY_LEN(cli_database));
 	ast_manager_register_xml_core("DBGet", EVENT_FLAG_SYSTEM | EVENT_FLAG_REPORTING, manager_dbget);
+	ast_manager_register_xml_core("DBGetTree", EVENT_FLAG_SYSTEM | EVENT_FLAG_REPORTING, manager_db_tree_get);
 	ast_manager_register_xml_core("DBPut", EVENT_FLAG_SYSTEM, manager_dbput);
 	ast_manager_register_xml_core("DBDel", EVENT_FLAG_SYSTEM, manager_dbdel);
 	ast_manager_register_xml_core("DBDelTree", EVENT_FLAG_SYSTEM, manager_dbdeltree);

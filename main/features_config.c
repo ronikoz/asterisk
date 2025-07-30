@@ -33,24 +33,45 @@
 		<synopsis>Features Configuration</synopsis>
 		<configFile name="features.conf">
 			<configObject name="globals">
+				<since>
+					<version>12.0.0</version>
+				</since>
 				<synopsis>
 				</synopsis>
 				<configOption name="featuredigittimeout" default="1000">
+					<since>
+						<version>12.0.0</version>
+					</since>
 					<synopsis>Milliseconds allowed between digit presses when entering a feature code.</synopsis>
 				</configOption>
 				<configOption name="courtesytone">
-					<synopsis>Sound to play when automon or automixmon is activated</synopsis>
+					<since>
+						<version>12.0.0</version>
+					</since>
+					<synopsis>Sound to play when automixmon is activated</synopsis>
 				</configOption>
 				<configOption name="recordingfailsound">
-					<synopsis>Sound to play when automon or automixmon is attempted but fails to start</synopsis>
+					<since>
+						<version>12.0.0</version>
+					</since>
+					<synopsis>Sound to play when automixmon is attempted but fails to start</synopsis>
 				</configOption>
 				<configOption name="transferdigittimeout" default="3">
+					<since>
+						<version>12.0.0</version>
+					</since>
 					<synopsis>Seconds allowed between digit presses when dialing a transfer destination</synopsis>
 				</configOption>
 				<configOption name="atxfernoanswertimeout" default="15">
+					<since>
+						<version>12.0.0</version>
+					</since>
 					<synopsis>Seconds to wait for attended transfer destination to answer</synopsis>
 				</configOption>
 				<configOption name="atxferdropcall" default="no">
+					<since>
+						<version>12.0.0</version>
+					</since>
 					<synopsis>Hang up the call entirely if the attended transfer fails</synopsis>
 					<description>
 						<para>When this option is set to <literal>no</literal>, then Asterisk will attempt to
@@ -65,14 +86,23 @@
 					</description>
 				</configOption>
 				<configOption name="atxferloopdelay" default="10">
+					<since>
+						<version>12.0.0</version>
+					</since>
 					<synopsis>Seconds to wait between attempts to re-dial transfer destination</synopsis>
 					<see-also><ref type="configOption">atxferdropcall</ref></see-also>
 				</configOption>
 				<configOption name="atxfercallbackretries" default="2">
+					<since>
+						<version>12.0.0</version>
+					</since>
 					<synopsis>Number of times to re-attempt dialing a transfer destination</synopsis>
 					<see-also><ref type="configOption">atxferdropcall</ref></see-also>
 				</configOption>
 				<configOption name="xfersound" default="beep">
+					<since>
+						<version>12.0.0</version>
+					</since>
 					<synopsis>Sound to play to during transfer and transfer-like operations.</synopsis>
 					<description>
 						<para>This sound will play to the transferrer and transfer target channels when
@@ -81,6 +111,9 @@
 					</description>
 				</configOption>
 				<configOption name="xferfailsound" default="beeperr">
+					<since>
+						<version>12.0.0</version>
+					</since>
 					<synopsis>Sound to play to a transferee when a transfer fails</synopsis>
 				</configOption>
 				<configOption name="atxferabort" default="*1">
@@ -129,24 +162,53 @@
 					</description>
 				</configOption>
 				<configOption name="pickupsound">
+					<since>
+						<version>12.0.0</version>
+					</since>
 					<synopsis>Sound to play to picker when a call is picked up</synopsis>
 				</configOption>
 				<configOption name="pickupfailsound">
+					<since>
+						<version>12.0.0</version>
+					</since>
 					<synopsis>Sound to play to picker when a call cannot be picked up</synopsis>
 				</configOption>
 				<configOption name="transferdialattempts" default="3">
+					<since>
+						<version>13.1.0</version>
+					</since>
 					<synopsis>Number of dial attempts allowed when attempting a transfer</synopsis>
 				</configOption>
 				<configOption name="transferretrysound" default="pbx-invalid">
+					<since>
+						<version>13.1.0</version>
+					</since>
 					<synopsis>Sound that is played when an incorrect extension is dialed and the transferer should try again.</synopsis>
 				</configOption>
 				<configOption name="transferinvalidsound" default="privacy-incorrect">
+					<since>
+						<version>13.1.0</version>
+					</since>
 					<synopsis>Sound that is played when an incorrect extension is dialed and the transferer has no attempts remaining.</synopsis>
+				</configOption>
+				<configOption name="transferannouncesound" default="pbx-transfer">
+					<since>
+						<version>16.29.0</version>
+						<version>18.15.0</version>
+						<version>19.7.0</version>
+					</since>
+					<synopsis>Sound that is played to the transferer when a transfer is initiated. If empty, no sound will be played.</synopsis>
 				</configOption>
 			</configObject>
 			<configObject name="featuremap">
+				<since>
+					<version>12.0.0</version>
+				</since>
 				<synopsis>DTMF options that can be triggered during bridged calls</synopsis>
 				<configOption name="atxfer">
+					<since>
+						<version>12.0.0</version>
+					</since>
 					<synopsis>DTMF sequence to initiate an attended transfer</synopsis>
 					<description>
 						<para>The transferee parties will be placed on hold and the
@@ -158,6 +220,9 @@
 					</description>
 				</configOption>
 				<configOption name="blindxfer" default="#">
+					<since>
+						<version>12.0.0</version>
+					</since>
 					<synopsis>DTMF sequence to initiate a blind transfer</synopsis>
 					<description>
 						<para>The transferee parties will be placed on hold and the
@@ -174,6 +239,9 @@
 					</description>
 				</configOption>
 				<configOption name="parkcall">
+					<since>
+						<version>12.0.0</version>
+					</since>
 					<synopsis>DTMF sequence to park a call</synopsis>
 					<description>
 						<para>The parking lot used to park the call is determined by using either the
@@ -183,41 +251,37 @@
 						is used. The call is parked in the next available space in the parking lot.</para>
 					</description>
 				</configOption>
-				<configOption name="automon">
-					<synopsis>DTMF sequence to start or stop monitoring a call</synopsis>
+				<configOption name="automixmon">
+					<since>
+						<version>12.0.0</version>
+					</since>
+					<synopsis>DTMF sequence to start or stop MixMonitor on a call</synopsis>
 					<description>
 						<para>This will cause the channel that pressed the DTMF sequence
-						to be monitored by the <literal>Monitor</literal> application. The
-						format for the recording is determined by the <replaceable>TOUCH_MONITOR_FORMAT</replaceable>
+						to be monitored by the <literal>MixMonitor</literal> application. The
+						format for the recording is determined by the <replaceable>TOUCH_MIXMONITOR_FORMAT</replaceable>
 						channel variable. If this variable is not specified, then <literal>wav</literal> is the
 						default. The filename is constructed in the following manner:</para>
-
-						<para>    prefix-timestamp-filename</para>
-
-						<para>where prefix is either the value of the <replaceable>TOUCH_MONITOR_PREFIX</replaceable>
+						<para>    prefix-timestamp-suffix.fmt</para>
+						<para>where prefix is either the value of the <replaceable>TOUCH_MIXMONITOR_PREFIX</replaceable>
 						channel variable or <literal>auto</literal> if the variable is not set. The timestamp
-						is a UNIX timestamp. The filename is either the value of the <replaceable>TOUCH_MONITOR</replaceable>
+						is a UNIX timestamp. The suffix is either the value of the <replaceable>TOUCH_MIXMONITOR</replaceable>
 						channel variable or the callerID of the channels if the variable is not set.</para>
+						<para>To play a periodic beep while this call is being recorded, set the
+						<replaceable>TOUCH_MIXMONITOR_BEEP</replaceable> to the interval in seconds. The interval will default
+						to 15 seconds if invalid.  The minimum interval is 5 seconds.</para>
 					</description>
-				</configOption>
-				<configOption name="automixmon">
-					<synopsis>DTMF sequence to start or stop mixmonitoring a call </synopsis>
-					<description>
-						<para>Operation of the automixmon is similar to the <literal> automon </literal>
-						feature, with the following exceptions:
-							<replaceable>TOUCH_MIXMONITOR</replaceable> is used in place of <replaceable>TOUCH_MONITOR</replaceable>
-							<replaceable>TOUCH_MIXMONITOR_FORMAT</replaceable> is used in place of <replaceable>TOUCH_MIXMONITOR</replaceable>
-							There is no equivalent for <replaceable>TOUCH_MONITOR_PREFIX</replaceable>. <literal>"auto"</literal> is always how the filename begins.</para>
-					</description>
-					<see-also><ref type="configOption">automon</ref></see-also>
 				</configOption>
 			</configObject>
 			<configObject name="applicationmap">
+				<since>
+					<version>12.0.0</version>
+				</since>
 				<synopsis>Section for defining custom feature invocations during a call</synopsis>
 				<description>
 					<para>The applicationmap is an area where new custom features can be created. Items
 					defined in the applicationmap are not automatically accessible to bridged parties. Access
-					to the individual items is controled using the <replaceable>DYNAMIC_FEATURES</replaceable> channel variable.
+					to the individual items is controlled using the <replaceable>DYNAMIC_FEATURES</replaceable> channel variable.
 					The <replaceable>DYNAMIC_FEATURES</replaceable> is a <literal>#</literal> separated list of
 					either applicationmap item names or featuregroup names.</para>
 				</description>
@@ -265,6 +329,9 @@
 				</configOption>
 			</configObject>
 			<configObject name="featuregroup">
+				<since>
+					<version>12.0.0</version>
+				</since>
 				<synopsis>Groupings of items from the applicationmap</synopsis>
 				<description>
 					<para>Feature groups allow for multiple applicationmap items to be
@@ -293,6 +360,9 @@
 		</configFile>
 	</configInfo>
 	<function name="FEATURE" language="en_US">
+		<since>
+			<version>12.0.0</version>
+		</since>
 		<synopsis>
 			Get or set a feature option on a channel.
 		</synopsis>
@@ -320,6 +390,7 @@
 					<enum name="transferdialattempts"><para><xi:include xpointer="xpointer(/docs/configInfo[@name='features']/configFile[@name='features.conf']/configObject[@name='globals']/configOption[@name='transferdialattempts']/synopsis/text())" /></para></enum>
 					<enum name="transferretrysound"><para><xi:include xpointer="xpointer(/docs/configInfo[@name='features']/configFile[@name='features.conf']/configObject[@name='globals']/configOption[@name='transferretrysound']/synopsis/text())" /></para></enum>
 					<enum name="transferinvalidsound"><para><xi:include xpointer="xpointer(/docs/configInfo[@name='features']/configFile[@name='features.conf']/configObject[@name='globals']/configOption[@name='transferinvalidsound']/synopsis/text())" /></para></enum>
+					<enum name="transferannouncesound"><para><xi:include xpointer="xpointer(/docs/configInfo[@name='features']/configFile[@name='features.conf']/configObject[@name='globals']/configOption[@name='transferannouncesound']/synopsis/text())" /></para></enum>
 				</enumlist>
 			</parameter>
 		</syntax>
@@ -335,6 +406,9 @@
 		</see-also>
 	</function>
 	<function name="FEATUREMAP" language="en_US">
+		<since>
+			<version>12.0.0</version>
+		</since>
 		<synopsis>
 			Get or set a feature map to a given value on a specific channel.
 		</synopsis>
@@ -344,7 +418,6 @@
 				<enumlist>
 					<enum name="atxfer"><para>Attended Transfer</para></enum>
 					<enum name="blindxfer"><para>Blind Transfer</para></enum>
-					<enum name="automon"><para>Auto Monitor</para></enum>
 					<enum name="disconnect"><para>Call Disconnect</para></enum>
 					<enum name="parkcall"><para>Park Call</para></enum>
 					<enum name="automixmon"><para>Auto MixMonitor</para></enum>
@@ -383,6 +456,7 @@
 #define DEFAULT_TRANSFER_DIAL_ATTEMPTS              3
 #define DEFAULT_TRANSFER_RETRY_SOUND                "pbx-invalid"
 #define DEFAULT_TRANSFER_INVALID_SOUND              "privacy-incorrect"
+#define DEFAULT_TRANSFER_ANNOUNCE_SOUND             "pbx-transfer"
 
 /*! Default pickup options */
 #define DEFAULT_PICKUPEXTEN                         "*8"
@@ -906,6 +980,8 @@ static int xfer_set(struct ast_features_xfer_config *xfer, const char *name,
 		ast_string_field_set(xfer, transferretrysound, value);
 	} else if (!strcasecmp(name, "transferinvalidsound")) {
 		ast_string_field_set(xfer, transferinvalidsound, value);
+	} else if (!strcasecmp(name, "transferannouncesound")) {
+		ast_string_field_set(xfer, transferannouncesound, value);
 	} else {
 		/* Unrecognized option */
 		res = -1;
@@ -1002,8 +1078,6 @@ static int featuremap_set(struct ast_featuremap_config *featuremap, const char *
 		ast_string_field_set(featuremap, blindxfer, value);
 	} else if (!strcasecmp(name, "disconnect")) {
 		ast_string_field_set(featuremap, disconnect, value);
-	} else if (!strcasecmp(name, "automon")) {
-		ast_string_field_set(featuremap, automon, value);
 	} else if (!strcasecmp(name, "atxfer")) {
 		ast_string_field_set(featuremap, atxfer, value);
 	} else if (!strcasecmp(name, "automixmon")) {
@@ -1027,8 +1101,6 @@ static int featuremap_get(struct ast_featuremap_config *featuremap, const char *
 		ast_copy_string(buf, featuremap->blindxfer, len);
 	} else if (!strcasecmp(field, "disconnect")) {
 		ast_copy_string(buf, featuremap->disconnect, len);
-	} else if (!strcasecmp(field, "automon")) {
-		ast_copy_string(buf, featuremap->automon, len);
 	} else if (!strcasecmp(field, "atxfer")) {
 		ast_copy_string(buf, featuremap->atxfer, len);
 	} else if (!strcasecmp(field, "automixmon")) {
@@ -1797,6 +1869,8 @@ static int load_config(void)
 			DEFAULT_TRANSFER_RETRY_SOUND, xfer_handler, 0);
 	aco_option_register_custom(&cfg_info, "transferinvalidsound", ACO_EXACT, global_options,
 			DEFAULT_TRANSFER_INVALID_SOUND, xfer_handler, 0);
+	aco_option_register_custom(&cfg_info, "transferannouncesound", ACO_EXACT, global_options,
+			DEFAULT_TRANSFER_ANNOUNCE_SOUND, xfer_handler, 0);
 
 	aco_option_register_custom(&cfg_info, "pickupexten", ACO_EXACT, global_options,
 			DEFAULT_PICKUPEXTEN, pickup_handler, 0);
@@ -1844,8 +1918,6 @@ static int load_config(void)
 			DEFAULT_FEATUREMAP_BLINDXFER, featuremap_handler, 0);
 	aco_option_register_custom(&cfg_info, "disconnect", ACO_EXACT, featuremap_options,
 			DEFAULT_FEATUREMAP_DISCONNECT, featuremap_handler, 0);
-	aco_option_register_custom(&cfg_info, "automon", ACO_EXACT, featuremap_options,
-			DEFAULT_FEATUREMAP_AUTOMON, featuremap_handler, 0);
 	aco_option_register_custom(&cfg_info, "atxfer", ACO_EXACT, featuremap_options,
 			DEFAULT_FEATUREMAP_ATXFER, featuremap_handler, 0);
 	aco_option_register_custom(&cfg_info, "parkcall", ACO_EXACT, featuremap_options,
@@ -1944,7 +2016,6 @@ static char *handle_feature_show(struct ast_cli_entry *e, int cmd, struct ast_cl
 	ast_cli(a->fd, HFS_FORMAT, "Pickup", DEFAULT_PICKUPEXTEN, cfg->global->pickup->pickupexten);
 	ast_cli(a->fd, HFS_FORMAT, "Blind Transfer", DEFAULT_FEATUREMAP_BLINDXFER, cfg->featuremap->blindxfer);
 	ast_cli(a->fd, HFS_FORMAT, "Attended Transfer", DEFAULT_FEATUREMAP_ATXFER, cfg->featuremap->atxfer);
-	ast_cli(a->fd, HFS_FORMAT, "One Touch Monitor", DEFAULT_FEATUREMAP_AUTOMON, cfg->featuremap->automon);
 	ast_cli(a->fd, HFS_FORMAT, "Disconnect Call", DEFAULT_FEATUREMAP_DISCONNECT, cfg->featuremap->disconnect);
 	ast_cli(a->fd, HFS_FORMAT, "Park Call", DEFAULT_FEATUREMAP_PARKCALL, cfg->featuremap->parkcall);
 	ast_cli(a->fd, HFS_FORMAT, "One Touch MixMonitor", DEFAULT_FEATUREMAP_AUTOMIXMON, cfg->featuremap->automixmon);

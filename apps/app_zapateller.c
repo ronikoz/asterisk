@@ -41,6 +41,9 @@
 
 /*** DOCUMENTATION
 	<application name="Zapateller" language="en_US">
+		<since>
+			<version>0.1.12</version>
+		</since>
 		<synopsis>
 			Block telemarketers with SIT.
 		</synopsis>

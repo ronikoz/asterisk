@@ -278,13 +278,23 @@ static void bridge_channel_poke(struct ast_bridge_channel *bridge_channel)
  */
 static int channel_set_cause(struct ast_channel *chan, int cause)
 {
+	int current_cause;
 	ast_channel_lock(chan);
+	current_cause = ast_channel_hangupcause(chan);
+
+	/* if the hangupcause is already set, leave it */
+	if (current_cause > 0) {
+		ast_channel_unlock(chan);
+		return current_cause;
+	}
+
 	if (cause <= 0) {
 		cause = ast_channel_hangupcause(chan);
 		if (cause <= 0) {
 			cause = AST_CAUSE_NORMAL_CLEARING;
 		}
 	}
+
 	ast_channel_hangupcause_set(chan, cause);
 	ast_channel_unlock(chan);
 	return cause;
@@ -1175,26 +1185,8 @@ static int run_app_helper(struct ast_channel *chan, const char *app_name, const 
 
 	if (!strcasecmp("Gosub", app_name)) {
 		ast_app_exec_sub(NULL, chan, app_args, 0);
-	} else if (!strcasecmp("Macro", app_name)) {
-		ast_app_exec_macro(NULL, chan, app_args);
 	} else {
-		struct ast_app *app;
-
-		app = pbx_findapp(app_name);
-		if (!app) {
-			ast_log(LOG_WARNING, "Could not find application (%s)\n", app_name);
-		} else {
-			struct ast_str *substituted_args = ast_str_create(16);
-
-			if (substituted_args) {
-				ast_str_substitute_variables(&substituted_args, 0, chan, app_args);
-				res = pbx_exec(chan, app, ast_str_buffer(substituted_args));
-				ast_free(substituted_args);
-			} else {
-				ast_log(LOG_WARNING, "Could not substitute application argument variables for %s\n", app_name);
-				res = pbx_exec(chan, app, app_args);
-			}
-		}
+		res = ast_pbx_exec_application(chan, app_name, app_args);
 	}
 	return res;
 }
@@ -1293,7 +1285,7 @@ void ast_bridge_channel_playfile(struct ast_bridge_channel *bridge_channel, ast_
 
 	/*
 	 * It may be necessary to resume music on hold after we finish
-	 * playing the announcment.
+	 * playing the announcement.
 	 */
 	if (ast_test_flag(ast_channel_flags(bridge_channel->chan), AST_FLAG_MOH)) {
 		const char *latest_musicclass;
@@ -1644,8 +1636,6 @@ static void testsuite_notify_feature_success(struct ast_channel *chan, const cha
 			feature = "atxfer";
 		} else if (!strcmp(dtmf, featuremap->disconnect)) {
 			feature = "disconnect";
-		} else if (!strcmp(dtmf, featuremap->automon)) {
-			feature = "automon";
 		} else if (!strcmp(dtmf, featuremap->automixmon)) {
 			feature = "automixmon";
 		} else if (!strcmp(dtmf, featuremap->parkcall)) {
@@ -2279,21 +2269,16 @@ static void bridge_channel_handle_control(struct ast_bridge_channel *bridge_chan
 {
 	struct ast_channel *chan;
 	struct ast_option_header *aoh;
-	int is_caller;
 
 	chan = bridge_channel->chan;
 	switch (fr->subclass.integer) {
 	case AST_CONTROL_REDIRECTING:
-		is_caller = !ast_test_flag(ast_channel_flags(chan), AST_FLAG_OUTGOING);
-		if (ast_channel_redirecting_sub(NULL, chan, fr, 1) &&
-			ast_channel_redirecting_macro(NULL, chan, fr, is_caller, 1)) {
+		if (ast_channel_redirecting_sub(NULL, chan, fr, 1)) {
 			ast_indicate_data(chan, fr->subclass.integer, fr->data.ptr, fr->datalen);
 		}
 		break;
 	case AST_CONTROL_CONNECTED_LINE:
-		is_caller = !ast_test_flag(ast_channel_flags(chan), AST_FLAG_OUTGOING);
-		if (ast_channel_connected_line_sub(NULL, chan, fr, 1) &&
-			ast_channel_connected_line_macro(NULL, chan, fr, is_caller, 1)) {
+		if (ast_channel_connected_line_sub(NULL, chan, fr, 1)) {
 			ast_indicate_data(chan, fr->subclass.integer, fr->data.ptr, fr->datalen);
 		}
 		break;

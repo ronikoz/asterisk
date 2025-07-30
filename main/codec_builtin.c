@@ -105,6 +105,7 @@ static struct ast_codec g723 = {
 	.minimum_bytes = 20,
 	.samples_count = g723_samples,
 	.get_length = g723_length,
+	.quality = 20,
 };
 
 static int codec2_samples(struct ast_frame *frame)
@@ -146,7 +147,7 @@ static struct ast_codec none = {
 	.type = AST_MEDIA_TYPE_AUDIO,
 	.sample_rate = 8000, /* This must have some sample rate to prevent divide by 0 */
 	.minimum_ms = 10,
-	.maximum_ms = 150,
+	.maximum_ms = 140,
 	.default_ms = 20,
 	.minimum_bytes = 20,
 	.samples_count = none_samples,
@@ -169,12 +170,13 @@ static struct ast_codec ulaw = {
 	.type = AST_MEDIA_TYPE_AUDIO,
 	.sample_rate = 8000,
 	.minimum_ms = 10,
-	.maximum_ms = 150,
+	.maximum_ms = 140,
 	.default_ms = 20,
 	.minimum_bytes = 80,
 	.samples_count = ulaw_samples,
 	.get_length = ulaw_length,
 	.smooth = 1,
+	.quality = 100, /* We are the gold standard. */
 };
 
 static struct ast_codec alaw = {
@@ -183,12 +185,13 @@ static struct ast_codec alaw = {
 	.type = AST_MEDIA_TYPE_AUDIO,
 	.sample_rate = 8000,
 	.minimum_ms = 10,
-	.maximum_ms = 150,
+	.maximum_ms = 140,
 	.default_ms = 20,
 	.minimum_bytes = 80,
 	.samples_count = ulaw_samples,
 	.get_length = ulaw_length,
 	.smooth = 1,
+	.quality = 100, /* Just as good as ulaw */
 };
 
 static int gsm_samples(struct ast_frame *frame)
@@ -213,6 +216,7 @@ static struct ast_codec gsm = {
 	.samples_count = gsm_samples,
 	.get_length = gsm_length,
 	.smooth = 1,
+	.quality = 60,
 };
 
 static int g726_samples(struct ast_frame *frame)
@@ -237,6 +241,7 @@ static struct ast_codec g726rfc3551 = {
 	.samples_count = g726_samples,
 	.get_length = g726_length,
 	.smooth = 1,
+	.quality = 85,
 };
 
 static struct ast_codec g726aal2 = {
@@ -251,6 +256,7 @@ static struct ast_codec g726aal2 = {
 	.samples_count = g726_samples,
 	.get_length = g726_length,
 	.smooth = 1,
+	.quality = 85,
 };
 
 static struct ast_codec adpcm = {
@@ -265,6 +271,7 @@ static struct ast_codec adpcm = {
 	.samples_count = g726_samples,
 	.get_length = g726_length,
 	.smooth = 1,
+	.quality = 80,
 };
 
 static int slin_samples(struct ast_frame *frame)
@@ -283,13 +290,14 @@ static struct ast_codec slin8 = {
 	.type = AST_MEDIA_TYPE_AUDIO,
 	.sample_rate = 8000,
 	.minimum_ms = 10,
-	.maximum_ms = 70,
+	.maximum_ms = 60,
 	.default_ms = 20,
 	.minimum_bytes = 160,
 	.samples_count = slin_samples,
 	.get_length = slin_length,
 	.smooth = 1,
 	.smoother_flags = AST_SMOOTHER_FLAG_BE | AST_SMOOTHER_FLAG_FORCED,
+	.quality = 115, /* Better than ulaw */
 };
 
 static struct ast_codec slin12 = {
@@ -298,13 +306,14 @@ static struct ast_codec slin12 = {
 	.type = AST_MEDIA_TYPE_AUDIO,
 	.sample_rate = 12000,
 	.minimum_ms = 10,
-	.maximum_ms = 70,
+	.maximum_ms = 60,
 	.default_ms = 20,
 	.minimum_bytes = 240,
 	.samples_count = slin_samples,
 	.get_length = slin_length,
 	.smooth = 1,
 	.smoother_flags = AST_SMOOTHER_FLAG_BE | AST_SMOOTHER_FLAG_FORCED,
+	.quality = 116,
 };
 
 static struct ast_codec slin16 = {
@@ -313,13 +322,14 @@ static struct ast_codec slin16 = {
 	.type = AST_MEDIA_TYPE_AUDIO,
 	.sample_rate = 16000,
 	.minimum_ms = 10,
-	.maximum_ms = 70,
+	.maximum_ms = 60,
 	.default_ms = 20,
 	.minimum_bytes = 320,
 	.samples_count = slin_samples,
 	.get_length = slin_length,
 	.smooth = 1,
 	.smoother_flags = AST_SMOOTHER_FLAG_BE | AST_SMOOTHER_FLAG_FORCED,
+	.quality = 117,
 };
 
 static struct ast_codec slin24 = {
@@ -328,13 +338,14 @@ static struct ast_codec slin24 = {
 	.type = AST_MEDIA_TYPE_AUDIO,
 	.sample_rate = 24000,
 	.minimum_ms = 10,
-	.maximum_ms = 70,
+	.maximum_ms = 60,
 	.default_ms = 20,
 	.minimum_bytes = 480,
 	.samples_count = slin_samples,
 	.get_length = slin_length,
 	.smooth = 1,
 	.smoother_flags = AST_SMOOTHER_FLAG_BE | AST_SMOOTHER_FLAG_FORCED,
+	.quality = 118,
 };
 
 static struct ast_codec slin32 = {
@@ -343,13 +354,14 @@ static struct ast_codec slin32 = {
 	.type = AST_MEDIA_TYPE_AUDIO,
 	.sample_rate = 32000,
 	.minimum_ms = 10,
-	.maximum_ms = 70,
+	.maximum_ms = 60,
 	.default_ms = 20,
 	.minimum_bytes = 640,
 	.samples_count = slin_samples,
 	.get_length = slin_length,
 	.smooth = 1,
 	.smoother_flags = AST_SMOOTHER_FLAG_BE | AST_SMOOTHER_FLAG_FORCED,
+	.quality = 119,
 };
 
 static struct ast_codec slin44 = {
@@ -358,13 +370,14 @@ static struct ast_codec slin44 = {
 	.type = AST_MEDIA_TYPE_AUDIO,
 	.sample_rate = 44100,
 	.minimum_ms = 10,
-	.maximum_ms = 70,
+	.maximum_ms = 60,
 	.default_ms = 20,
 	.minimum_bytes = 882,
 	.samples_count = slin_samples,
 	.get_length = slin_length,
 	.smooth = 1,
 	.smoother_flags = AST_SMOOTHER_FLAG_BE | AST_SMOOTHER_FLAG_FORCED,
+	.quality = 120,
 };
 
 static struct ast_codec slin48 = {
@@ -373,13 +386,14 @@ static struct ast_codec slin48 = {
 	.type = AST_MEDIA_TYPE_AUDIO,
 	.sample_rate = 48000,
 	.minimum_ms = 10,
-	.maximum_ms = 70,
+	.maximum_ms = 60,
 	.default_ms = 20,
 	.minimum_bytes = 960,
 	.samples_count = slin_samples,
 	.get_length = slin_length,
 	.smooth = 1,
 	.smoother_flags = AST_SMOOTHER_FLAG_BE | AST_SMOOTHER_FLAG_FORCED,
+	.quality = 121,
 };
 
 static struct ast_codec slin96 = {
@@ -388,13 +402,14 @@ static struct ast_codec slin96 = {
 	.type = AST_MEDIA_TYPE_AUDIO,
 	.sample_rate = 96000,
 	.minimum_ms = 10,
-	.maximum_ms = 70,
+	.maximum_ms = 60,
 	.default_ms = 20,
 	.minimum_bytes = 1920,
 	.samples_count = slin_samples,
 	.get_length = slin_length,
 	.smooth = 1,
 	.smoother_flags = AST_SMOOTHER_FLAG_BE | AST_SMOOTHER_FLAG_FORCED,
+	.quality = 122,
 };
 
 static struct ast_codec slin192 = {
@@ -403,13 +418,14 @@ static struct ast_codec slin192 = {
 	.type = AST_MEDIA_TYPE_AUDIO,
 	.sample_rate = 192000,
 	.minimum_ms = 10,
-	.maximum_ms = 70,
+	.maximum_ms = 60,
 	.default_ms = 20,
 	.minimum_bytes = 3840,
 	.samples_count = slin_samples,
 	.get_length = slin_length,
 	.smooth = 1,
 	.smoother_flags = AST_SMOOTHER_FLAG_BE | AST_SMOOTHER_FLAG_FORCED,
+	.quality = 123,
 };
 
 static int lpc10_samples(struct ast_frame *frame)
@@ -433,6 +449,7 @@ static struct ast_codec lpc10 = {
 	.minimum_bytes = 7,
 	.samples_count = lpc10_samples,
 	.smooth = 1,
+	.quality = 25,
 };
 
 static int g729_samples(struct ast_frame *frame)
@@ -451,13 +468,14 @@ static struct ast_codec g729a = {
 	.type = AST_MEDIA_TYPE_AUDIO,
 	.sample_rate = 8000,
 	.minimum_ms = 10,
-	.maximum_ms = 230,
+	.maximum_ms = 220,
 	.default_ms = 20,
 	.minimum_bytes = 10,
 	.samples_count = g729_samples,
 	.get_length = g729_length,
 	.smooth = 1,
 	.smoother_flags = AST_SMOOTHER_FLAG_G729,
+	.quality = 20,
 };
 
 static unsigned char get_n_bits_at(unsigned char *data, int n, int bit)
@@ -584,6 +602,7 @@ static struct ast_codec speex8 = {
 	.default_ms = 20,
 	.minimum_bytes = 10,
 	.samples_count = speex8_samples,
+	.quality = 40,
 };
 
 static int speex16_samples(struct ast_frame *frame)
@@ -601,6 +620,7 @@ static struct ast_codec speex16 = {
 	.default_ms = 20,
 	.minimum_bytes = 10,
 	.samples_count = speex16_samples,
+	.quality = 40,
 };
 
 static int speex32_samples(struct ast_frame *frame)
@@ -618,6 +638,7 @@ static struct ast_codec speex32 = {
 	.default_ms = 20,
 	.minimum_bytes = 10,
 	.samples_count = speex32_samples,
+	.quality = 40,
 };
 
 static int ilbc_samples(struct ast_frame *frame)
@@ -641,6 +662,7 @@ static struct ast_codec ilbc = {
 	.minimum_bytes = 38,
 	.samples_count = ilbc_samples,
 	.smooth = 0,
+	.quality = 45,
 };
 
 static struct ast_codec g722 = {
@@ -649,12 +671,13 @@ static struct ast_codec g722 = {
 	.type = AST_MEDIA_TYPE_AUDIO,
 	.sample_rate = 16000,
 	.minimum_ms = 10,
-	.maximum_ms = 150,
+	.maximum_ms = 140,
 	.default_ms = 20,
 	.minimum_bytes = 80,
 	.samples_count = g726_samples,
 	.get_length = g726_length,
 	.smooth = 1,
+	.quality = 110, /* In theory, better than ulaw */
 };
 
 static int siren7_samples(struct ast_frame *frame)
@@ -678,6 +701,7 @@ static struct ast_codec siren7 = {
 	.minimum_bytes = 80,
 	.samples_count = siren7_samples,
 	.get_length = siren7_length,
+	.quality = 85,
 };
 
 static int siren14_samples(struct ast_frame *frame)
@@ -701,6 +725,7 @@ static struct ast_codec siren14 = {
 	.minimum_bytes = 120,
 	.samples_count = siren14_samples,
 	.get_length = siren14_length,
+	.quality = 90,
 };
 
 static int g719_samples(struct ast_frame *frame)
@@ -724,6 +749,7 @@ static struct ast_codec g719 = {
 	.minimum_bytes = 160,
 	.samples_count = g719_samples,
 	.get_length = g719_length,
+	.quality = 95,
 };
 
 static int opus_samples(struct ast_frame *frame)
@@ -751,6 +777,7 @@ static struct ast_codec opus = {
 	.default_ms = 20,
 	.samples_count = opus_samples,
 	.minimum_bytes = 10,
+	.quality = 50,
 };
 
 static struct ast_codec jpeg = {
@@ -859,7 +886,7 @@ static struct ast_codec silk8 = {
 	.maximum_ms = 100,
 	.default_ms = 20,
 	.minimum_bytes = 160,
-	.samples_count = silk_samples
+	.samples_count = silk_samples,
 };
 
 static struct ast_codec silk12 = {

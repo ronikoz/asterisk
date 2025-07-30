@@ -120,6 +120,9 @@
 /*** DOCUMENTATION
 	<managerEvent language="en_US" name="DeviceStateChange">
 		<managerEventInstance class="EVENT_FLAG_CALL">
+			<since>
+				<version>13.0.0</version>
+			</since>
 			<synopsis>Raised when a device state changes</synopsis>
 			<syntax>
 				<parameter name="Device">
@@ -179,8 +182,8 @@ static const struct chan2dev {
 	{ AST_STATE_RESERVED,        AST_DEVICE_INUSE },
 	{ AST_STATE_OFFHOOK,         AST_DEVICE_INUSE },
 	{ AST_STATE_DIALING,         AST_DEVICE_INUSE },
-	{ AST_STATE_RING,            AST_DEVICE_INUSE },
-	{ AST_STATE_RINGING,         AST_DEVICE_RINGING },
+	{ AST_STATE_RING,            AST_DEVICE_INUSE }, /* Audible ringback tone */
+	{ AST_STATE_RINGING,         AST_DEVICE_RINGING }, /* Actual ringing */
 	{ AST_STATE_UP,              AST_DEVICE_INUSE },
 	{ AST_STATE_BUSY,            AST_DEVICE_BUSY },
 	{ AST_STATE_DIALING_OFFHOOK, AST_DEVICE_INUSE },
@@ -780,7 +783,7 @@ static const char *device_state_get_id(struct stasis_message *message)
  * \since 12.2.0
  *
  * \param cache_topic Caching topic the aggregate message may be published over.
- * \param aggregate The aggregate shapshot message to publish.
+ * \param aggregate The aggregate snapshot message to publish.
  */
 static void device_state_aggregate_publish(struct stasis_topic *cache_topic, struct stasis_message *aggregate)
 {
@@ -805,7 +808,7 @@ static void device_state_aggregate_publish(struct stasis_topic *cache_topic, str
  * \since 12.2.0
  *
  * \param entry Cache entry to calculate a new aggregate snapshot.
- * \param new_snapshot The shapshot that is being updated.
+ * \param new_snapshot The snapshot that is being updated.
  *
  * \note Return a ref bumped pointer from stasis_cache_entry_get_aggregate()
  * if a new aggregate could not be calculated because of error.

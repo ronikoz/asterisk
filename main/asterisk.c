@@ -1,7 +1,7 @@
 /*
  * Asterisk -- An open source telephony toolkit.
  *
- * Copyright (C) 1999 - 2018, Digium, Inc.
+ * Copyright (C) 1999 - 2025, Sangoma Technologies Corporation
  *
  * Mark Spencer <markster@digium.com>
  *
@@ -53,7 +53,7 @@
  *
  * \section copyright Copyright and Author
  *
- * Copyright (C) 1999 - 2021, Sangoma Technologies Corporation.
+ * Copyright (C) 1999 - 2025, Sangoma Technologies Corporation.
  * Asterisk is a <a href="https://cdn.sangoma.com/wp-content/uploads/Sangoma-Trademark-Policy.pdf">registered trademark</a>
  * of <a rel="nofollow" href="http://www.sangoma.com">Sangoma Technologies Corporation</a>.
  *
@@ -70,8 +70,8 @@
 /*!
  * \page asterisk_community_resources Asterisk Community Resources
  * \par Websites
- * \li http://www.asterisk.org Asterisk Homepage
- * \li http://wiki.asterisk.org Asterisk Wiki
+ * \li https://www.asterisk.org Asterisk Homepage
+ * \li https://docs.asterisk.org Asterisk documentation
  *
  * \par Mailing Lists
  * \par
@@ -245,10 +245,14 @@ int daemon(int, int);  /* defined in libresolv of all places */
 #include "asterisk/utf8.h"
 
 #include "../defaults.h"
+#include "channelstorage.h"
 
 /*** DOCUMENTATION
 	<managerEvent language="en_US" name="FullyBooted">
 		<managerEventInstance class="EVENT_FLAG_SYSTEM">
+			<since>
+				<version>12.0.0</version>
+			</since>
 			<synopsis>Raised when all Asterisk initialization procedures have finished.</synopsis>
 			<syntax>
 				<parameter name="Status">
@@ -265,6 +269,9 @@ int daemon(int, int);  /* defined in libresolv of all places */
 	</managerEvent>
 	<managerEvent language="en_US" name="Shutdown">
 		<managerEventInstance class="EVENT_FLAG_SYSTEM">
+			<since>
+				<version>12.0.0</version>
+			</since>
 			<synopsis>Raised when Asterisk is shutdown or restarted.</synopsis>
 			<syntax>
 				<parameter name="Shutdown">
@@ -297,7 +304,7 @@ int daemon(int, int);  /* defined in libresolv of all places */
 #define NUM_MSGS 64
 
 /*! Displayed copyright tag */
-#define COPYRIGHT_TAG "Copyright (C) 1999 - 2021, Sangoma Technologies Corporation and others."
+#define COPYRIGHT_TAG "Copyright (C) 1999 - 2025, Sangoma Technologies Corporation and others."
 
 /*! \brief Welcome message when starting a CLI interface */
 #define WELCOME_MESSAGE \
@@ -491,7 +498,8 @@ static char *handle_show_settings(struct ast_cli_entry *e, int cmd, struct ast_c
 	ast_cli(a->fd, "\nPBX Core settings\n");
 	ast_cli(a->fd, "-----------------\n");
 	ast_cli(a->fd, "  Version:                     %s\n", ast_get_version());
-	ast_cli(a->fd, "  Build Options:               %s\n", S_OR(ast_get_build_opts(), "(none)"));
+	ast_cli(a->fd, "  ABI related Build Options:   %s\n", S_OR(ast_get_build_opts(), "(none)"));
+	ast_cli(a->fd, "  All Build Options:           %s\n", S_OR(ast_get_build_opts_all(), "(none)"));
 	if (ast_option_maxcalls)
 		ast_cli(a->fd, "  Maximum calls:               %d (Current %d)\n", ast_option_maxcalls, ast_active_channels());
 	else
@@ -552,6 +560,7 @@ static char *handle_show_settings(struct ast_cli_entry *e, int cmd, struct ast_c
 	ast_cli(a->fd, "  Generic PLC:                 %s\n", ast_test_flag(&ast_options, AST_OPT_FLAG_GENERIC_PLC) ? "Enabled" : "Disabled");
 	ast_cli(a->fd, "  Generic PLC on equal codecs: %s\n", ast_test_flag(&ast_options, AST_OPT_FLAG_GENERIC_PLC_ON_EQUAL_CODECS) ? "Enabled" : "Disabled");
 	ast_cli(a->fd, "  Hide Msg Chan AMI events:    %s\n", ast_opt_hide_messaging_ami_events ? "Enabled" : "Disabled");
+	ast_cli(a->fd, "  Sounds search custom dir:    %s\n", ast_opt_sounds_search_custom ? "Enabled" : "Disabled");
 	ast_cli(a->fd, "  Min DTMF duration::          %u\n", option_dtmfminduration);
 #if !defined(LOW_MEMORY)
 	ast_cli(a->fd, "  Cache media frames:          %s\n", ast_opt_cache_media_frames ? "Enabled" : "Disabled");
@@ -570,6 +579,10 @@ static char *handle_show_settings(struct ast_cli_entry *e, int cmd, struct ast_c
 		ast_cli(a->fd, "  RTP dynamic payload types:   %u-%u\n",
 		        AST_RTP_PT_FIRST_DYNAMIC, AST_RTP_MAX_PT - 1);
 	}
+	ast_cli(a->fd, "  Channel storage backend:     %s\n",
+		ast_channel_get_current_storage_driver_name());
+	ast_cli(a->fd, "  Shell on remote consoles:    %s\n",
+		ast_option_disable_remote_console_shell ? "Disabled" : "Enabled");
 
 	ast_cli(a->fd, "\n* Subsystems\n");
 	ast_cli(a->fd, "  -------------\n");
@@ -594,6 +607,7 @@ static char *handle_show_settings(struct ast_cli_entry *e, int cmd, struct ast_c
 	ast_cli(a->fd, "  ASTDB:                       %s\n", ast_config_AST_DB);
 	ast_cli(a->fd, "  IAX2 Keys directory:         %s\n", ast_config_AST_KEY_DIR);
 	ast_cli(a->fd, "  AGI Scripts directory:       %s\n", ast_config_AST_AGI_DIR);
+	ast_cli(a->fd, "  Cache directory:             %s\n", ast_config_AST_CACHE_DIR);
 	ast_cli(a->fd, "\n\n");
 	return CLI_SUCCESS;
 }
@@ -1115,6 +1129,10 @@ void ast_unreplace_sigchld(void)
 	unsigned int level;
 
 	ast_mutex_lock(&safe_system_lock);
+
+	/* Wrapping around here is an error */
+	ast_assert(safe_system_level > 0);
+
 	level = --safe_system_level;
 
 	/* only restore the handler if we are the last one */
@@ -2048,7 +2066,7 @@ static void really_quit(int num, shutdown_nice_t niceness, int restart)
 		run_cleanups = 0;
 	}
 
-	if (!restart) {
+	if (!restart && !ast_opt_remote) {
 		ast_sd_notify("STOPPING=1");
 	}
 	if (ast_opt_console || (ast_opt_remote && !ast_opt_exec)) {
@@ -2162,7 +2180,19 @@ static void set_header(char *outbuf, int maxout, char level)
 		break;
 	case 3: cmp = VERBOSE_PREFIX_3;
 		break;
-	default: cmp = VERBOSE_PREFIX_4;
+	case 4: cmp = VERBOSE_PREFIX_4;
+		break;
+	case 5: cmp = VERBOSE_PREFIX_5;
+		break;
+	case 6: cmp = VERBOSE_PREFIX_6;
+		break;
+	case 7: cmp = VERBOSE_PREFIX_7;
+		break;
+	case 8: cmp = VERBOSE_PREFIX_8;
+		break;
+	case 9: cmp = VERBOSE_PREFIX_9;
+		break;
+	default: cmp = VERBOSE_PREFIX_10;
 		break;
 	}
 
@@ -2309,6 +2339,10 @@ static int remoteconsolehandler(const char *s)
 
 	/* The real handler for bang */
 	if (s[0] == '!') {
+		if (ast_option_disable_remote_console_shell) {
+			printf("Shell access is disabled on remote consoles\n");
+			return 1;
+		}
 		if (s[1])
 			ast_safe_system(s+1);
 		else
@@ -3007,6 +3041,23 @@ static char *cli_complete(EditLine *editline, int ch)
 			/* Only read 1024 bytes at a time */
 			res = read(ast_consock, mbuf + mlen, 1024);
 			if (res > 0) {
+				if (!strncmp(mbuf, "Usage:", 6)) {
+					/*
+					 * Abort on malformed tab completes
+					 * If help (tab complete) follows certain
+					 * special characters, the main Asterisk process
+					 * provides usage for the internal tab complete
+					 * helper command that the remote console processes
+					 * use.
+					 * If this happens, the AST_CLI_COMPLETE_EOF sentinel
+					 * value never gets sent. As a result, we'll just block
+					 * forever if we don't handle this case.
+					 * If we get command usage on a tab complete, then
+					 * we know this scenario just happened and we should
+					 * just silently ignore and do nothing.
+					 */
+					break;
+				}
 				mlen += res;
 				mbuf[mlen] = '\0';
 			}
@@ -3151,29 +3202,49 @@ static int ast_el_read_history(const char *filename)
 		ast_el_initialize();
 	}
 
-	return history(el_hist, &ev, H_LOAD, filename);
+	if (access(filename, F_OK) == 0) {
+		return history(el_hist, &ev, H_LOAD, filename);
+	}
+
+	/* If the history file doesn't exist, failing to read it is unremarkable. */
+	return 0;
+}
+
+static void process_histfile(int (*readwrite)(const char *filename))
+{
+	struct passwd *pw = getpwuid(geteuid());
+	int ret = 0;
+	char *name = NULL;
+
+	if (!pw || ast_strlen_zero(pw->pw_dir)) {
+		ast_log(LOG_ERROR, "Unable to determine home directory.  History read/write disabled.\n");
+		return;
+	}
+
+	ret = ast_asprintf(&name, "%s/.asterisk_history", pw->pw_dir);
+	if (ret <= 0) {
+		ast_log(LOG_ERROR, "Unable to create history file name.  History read/write disabled.\n");
+		return;
+	}
+
+	ret = readwrite(name);
+	if (ret < 0) {
+		ast_log(LOG_ERROR, "Unable to read or write history file '%s'\n", name);
+	}
+
+	ast_free(name);
+
+	return;
 }
 
 static void ast_el_read_default_histfile(void)
 {
-	char histfile[80] = "";
-	const char *home = getenv("HOME");
-
-	if (!ast_strlen_zero(home)) {
-		snprintf(histfile, sizeof(histfile), "%s/.asterisk_history", home);
-		ast_el_read_history(histfile);
-	}
+	process_histfile(ast_el_read_history);
 }
 
 static void ast_el_write_default_histfile(void)
 {
-	char histfile[80] = "";
-	const char *home = getenv("HOME");
-
-	if (!ast_strlen_zero(home)) {
-		snprintf(histfile, sizeof(histfile), "%s/.asterisk_history", home);
-		ast_el_write_history(histfile);
-	}
+	process_histfile(ast_el_write_history);
 }
 
 static void ast_remotecontrol(char *data)
@@ -3351,7 +3422,7 @@ static int show_cli_help(void)
 	printf("   -L <load>       Limit the maximum load average before rejecting new calls\n");
 	printf("   -M <value>      Limit the maximum number of calls to the specified value\n");
 	printf("   -m              Mute debugging and console output on the console\n");
-	printf("   -n              Disable console colorization\n");
+	printf("   -n              Disable console colorization. Can be used only at startup.\n");
 	printf("   -p              Run as pseudo-realtime thread\n");
 	printf("   -q              Quiet mode (suppress output)\n");
 	printf("   -r              Connect to Asterisk on this machine\n");
@@ -3360,7 +3431,7 @@ static int show_cli_help(void)
 	printf("   -t              Record soundfiles in /var/tmp and move them where they\n");
 	printf("                   belong after they are done\n");
 	printf("   -T              Display the time in [Mmm dd hh:mm:ss] format for each line\n");
-	printf("                   of output to the CLI\n");
+	printf("                   of output to the CLI. Cannot be used with remote console mode.\n\n");
 	printf("   -v              Increase verbosity (multiple v's = more verbose)\n");
 	printf("   -x <cmd>        Execute command <cmd> (implies -r)\n");
 	printf("   -X              Enable use of #exec in asterisk.conf\n");
@@ -3466,8 +3537,20 @@ static void canary_exit(void)
 	}
 }
 
+enum startup_commands_phase {
+	STARTUP_COMMANDS_PRE_INIT = 0,
+	STARTUP_COMMANDS_PRE_MODULE,
+	STARTUP_COMMANDS_FULLY_BOOTED
+};
+
+static const char *startup_commands_phase_str[] = {
+	"pre-init",
+	"pre-module",
+	"fully-booted,yes,true,y,t,1,on"
+};
+
 /* Execute CLI commands on startup.  Run by main() thread. */
-static void run_startup_commands(void)
+static void run_startup_commands(enum startup_commands_phase phase)
 {
 	int fd;
 	struct ast_config *cfg;
@@ -3487,8 +3570,10 @@ static void run_startup_commands(void)
 	}
 
 	for (v = ast_variable_browse(cfg, "startup_commands"); v; v = v->next) {
-		if (ast_true(v->value))
+		char *value = ast_str_to_lower(ast_strdupa(v->value));
+		if (ast_in_delimited_string(value, startup_commands_phase_str[phase], ',')) {
 			ast_cli_command(fd, v->name);
+		}
 	}
 
 	close(fd);
@@ -3554,7 +3639,7 @@ int main(int argc, char *argv[])
 	}
 	ast_mainpid = getpid();
 
-	/* Process command-line options that effect asterisk.conf load. */
+	/* Process command-line options that affect asterisk.conf load. */
 	while ((c = getopt(argc, argv, getopt_settings)) != -1) {
 		switch (c) {
 		case 'X':
@@ -3713,6 +3798,57 @@ int main(int argc, char *argv[])
 		case '?':
 			/* already processed. */
 			break;
+		}
+	}
+
+	if (ast_opt_remote) {
+		int didwarn = 0;
+		optind = 1;
+
+		/* Not all options can be used with remote console. Warn if they're used. */
+		while ((c = getopt(argc, argv, getopt_settings)) != -1) {
+			switch (c) {
+			/* okay to run with remote console */
+			case 'B': /* force black background */
+			case 'C': /* set config path */
+			case 'd': /* debug */
+			case 'h': /* help */
+			case 'I': /* obsolete timing option: warning already thrown if used */
+			case 'L': /* max load */
+			case 'M': /* max calls */
+			case 'm': /* mute */
+			/*! \note The q option is never used anywhere, only defined */
+			case 'q': /* quiet */
+			case 'R': /* reconnect */
+			case 'r': /* remote */
+			/*! \note Can ONLY be used with remote console */
+			case 's': /* set socket path */
+			case 'T': /* timestamp */
+			case 'V': /* version */
+			case 'v': /* verbose */
+			case 'W': /* white background */
+			case 'x': /* remote execute */
+			case '?': /* ? */
+				break;
+			/* can only be run when Asterisk is starting */
+			case 'X': /* enables #exec for asterisk.conf only. */
+			case 'c': /* foreground console */
+			case 'e': /* minimum memory free */
+			case 'F': /* always fork */
+			case 'f': /* no fork */
+			case 'G': /* run group */
+			case 'g': /* dump core */
+			case 'i': /* init keys */
+			case 'n': /* no color */
+			case 'p': /* high priority */
+			case 't': /* cache record files */
+			case 'U': /* run user */
+				fprintf(stderr, "'%c' option is not compatible with remote console mode and has no effect.\n", c);
+				didwarn = 1;
+			}
+		}
+		if (didwarn) {
+			fprintf(stderr, "\n"); /* if any warnings print out, make them stand out */
 		}
 	}
 
@@ -4014,7 +4150,7 @@ static void asterisk_daemon(int isroot, const char *runuser, const char *rungrou
 
 	load_astmm_phase_1();
 
-	/* Check whether high prio was succesfully set by us or some
+	/* Check whether high prio was successfully set by us or some
 	 * other incantation. */
 	if (has_priority()) {
 		ast_set_flag(&ast_options, AST_OPT_FLAG_HIGH_PRIORITY);
@@ -4156,6 +4292,8 @@ static void asterisk_daemon(int isroot, const char *runuser, const char *rungrou
 	threadstorage_init();
 
 	check_init(init_logger(), "Logger");
+	run_startup_commands(STARTUP_COMMANDS_PRE_INIT);
+
 	check_init(ast_rtp_engine_init(), "RTP Engine");
 
 	ast_autoservice_init();
@@ -4188,6 +4326,9 @@ static void asterisk_daemon(int isroot, const char *runuser, const char *rungrou
 	check_init(load_pbx_app(), "PBX Application Support");
 	check_init(load_pbx_hangup_handler(), "PBX Hangup Handler Support");
 	check_init(ast_local_init(), "Local Proxy Channel Driver");
+	check_init(ast_refer_init(), "Refer API");
+
+	run_startup_commands(STARTUP_COMMANDS_PRE_MODULE);
 
 	/* We should avoid most config loads before this point as they can't use realtime. */
 	check_init(load_modules(), "Module");
@@ -4201,6 +4342,7 @@ static void asterisk_daemon(int isroot, const char *runuser, const char *rungrou
 
 	/* loads the cli_permissions.conf file needed to implement cli restrictions. */
 	ast_cli_perms_init(0);
+	ast_cli_channels_init(); /* Not always safe to access CLI commands until startup is complete. */
 
 	ast_stun_init();
 
@@ -4225,7 +4367,7 @@ static void asterisk_daemon(int isroot, const char *runuser, const char *rungrou
 	ast_cli_register_multiple(cli_asterisk, ARRAY_LEN(cli_asterisk));
 	ast_register_cleanup(main_atexit);
 
-	run_startup_commands();
+	run_startup_commands(STARTUP_COMMANDS_FULLY_BOOTED);
 	ast_sd_notify("READY=1");
 
 	ast_verb(0, COLORIZE_FMT "\n", COLORIZE(COLOR_BRGREEN, 0, "Asterisk Ready."));
@@ -4235,7 +4377,7 @@ static void asterisk_daemon(int isroot, const char *runuser, const char *rungrou
 	if (ast_opt_console) {
 		/* Console stuff now... */
 		/* Register our quit function */
-		char title[256];
+		char title[296];
 		char hostname[MAXHOSTNAMELEN] = "";
 
 		if (gethostname(hostname, sizeof(hostname) - 1)) {

@@ -36,25 +36,25 @@
 			<para>Write yes or no</para>
 		</enum>
 		<enum name="h323id_url">
-			<para>R/0 Returns caller URL</para>
+			<para>R/O Returns caller URL</para>
 			</enum>
 		<enum name="caller_h323id">
-			<para>R/0 Returns caller h323id</para>
+			<para>R/O Returns caller h323id</para>
 		</enum>
 		<enum name="caller_dialeddigits">
-			<para>R/0 Returns caller dialed digits</para>
+			<para>R/O Returns caller dialed digits</para>
 		</enum>
 		<enum name="caller_email">
-			<para>R/0 Returns caller email</para>
+			<para>R/O Returns caller email</para>
 		</enum>
 		<enum name="callee_email">
-			<para>R/0 Returns callee email</para>
+			<para>R/O Returns callee email</para>
 		</enum>
 		<enum name="callee_dialeddigits">
-			<para>R/0 Returns callee dialed digits</para>
+			<para>R/O Returns callee dialed digits</para>
 		</enum>
 		<enum name="caller_url">
-			<para>R/0 Returns caller URL</para>
+			<para>R/O Returns caller URL</para>
 		</enum>
 		<enum name="max_forwards">
 			<para>R/W Get or set the maximum number of call forwards for this channel.
@@ -3248,7 +3248,7 @@ static char *handle_cli_ooh323_show_peer(struct ast_cli_entry *e, int cmd, struc
 		if (peer->t38support == T38_DISABLED) {
 			ast_cli(a->fd, "%s\n", "disabled");
 		} else if (peer->t38support == T38_FAXGW) {
-			ast_cli(a->fd, "%s\n", "faxgw/chan_sip compatible");
+			ast_cli(a->fd, "%s\n", "faxgw compatible");
 		}
 		if (peer->faxdetect == (FAXDETECT_CNG | FAXDETECT_T38)) {
 			ast_cli(a->fd,"%-20s%s\n", "FAX Detect:", "Yes");
@@ -3386,7 +3386,7 @@ static char *handle_cli_ooh323_show_user(struct ast_cli_entry *e, int cmd, struc
 		if (user->t38support == T38_DISABLED) {
 			ast_cli(a->fd, "%s\n", "disabled");
 		} else if (user->t38support == T38_FAXGW) {
-			ast_cli(a->fd, "%s\n", "faxgw/chan_sip compatible");
+			ast_cli(a->fd, "%s\n", "faxgw compatible");
 		}
 		if (user->faxdetect == (FAXDETECT_CNG | FAXDETECT_T38)) {
 			ast_cli(a->fd,"%-20s%s\n", "FAX Detect:", "Yes");
@@ -3633,7 +3633,7 @@ static char *handle_cli_ooh323_show_config(struct ast_cli_entry *e, int cmd, str
 	if (gT38Support == T38_DISABLED) {
 		ast_cli(a->fd, "%s\n", "disabled");
 	} else if (gT38Support == T38_FAXGW) {
-		ast_cli(a->fd, "%s\n", "faxgw/chan_sip compatible");
+		ast_cli(a->fd, "%s\n", "faxgw compatible");
 	}
 	if (gFAXdetect == (FAXDETECT_CNG | FAXDETECT_T38)) {
 		ast_cli(a->fd,"%-20s%s\n", "FAX Detect:", "Yes");
@@ -5047,7 +5047,7 @@ struct ast_frame *ooh323_rtp_read(struct ast_channel *ast, struct ooh323_pvt *p)
 			p->faxdetected = 1;
 			ooRequestChangeMode(p->callToken, 1);
 		} else if ((dfr->subclass.integer == 'f') && !p->faxdetected) {
-			const char *target_context = S_OR(ast_channel_macrocontext(p->owner), ast_channel_context(p->owner));
+			const char *target_context = ast_channel_context(p->owner);
 			if ((strcmp(ast_channel_exten(p->owner), "fax")) &&
 			    (ast_exists_extension(p->owner, target_context, "fax", 1,
 		            S_COR(ast_channel_caller(p->owner)->id.number.valid, ast_channel_caller(p->owner)->id.number.str, NULL)))) {
@@ -5123,7 +5123,7 @@ void onModeChanged(ooCallData *call, int t38mode) {
 			if ((p->faxdetect & FAXDETECT_T38) && !p->faxdetected) {
                        		const char *target_context;
 				ast_debug(1, "* Detected T.38 Request\n");
-				target_context = S_OR(ast_channel_macrocontext(p->owner), ast_channel_context(p->owner));
+				target_context = ast_channel_context(p->owner);
                         	if ((strcmp(ast_channel_exten(p->owner), "fax")) &&
                             		(ast_exists_extension(p->owner, target_context, "fax", 1,
                             		S_COR(ast_channel_caller(p->owner)->id.number.valid, ast_channel_caller(p->owner)->id.number.str, NULL)))) {

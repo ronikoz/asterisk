@@ -370,7 +370,13 @@ int ast_stun_handle_packet(int s, struct sockaddr_in *src, unsigned char *data, 
 					    st.username ? st.username : "<none>");
 			if (st.username) {
 				append_attr_string(&attr, STUN_USERNAME, st.username, &resplen, &respleft);
-				snprintf(combined, sizeof(combined), "%16s%16s", st.username + 16, st.username);
+				/*
+				 * For Google Voice, the stun username is made up of the local
+				 * and remote usernames, each being fixed at 16 bytes.  We have
+				 * to swap the two at this point.
+				 */
+				snprintf(combined, 17, "%16s", st.username + 16);
+				snprintf(combined + 16, 17, "%16s", st.username);
 			} else {
 				combined[0] = '\0';
 			}
@@ -502,7 +508,7 @@ try_again:
 			/* Bad STUN packet, not right type, or transaction ID did not match. */
 			memset(answer, 0, sizeof(struct sockaddr_in));
 
-			/* Was not a resonse to our request. */
+			/* Was not a response to our request. */
 			goto try_again;
 		}
 		/* Success.  answer contains the external address if available. */
@@ -570,8 +576,17 @@ static void stun_shutdown(void)
 void ast_stun_init(void)
 {
 	ast_cli_register_multiple(cli_stun, sizeof(cli_stun) / sizeof(struct ast_cli_entry));
-	ast_register_cleanup(stun_shutdown);
-
 	debug_category_stun_id = ast_debug_category_register(AST_LOG_CATEGORY_STUN);
 	debug_category_stun_packet_id = ast_debug_category_register(AST_LOG_CATEGORY_STUN_PACKET);
+
+	/*
+	 * Normnally a core module should call ast_register_cleanup
+	 * which doesn't run if any module fails to unload.  This
+	 * prevents resources being pulled out from under a running
+	 * module and ppossibly causing a segfault.  In this case however,
+	 * the only thing we're cleaning up is the cli command and
+	 * the registers of the debug categories.
+	 */
+	ast_register_atexit(stun_shutdown);
+
 }

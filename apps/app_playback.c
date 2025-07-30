@@ -43,11 +43,21 @@
 
 /*** DOCUMENTATION
 	<application name="Playback" language="en_US">
+		<since>
+			<version>0.1.0</version>
+		</since>
 		<synopsis>
 			Play a file.
 		</synopsis>
 		<syntax>
 			<parameter name="filenames" required="true" argsep="&amp;">
+				<para>Ampersand separated list of filenames. If the filename
+				is a relative filename (it does not begin with a slash), it
+				will be searched for in the Asterisk sounds directory. If the
+				filename is able to be parsed as a URL, Asterisk will
+				download the file and then begin playback on it. To include a
+				literal <literal>&amp;</literal> in the URL you can enclose
+				the URL in single quotes.</para>
 				<argument name="filename" required="true" />
 				<argument name="filename2" multiple="true" />
 			</parameter>
@@ -73,8 +83,8 @@
 		</syntax>
 		<description>
 			<para>Plays back given filenames (do not put extension of wav/alaw etc).
-			The playback command answer the channel if no options are specified.
-			If the file is non-existant it will fail</para>
+			The Playback application answers the channel if no options are specified.
+			If the file is non-existent it will fail.</para>
 			<para>This application sets the following channel variable upon completion:</para>
 			<variablelist>
 				<variable name="PLAYBACKSTATUS">
@@ -87,7 +97,7 @@
 			<para>WaitExten (application) -- wait for digits from caller, optionally play music on hold</para>
 		</description>
 		<see-also>
-			<ref type="application">Background</ref>
+			<ref type="application">BackGround</ref>
 			<ref type="application">WaitExten</ref>
 			<ref type="application">ControlPlayback</ref>
 			<ref type="agi">stream file</ref>
@@ -492,7 +502,7 @@ static int playback_exec(struct ast_channel *chan, const char *data)
 		char *front;
 
 		ast_stopstream(chan);
-		while (!res && (front = strsep(&back, "&"))) {
+		while (!res && (front = ast_strsep(&back, '&', AST_STRSEP_STRIP | AST_STRSEP_TRIM))) {
 			if (option_say)
 				res = say_full(chan, front, "", ast_channel_language(chan), NULL, -1, -1);
 			else if (option_mix){
@@ -507,8 +517,7 @@ static int playback_exec(struct ast_channel *chan, const char *data)
 			if (!res) {
 				res = ast_waitstream(chan, "");
 				ast_stopstream(chan);
-			}
-			if (res) {
+			} else {
 				if (!ast_check_hangup(chan)) {
 					ast_log(LOG_WARNING, "Playback failed on %s for %s\n", ast_channel_name(chan), (char *)data);
 				}

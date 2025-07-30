@@ -37,12 +37,13 @@
 #include "asterisk/term.h"
 #include "asterisk/speech.h"
 #include "asterisk/format_cache.h"
+#include "asterisk/translate.h"
 
 static AST_RWLIST_HEAD_STATIC(engines, ast_speech_engine);
 static struct ast_speech_engine *default_engine = NULL;
 
 /*! \brief Find a speech recognition engine of specified name, if NULL then use the default one */
-static struct ast_speech_engine *find_engine(const char *engine_name)
+struct ast_speech_engine *ast_speech_find_engine(const char *engine_name)
 {
 	struct ast_speech_engine *engine = NULL;
 
@@ -183,9 +184,10 @@ struct ast_speech *ast_speech_new(const char *engine_name, const struct ast_form
 	struct ast_speech *new_speech = NULL;
 	struct ast_format_cap *joint;
 	RAII_VAR(struct ast_format *, best, NULL, ao2_cleanup);
+	RAII_VAR(struct ast_format *, best_translated, NULL, ao2_cleanup);
 
 	/* Try to find the speech recognition engine that was requested */
-	if (!(engine = find_engine(engine_name)))
+	if (!(engine = ast_speech_find_engine(engine_name)))
 		return NULL;
 
 	joint = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
@@ -201,7 +203,16 @@ struct ast_speech *ast_speech_new(const char *engine_name, const struct ast_form
 		if (ast_format_cap_iscompatible_format(engine->formats, ast_format_slin) != AST_FORMAT_CMP_NOT_EQUAL) {
 			best = ao2_bump(ast_format_slin);
 		} else {
-			return NULL;
+			/*
+			 * If there is no overlap and the engine does not support slin, find the best
+			 * format to translate to and set that as the 'best' input format for the engine.
+			 * API consumer is responsible for translating to this format.
+			 * Safe to cast cap as ast_translator_best_choice does not modify the caps
+			 */
+			if (ast_translator_best_choice(engine->formats, (struct ast_format_cap *)cap, &best, &best_translated)) {
+				/* No overlapping formats and no translatable formats */
+				return NULL;
+			}
 		}
 	}
 
@@ -313,19 +324,19 @@ int ast_speech_register(struct ast_speech_engine *engine)
 	}
 
 	/* If an engine is already loaded with this name, error out */
-	if (find_engine(engine->name)) {
+	if (ast_speech_find_engine(engine->name)) {
 		ast_log(LOG_WARNING, "Speech recognition engine '%s' already exists.\n", engine->name);
 		return -1;
 	}
 
-	ast_verb(2, "Registered speech recognition engine '%s'\n", engine->name);
+	ast_verb(5, "Registered speech recognition engine '%s'\n", engine->name);
 
 	/* Add to the engine linked list and make default if needed */
 	AST_RWLIST_WRLOCK(&engines);
 	AST_RWLIST_INSERT_HEAD(&engines, engine, list);
 	if (!default_engine) {
 		default_engine = engine;
-		ast_verb(2, "Made '%s' the default speech recognition engine\n", engine->name);
+		ast_verb(5, "Made '%s' the default speech recognition engine\n", engine->name);
 	}
 	AST_RWLIST_UNLOCK(&engines);
 
@@ -355,7 +366,7 @@ struct ast_speech_engine *ast_speech_unregister2(const char *engine_name)
 			if (engine == default_engine) {
 				default_engine = AST_RWLIST_FIRST(&engines);
 			}
-			ast_verb(2, "Unregistered speech recognition engine '%s'\n", engine_name);
+			ast_verb(5, "Unregistered speech recognition engine '%s'\n", engine_name);
 			/* All went well */
 			break;
 		}
@@ -364,6 +375,36 @@ struct ast_speech_engine *ast_speech_unregister2(const char *engine_name)
 	AST_RWLIST_UNLOCK(&engines);
 
 	return engine;
+}
+
+void ast_speech_unregister_engines(
+	int (*should_unregister)(const struct ast_speech_engine *engine, void *data), void *data,
+	void (*on_unregistered)(void *obj))
+{
+	struct ast_speech_engine *engine = NULL;
+
+	if (!should_unregister) {
+		return;
+	}
+
+	AST_RWLIST_WRLOCK(&engines);
+	AST_RWLIST_TRAVERSE_SAFE_BEGIN(&engines, engine, list) {
+		if (should_unregister(engine, data)) {
+			/* We have our engine... removed it */
+			AST_RWLIST_REMOVE_CURRENT(list);
+			/* If this was the default engine, we need to pick a new one */
+			if (engine == default_engine) {
+				default_engine = AST_RWLIST_FIRST(&engines);
+			}
+			ast_verb(5, "Unregistered speech recognition engine '%s'\n", engine->name);
+			/* All went well */
+			if (on_unregistered) {
+				on_unregistered(engine);
+			}
+		}
+	}
+	AST_RWLIST_TRAVERSE_SAFE_END;
+	AST_RWLIST_UNLOCK(&engines);
 }
 
 static int unload_module(void)

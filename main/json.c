@@ -88,7 +88,7 @@ enum ast_json_type ast_json_typeof(const struct ast_json *json)
 	case JSON_FALSE: return AST_JSON_FALSE;
 	case JSON_NULL: return AST_JSON_NULL;
 	}
-	ast_assert(0); /* Unexpect return from json_typeof */
+	ast_assert(0); /* Unexpected return from json_typeof */
 	return r;
 }
 
@@ -248,6 +248,16 @@ struct ast_json *ast_json_boolean(int value)
 struct ast_json *ast_json_null(void)
 {
 	return (struct ast_json *)json_null();
+}
+
+int ast_json_is_array(const struct ast_json *json)
+{
+	return json_is_array((const json_t *)json);
+}
+
+int ast_json_is_object(const struct ast_json *json)
+{
+	return json_is_object((const json_t *)json);
 }
 
 int ast_json_is_true(const struct ast_json *json)
@@ -456,8 +466,19 @@ int ast_json_object_iter_set(struct ast_json *object, struct ast_json_iter *iter
  */
 static size_t dump_flags(enum ast_json_encoding_format format)
 {
-	return format == AST_JSON_PRETTY ?
-		JSON_INDENT(2) | JSON_PRESERVE_ORDER : JSON_COMPACT;
+	size_t jansson_dump_flags;
+
+	if (format & AST_JSON_PRETTY) {
+		jansson_dump_flags = JSON_INDENT(2);
+	} else {
+		jansson_dump_flags = JSON_COMPACT;
+	}
+
+	if (format & AST_JSON_SORTED) {
+		jansson_dump_flags |= JSON_SORT_KEYS;
+	}
+
+	return jansson_dump_flags;
 }
 
 char *ast_json_dump_string_format(struct ast_json *root, enum ast_json_encoding_format format)
@@ -838,6 +859,83 @@ enum ast_json_to_ast_vars_code ast_json_to_ast_variables(struct ast_json *json_v
 	}
 
 	return AST_JSON_TO_AST_VARS_CODE_SUCCESS;
+}
+
+enum ast_json_nvp_ast_vars_code ast_json_nvp_array_to_ast_variables(
+	struct ast_json *json_variables, struct ast_variable **variables)
+{
+	struct ast_variable *tail = NULL;
+	int i = 0;
+	size_t len = json_variables ? ast_json_array_size(json_variables) : 0;
+
+	if (len == 0) {
+		return AST_JSON_NVP_AST_VARS_CODE_NO_INPUT;
+	}
+
+	for (i = 0; i < len; i++) {
+		struct ast_variable *new_var;
+		struct ast_json *json_value;
+		struct ast_json *json_key;
+		const char *key;
+		const char *value;
+
+		json_value = ast_json_array_get(json_variables, i);
+		if (!json_value || ast_json_is_null(json_value) || ast_json_typeof(json_value) != AST_JSON_OBJECT) {
+			/* Error: Only objects allowed */
+			return AST_JSON_NVP_AST_VARS_CODE_INVALID_TYPE;
+		}
+
+		json_key = ast_json_object_get(json_value, "name");
+		if (!json_key || ast_json_is_null(json_key) || ast_json_typeof(json_key) != AST_JSON_STRING) {
+			/* Error: Only strings allowed */
+			return AST_JSON_NVP_AST_VARS_CODE_INVALID_TYPE;
+		}
+		key = ast_json_string_get(json_key);
+
+		json_key = ast_json_object_get(json_value, "value");
+		if (!json_key || ast_json_is_null(json_key) || ast_json_typeof(json_key) != AST_JSON_STRING) {
+			/* Error: Only strings allowed */
+			return AST_JSON_NVP_AST_VARS_CODE_INVALID_TYPE;
+		}
+		value = ast_json_string_get(json_key);
+
+		new_var = ast_variable_new(key, value, "");
+		if (!new_var) {
+			/* Error: OOM */
+			return AST_JSON_NVP_AST_VARS_CODE_OOM;
+		}
+
+		tail = ast_variable_list_append_hint(variables, tail, new_var);
+	}
+
+	return AST_JSON_NVP_AST_VARS_CODE_SUCCESS;
+}
+
+struct ast_json *ast_variables_to_json_nvp_array(struct ast_variable *variables)
+{
+	struct ast_variable *v = NULL;
+	struct ast_json *json_variables = ast_json_array_create();
+
+	if (!variables || !json_variables) {
+		return NULL;
+	}
+
+	for (v = variables; v; v = v->next) {
+		struct ast_json *obj = ast_json_pack("{s: s, s: s}",
+			"name", v->name,
+			"value", v->value);
+		if (!obj) {
+			ast_json_unref(json_variables);
+			return NULL;
+		}
+		if (ast_json_array_append(json_variables, obj)) {
+			ast_json_unref(json_variables);
+			ast_json_unref(obj);
+			return NULL;
+		}
+	}
+
+	return json_variables;
 }
 
 struct ast_json *ast_json_channel_vars(struct varshead *channelvars)

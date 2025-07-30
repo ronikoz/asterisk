@@ -146,6 +146,7 @@ struct dahdi_pvt {
 	 * \note Set to a couple of nonzero values but it is only tested like a boolean.
 	 */
 	int radio;
+	int dialmode;					/*!< Dialing Modes Allowed (Pulse/Tone) */
 	int outsigmod;					/*!< Outbound Signalling style (modifier) */
 	int oprmode;					/*!< "Operator Services" mode */
 	struct dahdi_pvt *oprpeer;				/*!< "Operator Services" peer tech_pvt ptr */
@@ -203,6 +204,13 @@ struct dahdi_pvt {
 	 * \note Set from the "busydetect" value read in from chan_dahdi.conf
 	 */
 	unsigned int busydetect:1;
+	/*!
+	 * \brief TRUE if Called Subscriber held is enabled.
+	 * This allows a single incoming call to hold a DAHDI channel up,
+	 * allowing a recipient to hang up an extension and pick up another
+	 * phone on the same line without disconnecting the call.
+	 */
+	unsigned int calledsubscriberheld:1;
 	/*!
 	 * \brief TRUE if call return is enabled.
 	 * (*69, if your dialplan doesn't catch this first)
@@ -275,6 +283,14 @@ struct dahdi_pvt {
 	 * \note Set from the "hanguponpolarityswitch" value read in from chan_dahdi.conf
 	 */
 	unsigned int hanguponpolarityswitch:1;
+	/*!
+	 * \brief TRUE if FXS (FXO-signalled) channel should reoriginate for user to make a new call.
+	 */
+	unsigned int reoriginate:1;
+	/*!
+	 * \brief Internal flag for if we should actually process a reorigination.
+	 */
+	unsigned int doreoriginate:1;
 	/*! \brief TRUE if DTMF detection needs to be done by hardware. */
 	unsigned int hardwaredtmf:1;
 	/*!
@@ -298,6 +314,12 @@ struct dahdi_pvt {
 	 * \note Set from the "immediate" value read in from chan_dahdi.conf
 	 */
 	unsigned int immediate:1;
+	/*!
+	 * \brief TRUE if audible ringback should be provided
+	 * when immediate = yes.
+	 * \note Set from the "immediatering" value read in from chan_dahdi.conf
+	 */
+	unsigned int immediatering:1;
 	/*! \brief TRUE if in an alarm condition. */
 	unsigned int inalarm:1;
 	/*! \brief TRUE if TDD in MATE mode */
@@ -310,6 +332,10 @@ struct dahdi_pvt {
 	 * \note Set from the "callwaiting" value read in from chan_dahdi.conf
 	 */
 	unsigned int permcallwaiting:1;
+	/*!
+	 * \brief TRUE if Call Waiting Deluxe options should be available
+	 */
+	unsigned int callwaitingdeluxe:1;
 	/*!
 	 * \brief TRUE if the outgoing caller ID is blocked/restricted/hidden.
 	 * \note Set from the "hidecallerid" value read in from chan_dahdi.conf
@@ -344,6 +370,11 @@ struct dahdi_pvt {
 	 * \note Set from the "threewaycalling" value read in from chan_dahdi.conf
 	 */
 	unsigned int threewaycalling:1;
+	/*!
+	 * \brief TRUE if a three way dial tone should time out to silence
+	 * \note Set from the "threewaysilenthold" value read in from chan_dahdi.conf
+	 */
+	unsigned int threewaysilenthold:1;
 	/*!
 	 * \brief TRUE if call transfer is enabled
 	 * \note For FXS ports (either direct analog or over T1/E1):
@@ -404,11 +435,17 @@ struct dahdi_pvt {
 	unsigned int mwimonitoractive:1;
 	/*! \brief TRUE if a MWI message sending thread is active */
 	unsigned int mwisendactive:1;
+	/*! \brief TRUE if a manual MWI override is active for a channel */
+	unsigned int mwioverride_active:1;
+	/*! \brief Manual MWI disposition (on/off) */
+	unsigned int mwioverride_disposition:1;
 	/*!
 	 * \brief TRUE if channel is out of reset and ready
 	 * \note Used by SS7.  Otherwise set but not used.
 	 */
 	unsigned int inservice:1;
+	/*! *\brief TRUE if last number redial enabled */
+	unsigned int lastnumredial:1;
 	/*!
 	 * \brief Bitmask for the channel being locally blocked.
 	 * \note Applies to SS7 and MFCR2 channels.
@@ -623,6 +660,14 @@ struct dahdi_pvt {
 	 * \note Set from the "waitfordialtone" value read in from chan_dahdi.conf
 	 */
 	int waitfordialtone;
+	/*!
+	 * \brief Transient variable. Same as waitfordialtone, but temporarily set for a specific call, rather than permanently for the channel.
+	 */
+	int waitfordialtonetemp;
+	/*!
+	 * \brief Transient variable. Stored off waitfordialtone duration at runtime.
+	 */
+	int waitfordialtoneduration;
 	/*!
 	 * \brief Number of frames to watch for dialtone in incoming calls
 	 * \note Set from the "dialtone_detect" value read in from chan_dahdi.conf

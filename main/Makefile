@@ -31,7 +31,11 @@ ifeq ($(PJPROJECT_BUNDLED),yes)
 SRC:=$(filter-out libasteriskpj.c,$(SRC))
 endif
 OBJSFILTER:=$(MOD_OBJS) fskmodem_int.o fskmodem_float.o cygload.o buildinfo.o
-OBJS=$(filter-out $(OBJSFILTER),$(SRC:.c=.o))
+
+SRC_CC:=$(filter-out $(addsuffix .cc,$(MENUSELECT_CHANNELSTORAGE)),$(wildcard *.cc))
+SRC:=$(filter-out $(addsuffix .c,$(MENUSELECT_CHANNELSTORAGE)),$(SRC))
+
+OBJS=$(filter-out $(OBJSFILTER),$(SRC:.c=.o) $(SRC_CC:.cc=.oo))
 
 # we need to link in the objects statically, not as a library, because
 # otherwise modules will not have them available if none of the static
@@ -133,13 +137,10 @@ else
 ast_expr2f.c:
 endif
 	$(ECHO_PREFIX) echo "   [FLEX] $< -> $@"
-	$(CMD_PREFIX) $(FLEX) -o $@ ast_expr2.fl
-	$(CMD_PREFIX) sed 's@#if __STDC_VERSION__ >= 199901L@#if !defined __STDC_VERSION__ || __STDC_VERSION__ >= 199901L@' $@ > $@.fix
 	$(CMD_PREFIX) echo "#define ASTMM_LIBC ASTMM_REDIRECT" > $@
 	$(CMD_PREFIX) echo "#include \"asterisk.h\"" >> $@
 	$(CMD_PREFIX) echo >> $@
-	$(CMD_PREFIX) cat $@.fix >> $@
-	$(CMD_PREFIX) rm $@.fix
+	$(CMD_PREFIX) $(FLEX) -t ast_expr2.fl >> $@
 
 ifneq ($(findstring ENABLE_UPLOADS,$(MENUSELECT_CFLAGS)),)
 GMIMELDFLAGS+=$(GMIME_LIB)
@@ -167,6 +168,9 @@ lock.o: _ASTCFLAGS+=$(call get_menuselect_cflags,DETECT_DEADLOCKS)
 options.o: _ASTCFLAGS+=$(call get_menuselect_cflags,REF_DEBUG)
 sched.o: _ASTCFLAGS+=$(call get_menuselect_cflags,DEBUG_SCHEDULER DUMP_SCHEDULER)
 tcptls.o: _ASTCFLAGS+=$(OPENSSL_INCLUDE) -Wno-deprecated-declarations
+# since we're using open_memstream(), we need to release the buffer with
+# the native free() function or we might get unexpected behavior.
+test.o: _ASTCFLAGS+=-DASTMM_LIBC=ASTMM_IGNORE
 uuid.o: _ASTCFLAGS+=$(UUID_INCLUDE)
 stasis.o: _ASTCFLAGS+=$(call get_menuselect_cflags,AO2_DEBUG)
 time.o: _ASTCFLAGS+=-D_XOPEN_SOURCE=700

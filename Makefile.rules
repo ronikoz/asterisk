@@ -66,7 +66,7 @@ OPTIMIZE?=-O3
 
 ifneq ($(findstring darwin,$(OSARCH)),)
   ifeq ($(shell if test `/usr/bin/sw_vers -productVersion | cut -c4` -gt 5; then echo 6; else echo 0; fi),6)
-    # Snow Leopard/Lion has an issue with this optimization flag on large files (like chan_sip)
+    # Snow Leopard/Lion has an issue with this optimization flag on large files
     OPTIMIZE+=-fno-inline-functions
   endif
 endif
@@ -203,5 +203,20 @@ endif
 %: %.o
 	$(ECHO_PREFIX) echo "   [LD] $^ -> $@"
 	$(CMD_PREFIX) $(CXX) -o $@ $(PTHREAD_CFLAGS) $(_ASTLDFLAGS) $^ $(CXX_LIBS) $(ASTLDFLAGS)
+
+# These CC commands just create an object file with the input file embedded in it.
+# It can be access from code as follows:
+# If your input file is named abc_def.xml...
+#
+# extern const uint8_t _binary_abc_def_xml_start[];
+# extern const uint8_t _binary_abc_def_xml_end[];
+# extern const size_t _binary_abc_def_xml_size;
+%.o: %.xml
+	$(ECHO_PREFIX) echo "   [LD] $^ -> $@"
+	$(CMD_PREFIX) $(CC) -g -Wl,-znoexecstack -nostartfiles  -nodefaultlibs -nostdlib -r -Wl,-b,binary -o $@ $^
+
+%.o: %.xslt
+	$(ECHO_PREFIX) echo "   [LD] $^ -> $@"
+	$(CMD_PREFIX) $(CC) -g -Wl,-znoexecstack -nostartfiles  -nodefaultlibs -nostdlib -r -Wl,-b,binary -o $@ $^
 
 dist-clean:: clean
